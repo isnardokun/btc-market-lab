@@ -12,6 +12,7 @@ from ingestion.researchbitcoin_v2 import (
     query_params, store_rows, describe_shape,
 )
 from rendering.onchain_complement import render_complement, read_complement
+from validation.rbn_reconciliation import audit_rbn_against_html
 
 NOW = dt.datetime(2026, 10, 9, 13, 59, tzinfo=dt.timezone.utc)
 
@@ -169,6 +170,102 @@ class ResearchBitcoinComplementTests(unittest.TestCase):
         mvrv = next(x for x in data if x["metric"] == "mvrv_sth")
         self.assertTrue(mvrv["needs_methodology_comparison"])
         self.assertEqual(mvrv["researchbitcoin_points"], 0)
+
+    def _make_gate_fixture(self):
+        samples = [
+            ("supply_in_profit_percent", 0.6835608896),
+            ("supply_in_profit_sth_percent", 0.7092757091),
+            ("sopr_lth", 1.139),
+            ("realized_price_lth", 49277.0),
+        ]
+        for slug, value in samples:
+            store_rows(self.dbpath, slug, {
+                "2026-10-08": ("2026-10-08T00:00:00+00:00", value),
+            })
+        rendered = render_complement(self.dbpath, "2026-10-08")
+        self.assertIn("onchain-complement", rendered)
+        return "<!doctype html><html><body>" + rendered + "</body></html>"
+
+    def test_gate_reconciles_full_html_with_original_db(self):
+        html = self._make_gate_fixture()
+        self.assertEqual(audit_rbn_against_html(html, self.dbpath, "2026-10-09"), [])
+        self.assertEqual(audit_rbn_against_html(html, self.dbpath,
+                                               dt.date(2026, 10, 9)), [])
+
+    def test_gate_stays_optional_with_no_provider_rows(self):
+        self.assertEqual(audit_rbn_against_html(
+            "<html><body>Base BTC sin ResearchBitcoin</body></html>",
+            self.dbpath, "2026-10-09"), [])
+
+    def test_gate_blocks_tampered_rbn_display(self):
+        html = self._make_gate_fixture()
+        for before, after in [
+            ("≈68.4%*", "0.7%"),
+            ("≈70.9%*", "70.0%"),
+            ("US$\\xa049,277", "US$\\xa050,000"),
+            ("1.139", "1.293"),
+        ]:
+            before = before.replace("\\xa0", "\xa0")
+            after = after.replace("\\xa0", "\xa0")
+            with self.subTest(changed=after):
+                self.assertIn(before, html)
+                errors = audit_rbn_against_html(
+                    html.replace(before, after, 1), self.dbpath, "2026-10-09")
+                self.assertTrue(any("valor HTML/SQLite no coincide" in e for e in errors),
+                                errors)
+
+    def test_gate_blocks_wrong_raw_date_source_and_missing_caveat(self):
+        html = self._make_gate_fixture()
+        for before, after, code in [
+            ('data-api-raw="0.6835608896"',
+             'data-api-raw="0.7000000000"', "API raw"),
+            ('data-asof-utc="2026-10-08"',
+             'data-asof-utc="2026-10-07"', "fecha HTML/SQLite"),
+            ('href="https://researchbitcoin.net/metrics/supply_in_profit_percent/"',
+             'href="https://example.org/metrics/fake/"', "fuente metodológica"),
+            ("*Normalización provisional", "*Conversión definitiva",
+             "advertencia de escala provisional"),
+        ]:
+            with self.subTest(code=code):
+                self.assertIn(before, html)
+                errors = audit_rbn_against_html(
+                    html.replace(before, after, 1), self.dbpath, "2026-10-09")
+                self.assertTrue(any(code in e for e in errors), errors)
+
+    def test_gate_blocks_omitted_duplicate_and_unexpected_rbn_cards(self):
+        html = self._make_gate_fixture()
+        rendered = render_complement(self.dbpath, "2026-10-08")
+        self.assertTrue(any("faltan métricas" in e for e in
+                            audit_rbn_against_html("<html></html>",
+                                                   self.dbpath, "2026-10-09")))
+        duplicate = "<html>" + rendered + rendered + "</html>"
+        self.assertTrue(any("duplicados" in e for e in
+                            audit_rbn_against_html(duplicate, self.dbpath,
+                                                   "2026-10-09")))
+        self.assertTrue(any("métrica inesperada" in e for e in
+                            audit_rbn_against_html(
+                                html.replace('data-metric="sopr_lth"',
+                                             'data-metric="unknown_metric"'),
+                                self.dbpath, "2026-10-09")))
+        extra = html.replace('</body>',
+                             '<div id="onchain-complement"></div></body>')
+        self.assertTrue(any("duplicados" in e for e in
+                            audit_rbn_against_html(extra, self.dbpath,
+                                                   "2026-10-09")))
+
+    def test_gate_blocks_rbn_card_without_sqlite_provenance(self):
+        html = self._make_gate_fixture()
+        self.assertTrue(any("sin observaciones" in e for e in
+                            audit_rbn_against_html(
+                                html, self.dbpath, "2026-09-01")))
+        orphan = "<div id='onchain-complement'><div class='stat-item' " \
+                 "data-provider='researchbitcoin' data-metric='sopr_lth' " \
+                 "data-asof-utc='2026-10-08'><div class='sval'>1.139" \
+                 "</div></div></div>"
+        self.assertTrue(any("sin observaciones" in e for e in
+                            audit_rbn_against_html(
+                                orphan, self.dbpath.with_name("missing.db"),
+                                "2026-10-09")))
 
     def test_empty_extension_is_backward_compatible(self):
         self.assertEqual(render_complement(self.dbpath, "2026-10-08"), "")

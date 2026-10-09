@@ -157,6 +157,42 @@ Fichas originales:
 - https://researchbitcoin.net/metrics/supply_in_profit_percent/
 - https://researchbitcoin.net/metrics/supply_in_profit_sth_percent/
 
+## Reconciliación adicional en el publication gate (2026-10-09)
+
+El gate de reportes originales confrontaba precios e indicadores
+archivados, pero no las tarjetas de ResearchBitcoin. Una tarjeta podía
+mostrar un valor RBN distinto de su observación en SQLite y conservar
+un resultado global de `100/100`. Se añadió la comprobación crítica
+`validation/rbn_reconciliation.py`, llamada por
+`validation/publication_gate.py` **antes de publicar**.
+
+Para la fecha del reporte se seleccionan solo observaciones RBN
+locales y vigentes hasta el último día UTC completo. Por cada tarjeta
+visible, se comprueba:
+- Identidad exacta de métrica, proveedor y endpoint (este último
+  mediante el catálogo y la fila SQLite).
+- Fecha de observación UTC idéntica a la de la SQLite.
+- Valor mostrado, incluyendo formato y unidades, idéntico al calculado
+  **desde la observación original** por el renderizador oficial.
+- Para los porcentajes 0..1, atributo `data-api-raw` coincidente y
+  advertencia visible de **normalización provisional**.
+- Enlace a la ficha de fuente correspondiente al slug y ausencia de
+  tarjetas duplicadas, desconocidas, ocultas o ausentes.
+
+Una discrepancia se registra como **CRITICAL** en la categoría
+`consistencia` y bloquea la publicación, independientemente del score
+ponderado. Si el proveedor no ha sido habilitado, su tabla no existe
+o no hay datos RBN recientes **y el informe tampoco los muestra**,
+el gate sigue aprobando el informe principal de Bitview/macro/precios.
+
+Este cotejo valida **fidelidad HTML ↔ SQLite local**, no autenticidad
+externa de la API ni equivalencia metodológica entre proveedores.
+No prueba la escala o denominador de las métricas Supply in Profit;
+estas continúan provisionalmente documentadas. No escribe datos,
+no llama a APIs privadas y no activa sincronización automática.
+
+Pruebas: `python3 -m unittest -v tests.unit.test_researchbitcoin_complement`.
+
 ## Siguientes extensiones (no incluidas)
 
 - Añadir ingesta incremental diaria al pipeline **solo después** de validar
