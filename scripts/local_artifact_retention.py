@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import tempfile
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("BTC_RESEARCH_HOME", Path(__file__).resolve().parents[1])).resolve()
 RETAINED = ROOT / "reports" / "local-retained"
 PATHSPECS = (
     "reports/portable",
@@ -62,7 +62,7 @@ def backup():
             originals.append((relative, src))
     if not originals:
         print("-")
-        return
+        return None
     RETAINED.mkdir(parents=True, exist_ok=True, mode=0o700)
     RETAINED.chmod(0o700)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -82,6 +82,7 @@ def backup():
         encoding="utf-8",
     )
     print(str(folder))
+    return folder
 
 
 def restore(folder_name):
@@ -113,13 +114,65 @@ def restore(folder_name):
     print("Artefactos locales restaurados: " + str(len(files)))
 
 
+def bootstrap():
+    """One-time safe migration from a checkout with the OLD updater.
+
+    Expected use from the *existing* checkout, after verifying origin:
+        git fetch origin master
+        git show origin/master:scripts/local_artifact_retention.py > /tmp/btc-retain.py
+        BTC_RESEARCH_HOME="$PWD" python3 /tmp/btc-retain.py bootstrap
+
+    This first migration must not use the old update_local_and_test.sh.
+    """
+    def git(*args, capture=False):
+        result = subprocess.run(
+            ["git", *args], cwd=ROOT, check=True,
+            stdout=subprocess.PIPE if capture else None,
+            text=False,
+        )
+        return result.stdout if capture else None
+
+    actual = Path(os.fsdecode(git("rev-parse", "--show-toplevel", capture=True)).strip()).resolve()
+    if actual != ROOT:
+        raise RuntimeError("Directorio no corresponde a la raíz Git esperada")
+    branch = os.fsdecode(git("branch", "--show-current", capture=True)).strip()
+    remote = os.fsdecode(git("remote", "get-url", "origin", capture=True)).strip()
+    if branch != "master" or not (
+        remote.endswith("isnardokun/btc-market-lab")
+        or remote.endswith("isnardokun/btc-market-lab.git")
+    ):
+        raise RuntimeError("La migración exige master y origin isnardokun/btc-market-lab")
+    if git("diff", "--cached", "--name-only", "-z", capture=True):
+        raise RuntimeError("Existen cambios staged: detener sin modificar")
+    changed = [
+        os.fsdecode(x) for x in
+        git("diff", "--name-only", "-z", capture=True).split(b"\\0") if x
+    ]
+    if not all(allowed(path) for path in changed):
+        raise RuntimeError("Existen cambios de código/documentos sin guardar: detener")
+    # Backup before *any* working-tree edits or remote updates.
+    folder = backup()
+    try:
+        if changed:
+            git("restore", "--worktree", "--", *changed)
+        git("fetch", "origin", "master")
+        git("merge", "--ff-only", "origin/master")
+    finally:
+        if folder is not None:
+            restore(str(folder))
+    print("Migración segura completada. Commit instalado: " +
+          os.fsdecode(git("rev-parse", "--short", "HEAD", capture=True)).strip())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("backup", "restore"))
+    parser.add_argument("action", choices=("backup", "restore", "bootstrap"))
     parser.add_argument("--folder", help="Ruta del directorio de respaldo privado")
     args = parser.parse_args()
     if args.action == "backup":
         backup()
+    elif args.action == "bootstrap":
+        bootstrap()
     elif not args.folder:
         parser.error("restore requiere --folder")
     else:
