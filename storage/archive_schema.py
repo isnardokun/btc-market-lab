@@ -199,3 +199,25 @@ def save_window(conn, source_id, metric, start, end, status, points, *, run_id=N
         (source_id,metric,first.isoformat(),exclusive.isoformat(),status,points,
          dt.datetime.now(dt.timezone.utc).isoformat(),run_id),
     )
+
+
+def archive_schema_installed(conn):
+    """Read-only schema status, safe to call from ordinary daily ingests."""
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' "
+        "AND name='archive_schema_migrations'"
+    ).fetchone() is not None
+
+
+def require_archive_schema(conn):
+    """History apply is opt-in only after WAL-safe backup + migration."""
+    if not archive_schema_installed(conn):
+        raise RuntimeError(
+            "Instala primero la migración segura: "
+            "python3 scripts/archive_db_migrate.py --apply"
+        )
+    version = conn.execute(
+        "SELECT MAX(version) FROM archive_schema_migrations"
+    ).fetchone()[0]
+    if version != SCHEMA_VERSION:
+        raise RuntimeError("Esquema histórico incompatible, detener ingesta")
