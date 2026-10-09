@@ -87,6 +87,22 @@ class FinancialIntegrityTests(unittest.TestCase):
                 self.assertTrue("Objetivo condicional:" in bear or "Objetivo no estimable" in bear)
                 self.assertIn("spot", base)
 
+    def test_one_gold_support_plus_many_resistances_not_misread(self):
+        gold = (
+            '<div class="card"><h3>Niveles Clave</h3><div class="levels-grid">'
+            '<div class="lev-col"><h4>Soportes</h4>'
+            '<div class="lev-item"><span class="lev-price">$3992</span></div></div>'
+            '<div class="lev-col"><h4>Resistencias</h4>'
+            '<div class="lev-item"><span class="lev-price">$4880</span></div>'
+            '<div class="lev-item"><span class="lev-price">$5312</span></div>'
+            '</div></div></div>'
+        )
+        fresh = fixture(False).replace(
+            '<section><div class="section-title">Oro Futuro',
+            '<section>' + gold + '<div class="section-title">Oro Futuro'
+        )
+        self.assertEqual(audit_report_html(fresh, report_day=datetime.date(2026, 10, 8)), [])
+
     def test_missing_upper_target_is_explicit_not_fabricated(self):
         bull, base, bear = compute_scenarios(
             81900, [], [], [], [75613, 65955], [82139], 48, None, -12, "BTC",
