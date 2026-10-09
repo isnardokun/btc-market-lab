@@ -49,7 +49,8 @@ class MarketStorageTests(unittest.TestCase):
     def test_negative_flow_zero_flow_and_missing_are_different(self):
         self.assertEqual(sources.parse_farside(FARSIDE),[
              ("2026-10-08","IBIT",20.0),("2026-10-08","FBTC",-5.5),
-             ("2026-10-09","FBTC",0.0),("2026-10-09","GBTC",1.1)])
+             ("2026-10-08","TOTAL",14.5),("2026-10-09","FBTC",0.0),
+             ("2026-10-09","GBTC",1.1),("2026-10-09","TOTAL",1.1)])
 
     def test_etf_idempotent_and_revision_auditable(self):
         sha=self.sha()
@@ -176,7 +177,7 @@ class MarketStorageTests(unittest.TestCase):
             sources.download("https://evil.example/steal",opener=lambda *_:None)
         with self.assertRaises(ValueError):
             dbm.store_etf(self.db,provider="farside",trade_date="2026-10-09",
-                          ticker="TOTAL",amount_m=0,state="reported",sha="none")
+                          ticker="BTC/W",amount_m=0,state="reported",sha="none")
 
 if __name__=="__main__":
     unittest.main()
