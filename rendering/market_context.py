@@ -49,14 +49,18 @@ def render_market_context(db_path, now=None):
                 records=db.execute(
                     "SELECT ticker,net_flow_usd_m FROM market_etf_flows "
                     "WHERE provider='farside' AND trade_date=? ORDER BY ticker",(day.isoformat(),)).fetchall()
-                total=sum(r[1] for r in records)
+                reported_total=next((value for ticker,value in records if ticker=="TOTAL"),None)
+                component_values=[value for ticker,value in records if ticker!="TOTAL"]
+                total=reported_total if reported_total is not None else sum(component_values)
+                total_label=("Total publicado por Farside" if reported_total is not None
+                             else "Suma parcial, total oficial ausente")
                 blocks.append(
                     '<div class="stat-item" data-provider="farside" data-metric="etf_flows" data-asof-utc="'+
                     day.isoformat()+'"><div class="slbl">ETF spot BTC · Farside</div>'+
                     '<div class="sval">US$ '+f"{total:+,.1f}M"+
-                    '</div><div class="ssub">Suma parcial de '+str(len(records))+
-                    ' fondos con dato; no equivale al total oficial · '+day.isoformat()+
-                    ' · preliminar, sujeto a revisiones</div></div>')
+                    '</div><div class="ssub">'+escape(total_label)+'; '+str(len(component_values))+
+                    ' fondos con cifra reportada · '+day.isoformat()+
+                    ' · provisional, sujeto a revisiones</div></div>')
         future=db.execute(
             "SELECT provider,title,scheduled_utc,time_precision,event_date "
             "FROM market_calendar_events WHERE state='scheduled' AND event_date BETWEEN ? AND ? "
