@@ -19,6 +19,7 @@ from ingestion.bitview_history import (
 from ingestion.yahoo_history import extract_daily, symbols_in_catalog, archive
 from ingestion.news_archive import archive_news
 from scripts.history_coverage import coverage
+from scripts.history_query import query_history
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 
 
@@ -176,6 +177,34 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
         data=coverage(self.db)
         entry=next(x for x in data["datasets"] if x["table"]=="research_news_archive")
         self.assertEqual(entry["series"][0]["observations"],1)
+
+    def test_local_historical_queries_preserve_source_and_utc(self):
+        day=dt.date(2026,10,8)
+        unix=int(dt.datetime.combine(day,dt.time(),dt.timezone.utc).timestamp())
+        with sqlite3.connect(self.db) as db:
+            db.execute("INSERT INTO daily(series_id,ts,value) VALUES (7,?,?)",
+                       (unix,1.25))
+            db.execute("INSERT INTO macro_fred(series_id,date,value) "
+                       "VALUES('DGS10','2026-10-08',4.1)")
+        archive(self.db,"BTC-USD",[(unix,10.0,12.0,9.0,11.0,100.0)])
+        archive_news(self.db,"2026-10-09",{"BTC":[{
+            "title":"Research note","url":"https://example.org/note",
+            "date":"2026-10-08","source":"Publisher"}]},at=NOW)
+        for provider,metric,target in [
+            ("bitview","mvrv","value"),
+            ("fred","DGS10","value"),
+            ("yahoo","BTC-USD","close"),
+            ("news","BTC","url"),
+        ]:
+            with self.subTest(provider=provider):
+                dates=("2026-10-09","2026-10-09") if provider=="news" else (
+                       "2026-10-08","2026-10-08")
+                response=query_history(self.db,provider,metric,*dates)
+                self.assertEqual(response["count"],1)
+                self.assertIn(target,response["rows"][0])
+                self.assertEqual(response["provider"],provider)
+        with self.assertRaises(ValueError):
+            query_history(self.db,"bogus","x","2026-10-08","2026-10-08")
 
     def test_private_research_studio_visual_contract(self):
         self.assertEqual(STYLE_VERSION,"mercados-research-studio-v1")
