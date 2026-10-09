@@ -55,6 +55,25 @@ class ResearchBitcoinComplementTests(unittest.TestCase):
                 "supply_in_profit_sth_percent", NOW,
             )
 
+    def test_provider_slug_key_is_supported_without_guessing_field(self):
+        rows = parse_scalar_rows({"data": [
+            {"time": "2026-10-08T00:00:00Z", "sopr_lth": 1.054}
+        ]}, "sopr_lth", NOW)
+        self.assertEqual(rows["2026-10-08"][1], 1.054)
+
+    def test_wrong_provider_metric_must_not_be_relabelled(self):
+        with self.assertRaisesRegex(ValueError, "sin valor"):
+            parse_scalar_rows({"data": [
+                {"time": "2026-10-08T00:00:00Z", "realized_profit_sth": 250000.0}
+            ]}, "realized_loss_sth", NOW)
+
+    def test_ambiguous_generic_with_other_slug_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "otra métrica"):
+            parse_scalar_rows({"data": [
+                {"time": "2026-10-08T00:00:00Z", "value": 250000.0,
+                 "realized_profit_sth": 200000.0}
+            ]}, "realized_loss_sth", NOW)
+
     def test_open_day_not_archived(self):
         with self.assertRaises(ValueError):
             parse_scalar_rows(
