@@ -461,3 +461,53 @@ de precios, indicadores, RAG, fecha UTC ni metodología. Validar
 móvil 320/768/1440, impresión A4, enlaces de fuentes y tarjetas
 de RBN con advertencia provisional. La estética jamás puede
 saltarse el gate ni autorizar Telegram.
+
+
+## Procedimiento 11 — Archivo histórico de TODAS las APIs (Tier 2)
+
+**Objetivo permanente e irrenunciable:** descargar y conservar en SQLite
+local el mayor histórico permitido **de cada API contratada**, de forma
+reanudable, documentada y consultable retrospectivamente. Los reportes
+diarios NO sustituyen el histórico, ni representan toda la información
+disponible. El sistema debe poder contestar consultas del tipo
+«¿qué sucedía el 20-ene-2021?», con valor, fuente, unidad,
+observado UTC y cuándo fue descargado/revisado.
+
+**El usuario posee ResearchBitcoin TIER 2**, no el plan gratuito. No
+limitar el archivo a un año: usar `--tier 2 --from YYYY-MM-DD`.
+No confundir profundidad solicitada con disponibilidad comprobada:
+si el proveedor empieza después, registrar alcance real y huecos.
+
+Consultar siempre `docs/ARCHIVE_ARCHITECTURE_TIER2.md` y
+`docs/DATABASE_SCHEMA.md`; antes de cualquier descarga masiva:
+1. Inspeccionar SQLite existente, realizar copia de seguridad local,
+   estimar cuotas, almacenamiento y ventanas UTC.
+2. Ejecutar `python3 scripts/history_coverage.py` y PLAN sin `--apply`:
+   - ResearchBitcoin: `python3 ingestion/researchbitcoin_archive.py --history --tier 2 --from 2009-01-01 --max-requests 8`
+   - Bitview: `python3 ingestion/bitview_history.py --all-daily --max-requests 8`
+   - FRED: `python3 ingestion/ingest_fred.py --history`
+   - Yahoo: `python3 ingestion/yahoo_history.py --limit 4`
+3. Tras validar plan y backup, ejecutar lotes con `--apply`
+   cuando el operador lo autorice. **Nunca** correr
+   `ingest_all.py` original en modo destructivo.
+4. Guardar observaciones crudas, fuente, unidad, fecha UTC,
+   revisiones y evidencia de cobertura mediante
+   `storage/archive_schema.py`; no sobrescribir las series de
+   Bitview con ResearchBitcoin ni modificar `daily_metrics`.
+5. Una vez confirmado el histórico, usar `--incremental` para RBN
+   bajo una programación futura **aprobada** y respetando
+   el límite por ejecución; no agregar cron sin instrucción expresa.
+6. Informar periodos no accesibles, errores, fechas de
+   revisión, series sin datos y presupuesto de solicitudes,
+   sin afirmar cobertura total sin auditoría.
+
+## Procedimiento 12 — Diseño exclusivo Research Studio
+
+Para apariencia, jerarquía, accesibilidad, diseño de gráficas y
+portabilidad del reporte usar **`/mercados-research-design`** y
+`docs/REPORT_DESIGN_SYSTEM.md`. Este skill es la alternativa
+específica al genérico Sereno para BTC Market Lab.
+El diseño vive en `rendering/market_design.py` y se inyecta
+en `analysis/daily_report.py` **antes de publication_gate**.
+No cambiar valores/labels/fecha/narrativa para obtener un diseño
+más agradable ni añadir dependencias remotas que rompan HTML portátil.
