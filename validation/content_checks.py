@@ -25,6 +25,19 @@ def number(raw):
         return None
 
 
+def extract_cpi_yoy_from_macro_strip(source):
+    """Read CPI from the labeled FRED tile, never from unrelated MACD/price text.
+
+    Only accepts actual percent figures, not placeholder '---'.
+    """
+    hit = re.search(
+        r'<div class="mc-name">\s*CPI YoY\s*</div>\s*'
+        r'<div class="mc-val">\s*([-+]?\d+(?:\.\d+)?)\s*%\s*</div>',
+        source, re.I,
+    )
+    return float(hit.group(1)) if hit else None
+
+
 def plain(markup):
     return htmllib.unescape(re.sub(r"<[^>]*>", " ", markup)).replace("\xa0", " ")
 
