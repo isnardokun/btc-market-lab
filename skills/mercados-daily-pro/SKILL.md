@@ -570,3 +570,43 @@ Ejecutar `python3 -m unittest -v tests.unit.test_knowledge_corpus_v2` y
 `python3 tests/run_all.py` en cada actualización. Dar al usuario versión,
 SHA del corpus, pruebas, manifest, referencias revisadas y faltantes. No
 alterar archivos de ejecución locales ni publicar resultados privados.
+
+
+## Procedimiento 12 — ETF, derivados y calendario: SQLite obligatorio
+
+**Contrato no negociable:** TODAS las observaciones ETF, OI, funding y
+calendario, payloads brutos, revisiones, cursores y estados de ingesta
+se almacenan exclusivamente en `db/btc_research.db`. No crear
+cachés de datos CSV/JSON ni otra SQLite paralela. Los HTML son productos
+de publicación, no almacenes históricos.
+
+Lee `docs/MARKET_CONTEXT_SQLITE.md` antes de operar. Las nuevas
+tablas `market_*` exigen migración ADITIVA respaldada con
+`scripts/market_context_migrate.py --apply` después de verificar
+`git status` y ejecutar `bash scripts/update_local_and_test.sh`.
+El respaldo se realiza mediante `sqlite3.backup()`, compatible con WAL;
+si falla, DETENER la migración. No ejecutar `--apply` en datos privados
+sin autorización específica del usuario y una revisión del plan.
+
+Pipeline diario: refresco de mercado solo si el operador configura
+`MARKET_CONTEXT_DAILY_ENABLED=1`. La ingesta CLI es
+`python3 scripts/market_context_ingest.py --apply --sources binance,bybit,bls,fred`;
+Farside se habilita tras comprobar permisos de consulta.
+`--history` implica recuperación histórica limitada y debe
+ejecutarse por lotes y cuota, fuera del cron. No habilitar Telegram.
+
+Exigir evidencia post ejecución de `PRAGMA integrity_check`, recuentos,
+mínimo/máximo UTC, estado por proveedor, gaps y cursores de recuperación.
+Para el informe, leer SQLite en modo RO: excluir observaciones
+desactualizadas, conservar unidad original BTC/quote/fraction, incluir
+fecha, fuente, carácter preliminar y ausencia de información. NO sumar
+OI de distintos exchanges sin normalizar unidades y contratos; NO
+convertir funding liquidado en estimado; NO confundir ETF flows
+con AUM ni rellenar datos faltantes como cero. Calendarios oficiales
+sin hora: mostrar "Hora UTC no confirmada".
+
+Para verificar: `python3 -m unittest -v
+tests.unit.test_market_context_sqlite` y `python3 tests/run_all.py`.
+Respuesta a ChatGPT por `hermes_bridge.py inbox/reply --pr 23`:
+solo estadísticas saneadas y hallazgos; jamás subir SQLite, payloads,
+tokens ni HTML privado al GitHub público.
