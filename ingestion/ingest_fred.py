@@ -21,6 +21,7 @@ ADVERTENCIA: FRED tiene dos fechas por observación:
 import sys, os, datetime, sqlite3, json, time, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
+from storage.archive_schema import ensure_archive_schema
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -208,6 +209,8 @@ def main():
         print("ERROR: configura FRED_API_KEY en el entorno de Hermes", file=sys.stderr)
         return 2
     conn = sqlite3.connect(DB_PATH)
+    ensure_archive_schema(conn)
+    conn.commit()
     total = 0
     for series_id, name, freq, desc in FRED_SERIES:
         try:
