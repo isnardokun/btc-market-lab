@@ -9,12 +9,14 @@ Never part of daily.sh unless the operator explicitly enables it.
 import argparse
 import datetime as dt
 import json
+import uuid
 from pathlib import Path
 import sqlite3
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import CATALOG, PROVIDER
+from storage.archive_schema import ensure_archive_schema, save_window
 from ingestion.researchbitcoin_v2 import (
     DEFAULT_DB, fetch, last_completed_day, parse_scalar_rows, store_rows,
 )
@@ -91,9 +93,42 @@ def plan_metric(slug, present_dates, *, mode, cutoff, tier=0, history_start=None
     return group_missing_dates(missing)
 
 
+def read_checked_windows(db_path, slug):
+    """Successful requests, including empty metric eras, are resumable windows."""
+    uri = Path(db_path).resolve().as_uri() + "?mode=ro"
+    with sqlite3.connect(uri, uri=True) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT start_utc,end_exclusive_utc FROM archive_ingest_windows "
+                "WHERE source_id=? AND metric=? AND status IN ('ok','empty')",
+                (PROVIDER, slug),
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc):
+                raise
+            rows = []
+    return set(rows)
+
+
+def history_windows(db_path, slug, start, cutoff):
+    """Fixed 14d windows: checkpoint empty pre-launch history, no fake zeros."""
+    done = read_checked_windows(db_path, slug)
+    pending = []
+    day = start
+    while day <= cutoff:
+        end = min(day + dt.timedelta(days=14), cutoff + dt.timedelta(days=1))
+        if (day.isoformat(), end.isoformat()) not in done:
+            pending.append((day, end))
+        day = end
+    return pending
+
+
 def plan_all(db, *, mode, slugs=None, tier=0, history_start=None, cutoff=None):
     cutoff = cutoff or last_completed_day()
     selected = sorted(slugs or CATALOG)
+    if mode == "history":
+        earliest = allowed_earliest(cutoff, tier, history_start)
+        return {slug: history_windows(db, slug, earliest, cutoff) for slug in selected}
     return {slug: plan_metric(slug, read_dates(db, slug), mode=mode, cutoff=cutoff,
                               tier=tier, history_start=history_start)
             for slug in selected}
@@ -108,8 +143,11 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
     cutoff = last_completed_day(today)
     plan = plan_all(db_path, mode=mode, slugs=slugs, tier=tier,
                     history_start=history_start, cutoff=cutoff)
-    windows = [(slug, a, b) for slug, pairs in plan.items() for a, b in pairs]
-    # Interleave metric requests. Repeated calls steadily fill the oldest gaps.
+    # Interleave metrics so Tier 2 backfill progresses evenly.
+    windows = []
+    for batch in range(max((len(pairs) for pairs in plan.values()), default=0)):
+        windows.extend((slug, plan[slug][batch][0], plan[slug][batch][1])
+                       for slug in sorted(plan) if batch < len(plan[slug]))
     selected = windows[:max_requests]
     estimated = sum((end - start).days for _, start, end in selected)
     results = {
@@ -118,28 +156,56 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
         "estimated_max_data_points": estimated, "executed": bool(apply),
         "requested": [], "failed": [], "saved_observations": 0,
     }
+    run_id = uuid.uuid4().hex if apply else None
+    if apply:
+        with sqlite3.connect(db_path) as db:
+            ensure_archive_schema(db)
+            db.execute(
+                "INSERT INTO archive_ingest_runs "
+                "(run_id,source_id,operation,started_at_utc,status) "
+                "VALUES (?,?,?,?,'running')",
+                (run_id,PROVIDER,mode,dt.datetime.now(dt.timezone.utc).isoformat()),
+            )
     for slug, start, end in selected:
-        result = {"metric": slug, "start": start.isoformat(), "end_exclusive": end.isoformat()}
+        result = {"metric":slug,"start":start.isoformat(),"end_exclusive":end.isoformat()}
         if not apply:
             results["requested"].append(result)
             continue
+        status = "failed"
+        observed = {}
         try:
-            payload = client(slug, start_day=start, end_day=end)
-            observed = parse_scalar_rows(payload, slug, now=today)
-            # Reject response observations outside the requested chunk.
+            payload = client(slug,start_day=start,end_day=end)
+            if isinstance(payload,dict) and payload.get("data") == []:
+                observed = {}
+            else:
+                observed = parse_scalar_rows(payload,slug,now=today)
             if any(not start <= dt.date.fromisoformat(day) < end for day in observed):
-                raise ValueError("Proveedor devolvió observaciones fuera de la ventana solicitada")
-            store_rows(db_path, slug, observed)
+                raise ValueError("Proveedor devolvió observaciones fuera de ventana")
+            if observed:
+                store_rows(db_path,slug,observed)
+            status = "ok" if observed else "empty"
             result["rows"] = len(observed)
             results["saved_observations"] += len(observed)
-        except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
-            # Keep payload credentials / URLs / raw values out of public logs.
+        except (ValueError,RuntimeError,OSError,sqlite3.Error) as exc:
             result["error_type"] = type(exc).__name__
             results["failed"].append(result)
-            # Stop rather than consuming the rest of the quota on failures.
-            results["requested"].append(result)
-            break
+        finally:
+            with sqlite3.connect(db_path) as db:
+                ensure_archive_schema(db)
+                save_window(db,PROVIDER,slug,start,end,status,len(observed),
+                            run_id=run_id)
         results["requested"].append(result)
+        if status == "failed":
+            break
+    if apply:
+        with sqlite3.connect(db_path) as db:
+            db.execute(
+                "UPDATE archive_ingest_runs SET finished_at_utc=?,status=?,"
+                "requests=?,data_points=? WHERE run_id=?",
+                (dt.datetime.now(dt.timezone.utc).isoformat(),
+                 "partial" if results["failed"] else "completed",
+                 len(results["requested"]),results["saved_observations"],run_id),
+            )
     return results
 
 
