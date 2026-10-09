@@ -189,6 +189,20 @@ def validate_entry(entry, index):
     if url in ["http://", "https://", ""]:
         return False, f"[{index}] URL placeholder"
 
+    # A source timestamp may not be in the future relative to UTC generation.
+    published = str(entry.get("published", "") or "")
+    iso = re.search(r"\b(20\d{2}-\d{2}-\d{2})T(\d{2}:\d{2}(?::\d{2})?)(Z|[+-]\d{2}:?\d{2})\b", published)
+    if iso:
+        value = iso.group(0).replace("Z", "+00:00")
+        if re.search(r"[+-]\d{4}$", value):
+            value = value[:-2] + ":" + value[-2:]
+        try:
+            event_dt = datetime.datetime.fromisoformat(value)
+            if event_dt > datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=3):
+                return False, f"[{index}] Publicación futura frente a reloj UTC"
+        except ValueError:
+            return False, f"[{index}] Fecha publicada ISO inválida"
+
     # Title check — must be non-empty and long enough
     title = entry.get("title", "")
     if not title or len(title) < MIN_TITLE_LEN:
@@ -274,51 +288,27 @@ def run_news_pipeline(queries):
 
 # ─── Normalizar para el reporte ─────────────────────────────────────────
 def normalize_for_report(news_items):
-    """
-    Convierte news items crudos al formato que espera el reporte HTML.
-    Aplica traducción simple y clasificaciones.
-    """
-    KW = {
-        "rate hike": "alza de tasas", "rate cut": "baja de tasas",
-        "inflation": "inflacion", "fed": "Fed", "Treasury": "tesoro",
-        "yield": "rendimiento", "etf": "ETF", "bitcoin": "BTC",
-        "bullish": "alcista", "bearish": "bajista",
-        "resistance": "resistencia", "support": "soporte",
-        "breakout": "ruptura", "breakdown": "caida",
-        "surge": "subida", "plunge": "caida", "crash": "crash",
-        "long": "largo", "short": "corto", "liquidation": "liquidacion",
-        "rebound": "rebote", "recovery": "recuperacion",
-    }
+    """Preserve original headlines/extracts without pseudo-translation.
 
-    def translate(text):
-        if not text: return ""
-        result = text
-        for en, es in KW.items():
-            result = re.sub(rf"\b{re.escape(en)}\b", es, result, flags=re.IGNORECASE)
-        return result
-
+    An uncalibrated keyword rule cannot establish bullish/bearish market
+    impact. Expose the thematic category as a heuristic, not as a factual
+    causal effect or confirmed outlook.
+    """
     report_items = []
     for n in news_items:
-        title    = n.get("title", "")
-        hl       = n.get("highlight", "")
-        text_all = (title + " " + hl).lower()
-
-        bias     = classify_bias(text_all)
-        impact_t = classify_impact_text(text_all, bias)
-
-        title_es = translate(title)
-        hl_es    = translate(hl)
-
+        title = str(n.get("title", "") or "")
+        highlight = str(n.get("highlight", "") or "")
+        category = classify_impact((title + " " + highlight).lower())
         report_items.append({
-            "date":    n.get("date", ""),
-            "title":   title_es or title,
-            "url":     n.get("url", ""),
-            "summary": (hl_es or hl)[:280],
-            "bias":    bias,
-            "impact":  impact_t,
+            "date": n.get("date") or "Fecha no confirmada",
+            "title": title,
+            "url": n.get("url", ""),
+            "summary": highlight[:280],
+            "bias": "Sin evaluar",
+            "impact": category,
         })
-
     return report_items
+
 
 # ─── Query definitions ────────────────────────────────────────────────────
 DEFAULT_QUERIES = {
