@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import CATALOG, PROVIDER
+from storage.archive_schema import migrate, record_batch
 from ingestion.researchbitcoin_v2 import (
     DEFAULT_DB, fetch, last_completed_day, parse_scalar_rows, store_rows,
 )
@@ -99,13 +100,15 @@ def plan_all(db, *, mode, slugs=None, tier=0, history_start=None, cutoff=None):
             for slug in selected}
 
 
-def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
+def run(db_path, *, mode, slugs, tier=2, history_start=None, max_requests=13,
         apply=False, client=fetch, today=None):
     if not 1 <= max_requests <= 100:
         raise ValueError("max-requests fuera de rango 1..100")
     if not Path(db_path).is_file():
         raise ValueError("SQLite local no existe (no se creará una base vacía)")
     cutoff = last_completed_day(today)
+    if apply:
+        migrate(db_path)
     plan = plan_all(db_path, mode=mode, slugs=slugs, tier=tier,
                     history_start=history_start, cutoff=cutoff)
     windows = [(slug, a, b) for slug, pairs in plan.items() for a, b in pairs]
@@ -129,6 +132,9 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
             # Reject response observations outside the requested chunk.
             if any(not start <= dt.date.fromisoformat(day) < end for day in observed):
                 raise ValueError("Proveedor devolvió observaciones fuera de la ventana solicitada")
+            record_batch(db_path, PROVIDER, slug, CATALOG[slug],
+                         start.isoformat(), end.isoformat(), observed,
+                         f"Tier {tier}")
             store_rows(db_path, slug, observed)
             result["rows"] = len(observed)
             results["saved_observations"] += len(observed)
@@ -149,7 +155,7 @@ def main():
     m.add_argument("--incremental", action="store_true", help="Solo días posteriores al último observado")
     m.add_argument("--history", action="store_true", help="Rellenar todos los días faltantes en historia autorizada")
     p.add_argument("--db", type=Path, default=DEFAULT_DB)
-    p.add_argument("--tier", type=int, choices=(0, 1, 2), default=0)
+    p.add_argument("--tier", type=int, choices=(0, 1, 2), default=2)
     p.add_argument("--from", dest="history_start", metavar="YYYY-MM-DD")
     p.add_argument("--slug", action="append", choices=sorted(CATALOG), help="Filtrar a uno o varios slugs")
     p.add_argument("--max-requests", type=int, default=13,
