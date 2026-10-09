@@ -78,3 +78,31 @@ def render_market_context(db_path, now=None):
             '<p class="ssub">Fuentes archivadas en SQLite; fechas UTC explícitas. '
             'Datos parciales, cobertura por proveedor; no son señales automáticas.</p>'
             '<div class="stats-bar">'+''.join(blocks)+'</div></div>')
+
+
+def read_upcoming_calendar(db_path, now=None, limit=6):
+    """Render-facing official schedule; BLS timestamps beat FRED date-only."""
+    now=now or dt.datetime.now(dt.timezone.utc)
+    if now.tzinfo is None:raise ValueError("UTC-aware now required")
+    now=now.astimezone(dt.timezone.utc)
+    if not Path(db_path).is_file():return []
+    with sqlite3.connect(Path(db_path).resolve().as_uri()+"?mode=ro",uri=True) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                          "AND name='market_calendar_events'").fetchone():
+            return []
+        rows=db.execute(
+            "SELECT provider,title,scheduled_utc,time_precision,event_date "
+            "FROM market_calendar_events WHERE state='scheduled' AND event_date BETWEEN ? AND ? "
+            "ORDER BY event_date,CASE WHEN provider='bls' THEN 0 ELSE 1 END,scheduled_utc LIMIT 100",
+            (now.date().isoformat(),(now.date()+dt.timedelta(days=14)).isoformat())).fetchall()
+    selected=[];seen=set()
+    for provider,title,stamp,precision,day in rows:
+        # No exact hour is inferred from FRED's publication DATE.
+        key=(day,title.strip().lower())
+        if key in seen:continue
+        seen.add(key)
+        date=day
+        hour=stamp[11:16]+" UTC" if precision=="utc" and stamp else "Hora UTC no confirmada"
+        selected.append((date,title,hour,provider.upper()+" · calendario oficial"))
+        if len(selected)>=limit:break
+    return selected
