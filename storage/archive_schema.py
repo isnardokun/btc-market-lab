@@ -76,6 +76,18 @@ CREATE TABLE IF NOT EXISTS archive_observation_revisions (
 );
 CREATE INDEX IF NOT EXISTS idx_archive_revisions_lookup
 ON archive_observation_revisions(source_id,metric,observed_at_utc,revision_id);
+CREATE TABLE IF NOT EXISTS archive_fred_vintages (
+  series_id TEXT NOT NULL,
+  observed_date TEXT NOT NULL,
+  realtime_start TEXT NOT NULL,
+  realtime_end TEXT,
+  value REAL NOT NULL,
+  captured_at_utc TEXT NOT NULL,
+  PRIMARY KEY(series_id, observed_date, realtime_start)
+);
+CREATE INDEX IF NOT EXISTS idx_archive_fred_vintages_asof
+ON archive_fred_vintages(series_id, observed_date, realtime_start);
+
 """
 
 TRIGGERS = {
