@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from analysis import daily_report
 from ingestion import news_pipeline
-from validation.content_checks import audit_report_html
+from validation.content_checks import audit_report_html, extract_cpi_yoy_from_macro_strip
 
 
 class EditorialIntegrityTests(unittest.TestCase):
@@ -94,6 +94,33 @@ class EditorialIntegrityTests(unittest.TestCase):
         )
         errors = audit_report_html(html, strict_asof=True)
         self.assertTrue(any("futura" in x for x in errors), errors)
+
+    def test_cpi_tile_is_not_confused_with_macd_minus_532_33(self):
+        report = (
+            '<div class="mc"><div class="mc-name">CPI YoY</div>'
+            '<div class="mc-val">3.35%</div><div class="mc-date">2026-08-01</div></div>'
+            '<span class="o-name">MACD</span><span class="o-val">-532.33</span>'
+        )
+        self.assertAlmostEqual(extract_cpi_yoy_from_macro_strip(report), 3.35)
+
+    def test_cpi_tile_parser_fails_closed_without_real_percent_value(self):
+        report = ('<div class="mc-name">CPI YoY</div><div class="mc-val">--</div>'
+                  '<span>MACD -532.33</span>')
+        self.assertIsNone(extract_cpi_yoy_from_macro_strip(report))
+
+    def test_cpi_2_33_is_not_forbidden_when_actual_value_is_2_33(self):
+        report = '<div class="mc-name">CPI YoY</div><div class="mc-val">2.33%</div>'
+        self.assertEqual(extract_cpi_yoy_from_macro_strip(report), 2.33)
+
+    def test_snapshot_source_is_timezone_aware_and_param_labels_are_valid(self):
+        from ingestion import snapshot
+        source = (Path(__file__).resolve().parents[2] /
+                  "ingestion/snapshot.py").read_text(encoding="utf-8")
+        self.assertIn("datetime.timezone.utc", source)
+        self.assertNotIn('" SMA200_window"', source)
+        params = snapshot.get_pipeline_params()
+        self.assertEqual(params["SMA200_window"], 200)
+        self.assertEqual(params["historical_price_lookback"], 252)
 
     def test_no_static_directional_forecast_in_report_generator(self):
         source = (Path(__file__).resolve().parents[2] / "analysis/daily_report.py").read_text()
