@@ -10,7 +10,8 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
-from rendering.onchain_complement import render_complement
+from rendering.onchain_complement import render_complement, read_complement
+from analysis.research_studio import render_executive_brief, rbn_diagnostic, rsi_zone
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
 from ingestion.news_archive import archive_news
@@ -499,8 +500,8 @@ section{margin-bottom:54px}
 
 def ma_row(name, price, current_price):
     if price is None: cls, signal = "neu", "---"
-    elif current_price > price: cls, signal = "buy", "Compra"
-    elif current_price < price: cls, signal = "sell", "Venta"
+    elif current_price > price: cls, signal = "buy", "Por encima"
+    elif current_price < price: cls, signal = "sell", "Por debajo"
     else: cls, signal = "neu", "Neutral"
     return (f'<div class="ma-item {cls}">'
             f'<span class="ma-name">{name}</span>'
@@ -620,9 +621,9 @@ def gen_btc_narrative(oc, btc_price_data, btc_rsi, btc_hist, btc_chg, btc_sma200
     rhodl = oc.get("rhodl")
 
     # RSI signal
-    if btc_rsi and btc_rsi < 40:
-        rsi_sig = f"RSI(14) en {btc_rsi:.0f} indica zona de sobreventa — potencial de rebote."
-    elif btc_rsi and btc_rsi > 65:
+    if btc_rsi and btc_rsi < 30:
+        rsi_sig = f"RSI(14) en {btc_rsi:.0f}: sobreventa bajo 30, sin implicar compra o rebote."
+    elif btc_rsi and btc_rsi > 70:
         rsi_sig = f"RSI(14) en {btc_rsi:.0f} muestra condiciones de sobrecompra."
     else:
         rsi_sig = f"RSI(14) en {btc_rsi:.0f} se encuentra en zona neutral."
@@ -726,9 +727,9 @@ def gen_spy_narrative(spy_price, spy_chg, spy_rsi, spy_sma50, spy_sma200, m10y_v
     parts = []
 
     # RSI signal
-    if spy_rsi and spy_rsi < 40:
+    if spy_rsi and spy_rsi < 30:
         rsi_sig = f"RSI(14) en {spy_rsi:.0f} indica condiciones de sobreventa."
-    elif spy_rsi and spy_rsi > 60:
+    elif spy_rsi and spy_rsi > 70:
         rsi_sig = f"RSI(14) en {spy_rsi:.0f} muestra sobrecompra."
     else:
         rsi_sig = f"RSI(14) en {spy_rsi:.0f} se encuentra en zona neutral."
@@ -775,9 +776,9 @@ def gen_spy_narrative(spy_price, spy_chg, spy_rsi, spy_sma50, spy_sma200, m10y_v
 
 def gen_gold_narrative(gold_price, gold_chg, gold_rsi, gold_hist, m10y_val, mvix, mdxy):
     """Generate Gold narrative from REAL data only."""
-    if gold_rsi and gold_rsi < 40:
-        rsi_sig = f"RSI(14) en {gold_rsi:.0f} indica zona de sobreventa — potencial rebote."
-    elif gold_rsi and gold_rsi > 65:
+    if gold_rsi and gold_rsi < 30:
+        rsi_sig = f"RSI(14) en {gold_rsi:.0f}: sobreventa bajo 30, no equivale a señal de compra."
+    elif gold_rsi and gold_rsi > 70:
         rsi_sig = f"RSI(14) en {gold_rsi:.0f} muestra condiciones de sobrecompra."
     else:
         rsi_sig = f"RSI(14) en {gold_rsi:.0f} en zona neutral."
@@ -1004,7 +1005,7 @@ def main():
                  if p and btc_c[-1] > p)
     sell_s = sum(1 for p in [btc_sma20, btc_sma50, btc_sma100, btc_sma200]
                  if p and btc_c[-1] < p)
-    rsi_sig = "Compra" if btc_rsi and btc_rsi<40 else ("Venta" if btc_rsi and btc_rsi>60 else "Neutral")
+    rsi_sig = rsi_zone(btc_rsi)
     macd_sig = "Compra" if btc_hist and btc_hist>0 else ("Venta" if btc_hist and btc_hist<0 else "Neutral")
     stoch_sig = "Sobreventa" if btc_stoch_k and btc_stoch_k<20 else ("Sobrecompra" if btc_stoch_k and btc_stoch_k>80 else "Neutral")
     willr_sig = "Sobreventa" if btc_willr and btc_willr<-80 else ("Sobrecompra" if btc_willr and btc_willr>-20 else "Neutral")
@@ -1021,7 +1022,7 @@ def main():
 
     btc_osc_items = (
         osc_card("RSI(14)", f"{btc_rsi:.0f}" if btc_rsi else "---", rsi_sig,
-                 "buy" if (btc_rsi and btc_rsi<40) else ("sell" if (btc_rsi and btc_rsi>60) else "neu")) +
+                 "buy" if (btc_rsi and btc_rsi<30) else ("sell" if (btc_rsi and btc_rsi>70) else "neu")) +
         osc_card("MACD", (f"{btc_hist:.2f}" if btc_hist else "---"), macd_sig,
                  "buy" if (btc_hist and btc_hist>0) else ("sell" if (btc_hist and btc_hist<0) else "neu")) +
         osc_card("Estocastico", f"{btc_stoch_k:.0f}" if btc_stoch_k else "---", stoch_sig,
@@ -1034,10 +1035,10 @@ def main():
     )
 
     # ── SPY TECHNICAL ────────────────────────────────────────────────────────
-    spy_rsi_sig = "Compra" if spy_rsi and spy_rsi<40 else ("Venta" if spy_rsi and spy_rsi>60 else "Neutral")
+    spy_rsi_sig = rsi_zone(spy_rsi)
     spy_osc_items = (
         osc_card("RSI(14)", f"{spy_rsi:.0f}" if spy_rsi else "---", spy_rsi_sig,
-                 "buy" if (spy_rsi and spy_rsi<40) else ("sell" if (spy_rsi and spy_rsi>60) else "neu")) +
+                 "buy" if (spy_rsi and spy_rsi<30) else ("sell" if (spy_rsi and spy_rsi>70) else "neu")) +
         osc_card("Williams %R", f"{spy_willr:.0f}" if spy_willr else "---",
                  "Sobreventa" if spy_willr and spy_willr<-80 else ("Sobrecompra" if spy_willr and spy_willr>-20 else "Neutral"),
                  "buy" if (spy_willr and spy_willr<-80) else ("sell" if (spy_willr and spy_willr>-20) else "neu")) +
@@ -1061,7 +1062,7 @@ def main():
     )
 
     # ── GOLD TECHNICAL ────────────────────────────────────────────────────────
-    gold_rsi_sig = "Compra" if gold_rsi and gold_rsi<40 else ("Venta" if gold_rsi and gold_rsi>60 else "Neutral")
+    gold_rsi_sig = rsi_zone(gold_rsi)
     gold_macd_sig = "Compra" if gold_hist and gold_hist>0 else ("Venta" if gold_hist and gold_hist<0 else "Neutral")
     gold_stoch_sig = "Sobreventa" if gold_stoch_k and gold_stoch_k<20 else ("Sobrecompra" if gold_stoch_k and gold_stoch_k>80 else "Neutral")
     gold_willr_sig = "Sobreventa" if gold_willr and gold_willr<-80 else ("Sobrecompra" if gold_willr and gold_willr>-20 else "Neutral")
@@ -1077,7 +1078,7 @@ def main():
     )
     gold_osc_items = (
         osc_card("RSI(14)", f"{gold_rsi:.0f}" if gold_rsi else "---", gold_rsi_sig,
-                 "buy" if (gold_rsi and gold_rsi<40) else ("sell" if (gold_rsi and gold_rsi>60) else "neu")) +
+                 "buy" if (gold_rsi and gold_rsi<30) else ("sell" if (gold_rsi and gold_rsi>70) else "neu")) +
         osc_card("MACD", (f"{gold_hist:.2f}" if gold_hist else "---"), gold_macd_sig,
                  "buy" if (gold_hist and gold_hist>0) else ("sell" if gold_hist and gold_hist<0 else "neu")) +
         osc_card("Estocastico", f"{gold_stoch_k:.0f}" if gold_stoch_k else "---", gold_stoch_sig,
@@ -1111,6 +1112,16 @@ def main():
     A('<span>Fuentes: Yahoo Finance · bitview DB · FRED · Exa Search</span>')
     A('<span>Generado '+NOW_STR+'</span>')
     A('</div></div>')
+
+    # v2 executive brief: precedes macro tiles and historical detail.
+    rbn_rows = read_complement(DB_PATH, last_utc)
+    A(render_executive_brief(
+        btc=btc_price, btc_change=btc_chg, btc_rsi=btc_rsi,
+        btc_macd_hist=btc_hist, btc_sma20=btc_sma20,
+        btc_asof=price_asof_utc, spy=spy_price, spy_change=spy_chg,
+        gold=gold_price, gold_change=gold_chg,
+        yield10=m10y, yield10_date=m10y_date,
+        rbn_available=bool(rbn_rows)))
 
     # MACRO CALENDAR
     A('<div class="kicker" style="margin-bottom:8px">Calendario Macroeconomico</div>')
@@ -1189,7 +1200,7 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Max 52s</div><div class="sval">{"$%.0f"%btc_pdata["high52"]}</div><div class="ssub">{btc_pdata["high52_date"]}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Min 52s</div><div class="sval up">{"$%.0f"%btc_pdata["low52"]}</div><div class="ssub">{btc_pdata["low52_date"]}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Desde ATH</div><div class="sval dn">{btc_pdata["from_ath"]:.1f}%</div><div class="ssub">caida desde max</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"up" if btc_rsi and btc_rsi<40 else ("dn" if btc_rsi and btc_rsi>65 else "")}">{"%.0f"%btc_rsi if btc_rsi else "---"}</div><div class="ssub">Wilder smoothing</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"up" if btc_rsi and btc_rsi<30 else ("dn" if btc_rsi and btc_rsi>70 else "")}">{"%.0f"%btc_rsi if btc_rsi else "---"}</div><div class="ssub">Wilder smoothing</div></div>')
     A(f'<div class="stat-item"><div class="slbl">MACD</div><div class="sval {"up" if btc_hist and btc_hist>0 else ("dn" if btc_hist and btc_hist<0 else "")}">{"%.2f"%btc_hist if btc_hist else "---"}</div><div class="ssub">histograma</div></div>')
     A(f'<div class="stat-item"><div class="slbl">ATR(14)</div><div class="sval">{"$%.0f"%btc_atr if btc_atr else "---"}</div><div class="ssub">rango avg</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Mkt Cap</div><div class="sval">{oc["mcap"]:.2f}T</div><div class="ssub">USD</div></div>')
@@ -1225,6 +1236,7 @@ def main():
     # Optional RBN enrichment: read verified local sidecar only; no API call.
     # Empty until Hermes explicitly initializes/syncs the supplemental source.
     A(render_complement(DB_PATH, last_utc))
+    A(rbn_diagnostic(rbn_rows, btc_price=btc_price, cutoff=last_utc))
 
     # Expert Analysis — REAL DATA NARRATIVE
     A('<div class="expert-box">')
@@ -1255,7 +1267,7 @@ def main():
     A('<div class="card"><h3>Resumen Tecnico — Senales de Indicadores</h3>')
     A('<table class="signal-table">')
     A('<thead><tr><th>Indicador</th><th>Valor</th><th>Senal</th><th></th></tr></thead><tbody>')
-    A(f'<tr><td>RSI(14)</td><td class="val">{"%.1f"%btc_rsi if btc_rsi else "---"}</td><td class="{"buy" if btc_rsi and btc_rsi<40 else ("sell" if btc_rsi and btc_rsi>60 else "neu")}">{rsi_sig}</td><td></td></tr>')
+    A(f'<tr><td>RSI(14)</td><td class="val">{"%.1f"%btc_rsi if btc_rsi else "---"}</td><td class="{"buy" if btc_rsi and btc_rsi<30 else ("sell" if btc_rsi and btc_rsi>70 else "neu")}">{rsi_sig}</td><td></td></tr>')
     A(f'<tr><td>MACD (12,26,9)</td><td class="val">{"%.2f"%btc_hist if btc_hist else "---"}</td><td class="{"buy" if btc_hist and btc_hist>0 else ("sell" if btc_hist and btc_hist<0 else "neu")}">{macd_sig}</td><td></td></tr>')
     A(f'<tr><td>Estocastico (14)</td><td class="val">{"%.0f"%btc_stoch_k if btc_stoch_k else "---"}</td><td class="{"buy" if btc_stoch_k and btc_stoch_k<20 else ("sell" if btc_stoch_k and btc_stoch_k>80 else "neu")}">{stoch_sig}</td><td></td></tr>')
     A(f'<tr><td>Williams %R</td><td class="val">{"%.0f"%btc_willr if btc_willr else "---"}</td><td class="{"buy" if btc_willr and btc_willr<-80 else ("sell" if btc_willr and btc_willr>-20 else "neu")}">{willr_sig}</td><td></td></tr>')
@@ -1280,7 +1292,7 @@ def main():
     btc_bull, btc_base, btc_bear = compute_scenarios(
         btc_price, btc_c, btc_h, btc_l, btc_sup, btc_res,
         btc_rsi, btc_atr, btc_hist, "BTC",
-        macro_data={"next_event": "CPI 14-oct", "vix": mvix, "dxy": mdxy}
+        macro_data={"vix": mvix, "dxy": mdxy}
     )
     A(bias_section("Bitcoin (BTC)", btc_chg, btc_bull, btc_base, btc_bear))
 
@@ -1309,7 +1321,7 @@ def main():
     A('</div>')
 
     A('<div class="stats-bar">')
-    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"dn" if spy_rsi and spy_rsi>60 else ("up" if spy_rsi and spy_rsi<40 else "")}">{"%.0f"%spy_rsi if spy_rsi else "---"}</div><div class="ssub">{"Sobrecompra" if spy_rsi and spy_rsi>60 else ("Sobreventa" if spy_rsi and spy_rsi<40 else "Neutral")}</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"dn" if spy_rsi and spy_rsi>70 else ("up" if spy_rsi and spy_rsi<30 else "")}">{"%.0f"%spy_rsi if spy_rsi else "---"}</div><div class="ssub">{"Sobrecompra" if spy_rsi and spy_rsi>70 else ("Sobreventa" if spy_rsi and spy_rsi<30 else "Neutral")}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Williams %R</div><div class="sval">{"%.0f"%spy_willr if spy_willr else "---"}</div><div class="ssub">{"Extendida" if spy_willr and spy_willr>-20 else "Normal"}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">ATR(14)</div><div class="sval">{"$%.2f"%spy_atr if spy_atr else "---"}</div><div class="ssub">Rango promedio</div></div>')
     A(f'<div class="stat-item"><div class="slbl">10Y Yield</div><div class="sval dn">{"%.3f%%"%m10y if m10y else "---"}</div><div class="ssub">{m10y_date or ""}</div></div>')
@@ -1348,7 +1360,7 @@ def main():
     spy_bull, spy_base, spy_bear = compute_scenarios(
         spy_price, spy_c, spy_h, spy_l, spy_sup, spy_res,
         spy_rsi, spy_atr, spy_hist, "SPY",
-        macro_data={"next_event": "CPI 14-oct", "vix": mvix, "dxy": mdxy}
+        macro_data={"vix": mvix, "dxy": mdxy}
     )
     A(bias_section("SPY (S&P 500 ETF)", spy_chg, spy_bull, spy_base, spy_bear))
 
@@ -1369,7 +1381,7 @@ def main():
     A('</div>')
 
     A('<div class="stats-bar">')
-    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"up" if gold_rsi and gold_rsi<40 else ("dn" if gold_rsi and gold_rsi>60 else "")}">{"%.0f"%gold_rsi if gold_rsi else "---"}</div><div class="ssub">{gold_rsi_sig}</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"up" if gold_rsi and gold_rsi<30 else ("dn" if gold_rsi and gold_rsi>70 else "")}">{"%.0f"%gold_rsi if gold_rsi else "---"}</div><div class="ssub">{gold_rsi_sig}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">MACD</div><div class="sval {"up" if gold_hist and gold_hist>0 else ("dn" if gold_hist and gold_hist<0 else "")}">{"%.2f"%gold_hist if gold_hist else "---"}</div><div class="ssub">{gold_macd_sig}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Estocastico</div><div class="sval">{"%.0f"%gold_stoch_k if gold_stoch_k else "---"}</div><div class="ssub">{gold_stoch_sig}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Williams %R</div><div class="sval">{"%.0f"%gold_willr if gold_willr else "---"}</div><div class="ssub">{gold_willr_sig}</div></div>')
@@ -1402,7 +1414,7 @@ def main():
 
     A('<div class="card"><h3>Resumen Tecnico</h3><table class="signal-table">')
     A('<thead><tr><th>Indicador</th><th>Valor</th><th>Senal</th></tr></thead><tbody>')
-    A(f'<tr><td>RSI(14)</td><td class="val">{"%.0f"%gold_rsi if gold_rsi else "---"}</td><td class="{"buy" if gold_rsi and gold_rsi<40 else ("sell" if gold_rsi and gold_rsi>60 else "neu")}">{gold_rsi_sig}</td></tr>')
+    A(f'<tr><td>RSI(14)</td><td class="val">{"%.0f"%gold_rsi if gold_rsi else "---"}</td><td class="{"buy" if gold_rsi and gold_rsi<30 else ("sell" if gold_rsi and gold_rsi>70 else "neu")}">{gold_rsi_sig}</td></tr>')
     A(f'<tr><td>MACD</td><td class="val">{"%.2f"%gold_hist if gold_hist else "---"}</td><td class="{"buy" if gold_hist and gold_hist>0 else ("sell" if gold_hist and gold_hist<0 else "neu")}">{gold_macd_sig}</td></tr>')
     A(f'<tr><td>Estocastico</td><td class="val">{"%.0f"%gold_stoch_k if gold_stoch_k else "---"}</td><td class="{"buy" if gold_stoch_k and gold_stoch_k<20 else ("sell" if gold_stoch_k and gold_stoch_k>80 else "neu")}">{gold_stoch_sig}</td></tr>')
     A(f'<tr><td>Williams %R</td><td class="val">{"%.0f"%gold_willr if gold_willr else "---"}</td><td class="{"buy" if gold_willr and gold_willr<-80 else ("sell" if gold_willr and gold_willr>-20 else "neu")}">{gold_willr_sig}</td></tr>')
@@ -1424,7 +1436,7 @@ def main():
     gold_bull, gold_base, gold_bear = compute_scenarios(
         gold_cur, gold_c, gold_h, gold_l, gold_sup, gold_res,
         gold_rsi, gold_atr, gold_hist, "GOLD",
-        macro_data={"next_event": "CPI 14-oct", "vix": mvix, "dxy": mdxy}
+        macro_data={"vix": mvix, "dxy": mdxy}
     )
     A(bias_section("Oro Futuro (GC=F)", gold_chg, gold_bull, gold_base, gold_bear))
 

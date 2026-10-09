@@ -1,9 +1,8 @@
 """Mercados Research Studio — proprietary, offline editorial design language.
 
-CSS-only progressive enhancement of the existing report. No data values,
-charts, source labels, validation gates, JS logic, or semantic sections change.
+Editorial rules and responsive styling. Summary data is rendered by research_studio.
 """
-STYLE_VERSION = "mercados-research-studio-v1"
+STYLE_VERSION = "mercados-research-studio-v2"
 
 RESEARCH_CSS = r"""
 /* MERCADOS RESEARCH STUDIO / editorial design system v1 */
@@ -75,6 +74,18 @@ a:focus-visible{outline:3px solid #277E9B;outline-offset:3px;border-radius:3px}
 @media(prefers-reduced-motion:reduce){
  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+.research-brief{margin:12px 0 33px}
+.brief-caption{font-size:12px;color:var(--muted);margin:0 0 14px}
+.brief-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.brief-panel{background:#fff;border:1px solid var(--line);border-top:3px solid var(--sea);
+ border-radius:11px;padding:19px 20px 17px;min-width:0}
+.brief-panel h3{font-family:var(--serif);font-size:17px;line-height:1.28;
+ color:var(--deep);margin:0 0 10px}
+.brief-panel p{font-size:12.5px;line-height:1.65;margin:0;overflow-wrap:anywhere}
+.rbn-diagnostic{border-left:4px solid var(--sea)}
+.rbn-diagnostic ul{margin:10px 0 0;padding-left:20px;line-height:1.7}
+.rbn-diagnostic li{margin-bottom:9px}
+@media(max-width:760px){.brief-grid{grid-template-columns:1fr}.brief-panel{padding:15px}}
 @page{size:A4;margin:14mm}
 @media print{
  :root{--ivory:#fff;--paper:#fff}
@@ -85,6 +96,8 @@ a:focus-visible{outline:3px solid #277E9B;outline-offset:3px;border-radius:3px}
  .hdr h1,.hdr .sub,.hdr .hdr-kicker,.hdr-meta{color:#111!important}
  .card,.chart-box,.expert-box,.stat-item,.news-item{
  box-shadow:none!important;break-inside:avoid;page-break-inside:avoid}
+ .brief-grid{grid-template-columns:1fr}
+ .brief-panel,.rbn-diagnostic{break-inside:avoid;page-break-inside:avoid}
  section{break-before:auto}
  .section-title{break-after:avoid}
  a{color:#111;text-decoration:underline}

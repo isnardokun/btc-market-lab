@@ -111,6 +111,24 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
         errors.append("Unidades monetarias/porcentuales duplicadas (%% o xx)")
     if re.search(r"\$\$\s*\d", plain(source)):
         errors.append("Precio con símbolo monetario duplicado ($)")
+    # V2 editorial content is non-optional; a CSS-only facelift must fail.
+    if 'content="mercados-research-studio-v2"' in source:
+        for expected in ('id="executive-brief"', 'Hechos observados',
+                         'Lectura condicional', 'Riesgos y datos pendientes'):
+            if expected not in source:
+                errors.append("Research Studio v2: síntesis ejecutiva incompleta: " + expected)
+    # Indicators are descriptive; reject an RSI label contradicting 30/70.
+    for raw, label in re.findall(
+        r'<div class="o-name">RSI\(14\)</div>\s*'
+        r'<div class="o-val">([-+]?\d+(?:\.\d+)?)</div>\s*'
+        r'<div class="o-signal">([^<]+)</div>', source, re.I):
+        rsi = float(raw)
+        tag = plain(label).lower()
+        if ((30 <= rsi <= 70 and ("sobreventa" in tag or "sobrecompra" in tag))
+                or (rsi < 30 and "sobrecompra" in tag)
+                or (rsi > 70 and "sobreventa" in tag)):
+            errors.append("RSI(14): banda descriptiva incompatible con valor mostrado")
+
     stamped = re.search(r"Generado\s+(20\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}\s+UTC", source)
     if stamped:
         generation_day = dt.date.fromisoformat(stamped.group(1))

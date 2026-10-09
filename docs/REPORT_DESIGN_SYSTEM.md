@@ -107,3 +107,20 @@ una evaluación pixel a pixel.
 - Resultado reproducible en función del commit y SQLite.
 - El skill `/mercados-research-design` instalado junto a
   `/mercados-daily-pro`, sin desinstalar otros skills de Hermes.
+
+## v2 implementada — 2026-10-09 (iteración conservadora)
+
+El layout empieza con tres bloques deterministas: observaciones,
+inferencia condicional y fuentes pendientes. Los valores proceden
+del snapshot validado existente; el informe mantiene la estructura
+detallada posterior y el código de publicación auditable.
+
+La nueva sección de lectura cruzada RBN solo compara métricas locales
+de igual fecha UTC; comunica discrepancias profit/loss/net como
+reconciliación pendiente, sin sobreescribir la serie del proveedor.
+
+**Deuda editorial abierta:** reordenar las secciones heredadas por
+jerarquía de investigación, normalizar gráficos SVG con ejes/leyendas,
+incluir coberturas y cortes por panel, e inspeccionar impresión A4 y
+capturas del navegador local. No declarar la v2 como transformación
+integral del report ni afirmar histórico completo por un gate PASS.

@@ -223,8 +223,8 @@ def compute_scenarios(price, closes, highs, lows, supports, resistances,
     below, above = price_relative_levels(price, supports, resistances)
     s1, s2 = (below + [None, None])[:2]
     r1, r2 = (above + [None, None])[:2]
-    rsi_zone = ("sobreventa" if rsi is not None and rsi < 40 else
-                "sobrecompra" if rsi is not None and rsi > 65 else "neutral")
+    rsi_zone = ("sobreventa" if rsi is not None and rsi < 30 else
+                "sobrecompra" if rsi is not None and rsi > 70 else "neutral")
     macd_dir = ("positivo" if macd_hist is not None and macd_hist > 0 else
                 "negativo" if macd_hist is not None else "no disponible")
     precision = 2 if asset in ("SPY", "SPX") else 0

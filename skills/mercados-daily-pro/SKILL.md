@@ -509,3 +509,44 @@ de precios, indicadores, RAG, fecha UTC ni metodología. Validar
 móvil 320/768/1440, impresión A4, enlaces de fuentes y tarjetas
 de RBN con advertencia provisional. La estética jamás puede
 saltarse el gate ni autorizar Telegram.
+
+
+## Procedimiento 10 — Obligaciones de revisión Research Studio v2
+
+**Lectura obligatoria:** antes de auditar, generar o publicar un informe,
+leer `docs/HERMES_REVIEW_ACTIONS_2026-10-09.md` y
+`docs/REPORT_DESIGN_SYSTEM.md`, además del skill
+`/mercados-research-design`. El archivo de acciones constituye el backlog
+operativo: reportar prioridades, progreso, evidencia y bloqueos. No
+limitarse a anunciar 14/14 suites PASS o Publication Gate 100/100.
+
+Secuencia de aceptación:
+
+1. Confirmar Git SHA de `master`, fecha UTC de generación, versión visual
+   `mercados-research-studio-v2` y que la copia portable coincide
+   exactamente con el HTML aprobado por SHA256.
+2. Revisar los tres bloques ejecutivos: hechos medidos, interpretación
+   condicional, riesgos y faltantes. Ninguna inferencia debe aparecer
+   disfrazada de hecho, especialmente en noticias macro y flujos.
+3. Verificar RSI 30/70 en BTC, SPY y GC=F. Las posiciones frente a
+   medias móviles no se convierten en órdenes de compra/venta.
+4. Conciliar ResearchBitcoin con sus tres fuentes y sus cortes originales:
+   coste base STH/LTH, True Market Mean, SOPR STH, beneficio/pérdida y
+   neto realizado. Cualquier descuadre se etiqueta como `pendiente`
+   y se investiga con el proveedor; nunca se corrige la base para
+   forzar igualdad. No unir fechas o metodologías distintas.
+5. Consultar `scripts/history_coverage.py` sobre la SQLite local y
+   registrar por proveedor/métrica período mínimo/máximo, lagunas,
+   `empty`, ventanas no recorridas, revisiones, versionado y cuota
+   Tier 2. La mera existencia de los scripts no es una descarga.
+6. Inspeccionar el HTML offline y en A4, con ancho 320/390/768/1440.
+   Registrar qué pudo comprobarse y qué no.
+7. Ejecutar `tests.unit.test_research_studio_v2`, suite completa con
+   SQLite y Publication Gate sobre el borrador, sin mandar Telegram.
+   Preparar minuta: `prioridad | evidencia | fuente | fecha UTC |
+   archivo/función | corrección propuesta | test | estado`.
+
+**Responsabilidad:** cuando el usuario solicite mejoras de código,
+Hermes aporta diagnósticos y evidencia y el revisor crea el PR; Hermes
+no debe modificar `master` por cuenta propia ni ejecutar cambios
+destructivos o backfills masivos sin autorización.
