@@ -60,8 +60,8 @@ def make_portable(html: str) -> str:
         else match.group(0),
         html,
     )
-    css_urls = re.findall(r"url\\s*\\(\\s*([^)]+)\\)", cleaned, re.I)
-    if re.search(r"@import\\b", cleaned, re.I) or any(
+    css_urls = re.findall(r"url\s*\(\s*([^)]+)\)", cleaned, re.I)
+    if re.search(r"@import\b", cleaned, re.I) or any(
         not ref.strip(" \\t\\n\\r\\\"'").lower().startswith("data:")
         for ref in css_urls
     ):
