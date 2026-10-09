@@ -35,18 +35,16 @@ def get_db():
     return db
 
 def init_db(db):
+    """Never drop populated history: schema initialization must be additive."""
     db.executescript("""
-        DROP TABLE IF EXISTS daily;
-        DROP TABLE IF EXISTS series;
-        DROP TABLE IF EXISTS meta;
-        CREATE TABLE series (
+        CREATE TABLE IF NOT EXISTS series (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             idx TEXT,
             dtype TEXT,
             description TEXT
         );
-        CREATE TABLE daily (
+        CREATE TABLE IF NOT EXISTS daily (
             id INTEGER PRIMARY KEY,
             series_id INTEGER NOT NULL REFERENCES series(id),
             ts INTEGER NOT NULL,
