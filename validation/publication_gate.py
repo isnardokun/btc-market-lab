@@ -9,6 +9,7 @@ Bloquea si hay errores críticos. Min 95/100 para auto-publicar.
 """
 import os, sys, sqlite3, re, datetime, hashlib
 from pathlib import Path
+from validation.content_checks import audit_report_html
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
@@ -262,7 +263,7 @@ def check_trazabilidad():
 
     # 3.2 Verificar que los datos en daily_metrics fueron archivados HOY
     cur.execute("""
-        SELECT COUNT(DISTINCT metric) FROM daily_metrics
+        SELECT COUNT(DISTINCT asset || ':' || metric) FROM daily_metrics
         WHERE report_date = ?
     """, (TODAY_STR,))
     row = cur.fetchone()
@@ -405,6 +406,13 @@ def run():
     print(f"\n{'='*65}")
     print(f"PUBLICATION GATE — {TODAY_STR}")
     print(f"{'='*65}\n")
+
+    # Hard gates: these cannot be compensated by a weighted score.
+    if REPORT_PATH.is_file():
+        for message in audit_report_html(REPORT_PATH.read_text(encoding="utf-8"), report_day=TODAY):
+            issue("consistencia", "critical", message)
+    else:
+        issue("exactitud", "critical", "Reporte ausente, no se puede publicar")
 
     check_exactitud()
     check_consistencia()
