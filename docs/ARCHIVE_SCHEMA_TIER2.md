@@ -76,12 +76,20 @@ reescritura de valores para migrar. La tabla antigua
 | `archive_ingest_windows` | `(source_id,metric,start_utc,end_exclusive_utc)` | checkpoint y resultado (`ok/empty/partial/failed`) |
 | `archive_observation_revisions` | `revision_id` | versiones previas y nuevas cuando cambian RBN, Bitview, FRED, Yahoo OHLC close |
 | `archive_fred_vintages` | `(series_id,observed_date,realtime_start)` | vintages capturados con fechas reales reportadas por FRED |
+| `archive_multidimensional_observations` | `(source_id,metric,observed_at_utc,dimensions_key)` | almacenamiento separado para distribuciones, cohortes y bins Tier 2; **aún no ingestado automáticamente** |
 
 Las relaciones del catálogo de archivo son complementarias: no fuerzan
 reemplazar las PK de tablas antiguas de millones de registros. Índices
 nuevos centrados en source/metric/cobertura, revisiones y fechas.
 Los triggers solo conservan revisiones **futuras** y evitan insertar
 cambios falsos cuando el valor no varía.
+
+El catálogo `archive_datasets.data_shape` distingue `scalar`,
+`histogram`, `distribution`, `matrix` o `unknown`. No inferir
+que las 13 métricas escalares existentes representan todas las series
+que habilita Tier 2; las fuentes de estructura multidimensional
+requieren adaptadores y validación autenticada independientes.
+
 
 ### Advertencias de reproducibilidad
 
