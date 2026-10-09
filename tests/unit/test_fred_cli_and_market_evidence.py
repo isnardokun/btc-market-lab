@@ -92,6 +92,28 @@ class FredEntrypointTests(unittest.TestCase):
         self.assertEqual(proc.returncode,0,proc.stderr[-1000:])
         self.assertIn("--history",proc.stdout)
 
+    def test_fred_http_failure_is_counted_not_silently_empty(self):
+        from ingestion import ingest_fred as mod
+        from urllib.error import URLError
+        from unittest.mock import patch
+        with patch.object(mod, "urlopen", side_effect=URLError("unavailable")):
+            before=mod.FETCH_ERRORS
+            self.assertEqual(mod.fetch_series_incremental("DGS10","2026-09-01"),[])
+            self.assertEqual(mod.FETCH_ERRORS,before+1)
+            mod.FETCH_ERRORS=before
+
+    def test_fred_main_nonzero_on_series_error_without_live_api(self):
+        from ingestion import ingest_fred as mod
+        from unittest.mock import patch
+        with patch.object(mod,"FRED_API_KEY","test_key_no_network"), \
+             patch.object(mod,"FRED_SERIES",[("DGS10","10Y","daily","")]), \
+             patch.object(mod,"DB_PATH",":memory:"), \
+             patch.object(mod,"archive_schema_installed",return_value=False), \
+             patch.object(mod,"ingest_series",side_effect=RuntimeError("provider failure")):
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                status=mod.main()
+        self.assertEqual(status,1)
+
     def test_module_help_works(self):
         env=os.environ.copy()
         env.pop("PYTHONPATH",None)
