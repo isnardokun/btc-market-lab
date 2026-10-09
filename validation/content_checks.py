@@ -205,7 +205,23 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
                 )
                 if hit:
                     when = parse_day(hit.group(1))
-                    if when is None or not (day - dt.timedelta(days=366) <= when <= day):
+                    # Anchor 52 weeks to the last *completed* BTC daily bar,
+                    # never to the report's still-open generation date.
+                    source_cutoff = re.search(
+                        r'data-btc-asof-utc="([^"]+)"', section
+                    )
+                    if source_cutoff:
+                        try:
+                            asof = dt.datetime.strptime(
+                                source_cutoff.group(1), "%Y-%m-%d %H:%M"
+                            ).date()
+                        except ValueError:
+                            errors.append("BTC: corte UTC inválido para extremo 52 semanas")
+                            continue
+                    else:
+                        asof = day - dt.timedelta(days=1)
+                    earliest = asof - dt.timedelta(weeks=52)
+                    if when is None or not (earliest <= when <= asof):
                         errors.append(f"BTC: fecha de {label} fuera de ventana de 52 semanas")
 
             # Catch the specific cross-value contradiction in the historical report.
