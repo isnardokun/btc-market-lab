@@ -13,6 +13,7 @@ from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_time
 from rendering.onchain_complement import render_complement
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
+from ingestion.news_archive import archive_news
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
 try:
@@ -983,6 +984,16 @@ def main():
         nb = analyze_news(news_btc)
         ns = analyze_news(news_stocks)
         nm = analyze_news(news_metals)
+
+    # Preserve discovery provenance for historical research; never archive
+    # full article bodies or convert unverified news into market facts.
+    try:
+        archived_news = archive_news(DB_PATH, TODAY.isoformat(),
+                                     {"BTC": nb, "SPY": ns, "GOLD": nm})
+        print(f"Historical news URLs archived: {archived_news}")
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        print("WARNING: News archive skipped (" + type(exc).__name__ + ")",
+              file=sys.stderr)
 
     btc_chart  = svg_price(ohlc_f[-90:], "$", 200)
     spy_chart  = svg_price(spy_ohlc_f[-90:], "$", 180)
