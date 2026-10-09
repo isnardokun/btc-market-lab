@@ -1,3 +1,20 @@
+## Confirmación del usuario: ResearchBitcoin Tier 2 (2026-10-09)
+
+La configuración efectiva comunicada por el propietario es **Tier 2**,
+con capacidad documental declarada de 40.000.000 puntos/semana y
+sin límite temporal del plan. El token privado no se validó en este PR.
+
+Este proyecto debe planificar la recuperación histórica de las
+13 series escalares ResearchBitcoin del catálogo desde 2009-01-01
+(`--history --tier 2 --from 2009-01-01`), en lotes de hasta 14 días
+por petición, con ventanas `empty` auditables. Las demás métricas Tier 2
+deben incorporarse por familias de forma (scalar, binned, cohorte)
+después de documentar endpoint, unidades, JSON y límites. No declarar
+que las 348 métricas fueron descargadas mientras solo haya 13.
+
+**Migración de esquema y provenance:** `docs/ARCHIVE_SCHEMA_TIER2.md`
+tiene el modelo de tablas, WAL-safe backup y pasos locales obligatorios.
+
 # Política obligatoria: archivo histórico integral de mercados y Bitcoin
 
 **Regla operativa:** Mercados Daily Pro es simultáneamente un motor de
