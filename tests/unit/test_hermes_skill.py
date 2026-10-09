@@ -96,7 +96,8 @@ class HermesSkillTests(unittest.TestCase):
             self.assertTrue(folder.is_dir())
             self.assertEqual(folder.parent, root / "reports" / "local-retained")
             self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
-            git("rm", "-q", "--", *paths)
+            # Synthetic remote-cleanup commit in the disposable test repo only.
+            git("rm", "-f", "-q", "--", *paths)
             git("commit", "-qm", "stop tracking generated files")
             restored = subprocess.run(
                 [sys.executable, str(script), "restore", "--folder", str(folder)],
