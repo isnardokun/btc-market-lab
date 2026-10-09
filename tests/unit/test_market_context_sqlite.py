@@ -11,7 +11,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[2]))
 
 from ingestion import market_context_sources as sources
 from storage import market_context as dbm
-from rendering.market_context import render_market_context
+from rendering.market_context import render_market_context, read_upcoming_calendar
 from scripts import market_context_ingest as ingest
 
 FARSIDE=b'''<html><table><tr><th>Date</th><th>IBIT</th><th>FBTC</th><th>GBTC</th><th>Total</th></tr>
@@ -105,6 +105,22 @@ class MarketStorageTests(unittest.TestCase):
                             scheduled_utc=stamp,event_date=date,precision=precision,
                             source_url="https://www.bls.gov/schedule/news_release/",sha=sha,state=state)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_calendar_events").fetchone()[0],2)
+
+    def test_upcoming_macro_strip_uses_verified_sqlite_only(self):
+        sha=self.sha(provider="bls",body=ICS)
+        dbm.store_event(self.db,provider="bls",uid="verified-release",
+              title="CPI Official Source",event_date="2026-10-14",
+              scheduled_utc="2026-10-14T12:30:00+00:00",precision="utc",
+              source_url="https://www.bls.gov/schedule/news_release/",sha=sha)
+        dbm.store_event(self.db,provider="fred",uid="date-only-release",
+              title="PCE Release",event_date="2026-10-16",
+              scheduled_utc=None,precision="date_only",
+              source_url="https://fred.stlouisfed.org/docs/api/fred/releases_dates.html",sha=sha)
+        self.db.commit()
+        events=read_upcoming_calendar(self.path,now=dt.datetime(2026,10,9,tzinfo=dt.timezone.utc))
+        self.assertEqual(events[0],("2026-10-14","CPI Official Source","12:30 UTC","BLS · calendario oficial"))
+        self.assertEqual(events[1][2],"Hora UTC no confirmada")
+        self.assertEqual(read_upcoming_calendar(self.path,now=dt.datetime(2026,11,9,tzinfo=dt.timezone.utc)),[])
 
     def test_bls_unknown_timezone_must_not_be_invented(self):
         ics=ICS.replace(b"TZID=America/New_York",b"TZID=Unknown/Mars")
