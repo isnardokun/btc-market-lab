@@ -1,0 +1,41 @@
+<svg viewBox="0 0 860 300" xmlns="http://www.w3.org/2000/svg" style="font-family:Manrope,sans-serif">
+  <rect width="860" height="300" fill="#04201c"/>
+  <rect x="70" y="20" width="{int(W-PAD_L-PAD_R)}" height="{int(H-PAD_T-PAD_B)}" fill="#092b27" opacity="0.4"/>
+
+  <!-- RSI zones -->
+  <rect x="70" y="20" width="{int(W-PAD_L-PAD_R)}" height="{int(y70-PAD_T)}" fill="rgba(220,38,38,0.07)"/>
+  <rect x="70" y="184" width="{int(W-PAD_L-PAD_R)}" height="{int(y70-y30)}" fill="rgba(22,163,74,0.07)"/>
+  <rect x="70" y="184" width="{int(W-PAD_L-PAD_R)}" height="{int(H-PAD_B-y30)}" fill="rgba(220,38,38,0.07)"/>
+
+  <line x1="70" y1="90" x2="{W-PAD_R}" y2="90" stroke="rgba(220,38,38,0.4)" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="70" y1="184" x2="{W-PAD_R}" y2="184" stroke="rgba(22,163,74,0.4)" stroke-width="1" stroke-dasharray="4,3"/>
+  <line x1="70" y1="137" x2="{W-PAD_R}" y2="137" stroke="rgba(213,168,68,0.3)" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="{W-PAD_R+4}" y="94" font-size="9" fill="#DC2626" font-family="IBM Plex Mono,monospace">70</text>
+  <text x="{W-PAD_R+4}" y="188" font-size="9" fill="#16A34A" font-family="IBM Plex Mono,monospace">30</text>
+  <text x="{W-PAD_R+4}" y="141" font-size="9" fill="#d5a844" font-family="IBM Plex Mono,monospace">50</text>
+
+  <!-- Price -->
+  <polyline points="70.0,186.0 78.6,186.3 87.1,186.6 95.7,196.9 104.2,181.7 112.8,181.4 121.3,186.0 129.9,186.4 138.4,181.8 147.0,181.9 155.6,177.6 164.1,172.0 172.7,172.7 181.2,177.7 189.8,185.8 198.3,182.9 206.9,177.4 215.4,185.9 224.0,186.9 232.6,186.3 241.1,181.5 249.7,191.6 258.2,194.3 266.8,190.5 275.3,188.8 283.9,185.3 292.4,181.9 301.0,184.0 309.6,181.2 318.1,181.3 326.7,180.6 335.2,186.4 343.8,187.4 352.3,190.4 360.9,189.9 369.4,192.0 378.0,191.3 386.6,192.8 395.1,182.7 403.7,181.9 412.2,152.9 420.8,131.8 429.3,95.4 437.9,105.5 446.4,100.6 455.0,94.1 463.6,94.6 472.1,94.8 480.7,84.1 489.2,100.7 497.8,96.4 506.3,95.2 514.9,94.8 523.4,103.1 532.0,105.2 540.6,77.9 549.1,89.0 557.7,88.4 566.2,84.2 574.8,91.0 583.3,94.9 591.9,98.3 600.4,105.8 609.0,105.2 617.6,102.7 626.1,105.9 634.7,95.0 643.2,112.0 651.8,111.7 660.3,108.0 668.9,79.0 677.4,77.9 686.0,78.0 694.6,47.1 703.1,47.5 711.7,59.2 720.2,59.8 728.8,60.4 737.3,59.9 745.9,59.5 754.4,65.3 763.0,63.7 771.6,64.9 780.1,57.3 788.7,58.8 797.2,55.7 805.8,46.9 814.3,48.3 822.9,53.1 831.4,66.0 840.0,75.5" fill="none" stroke="#8bd5bd" stroke-width="2"/>
+
+  <!-- RSI line (left axis) -->
+  <polyline points="198.3,131.4 206.9,121.0 215.4,138.8 224.0,140.7 232.6,139.5 241.1,129.6 249.7,149.5 258.2,154.0 266.8,145.7 275.3,142.2 283.9,134.7 292.4,127.8 301.0,132.7 309.6,126.8 318.1,127.1 326.7,125.4 335.2,140.6 343.8,143.0 352.3,150.1 360.9,148.8 369.4,153.9 378.0,151.8 386.6,155.8 395.1,126.1 403.7,124.1 412.2,80.9 420.8,66.0 429.3,51.5 437.9,68.9 446.4,66.8 455.0,64.1 463.6,65.1 472.1,65.5 480.7,60.7 489.2,89.7 497.8,87.0 506.3,86.1 514.9,85.9 523.4,100.5 532.0,104.1 540.6,83.5 549.1,100.2 557.7,99.7 566.2,96.4 574.8,106.9 583.3,112.7 591.9,117.7 600.4,128.5 609.0,127.6 617.6,124.6 626.1,129.6 634.7,116.1 643.2,139.9 651.8,139.5 660.3,134.5 668.9,104.9 677.4,104.0 686.0,104.3 694.6,82.9 703.1,83.5 711.7,100.5 720.2,101.4 728.8,102.3 737.3,101.9 745.9,101.5 754.4,111.7 763.0,109.8 771.6,112.2 780.1,103.5 788.7,106.4 797.2,102.8 805.8,93.4 814.3,96.6 822.9,106.9 831.4,130.6 840.0,144.5" fill="none" stroke="#ef765f" stroke-width="2"/>
+
+  <!-- MVRV (right, simplified as thin line) -->
+  <polyline points="70.0,198.3 78.6,198.4 87.1,198.4 95.7,199.8 104.2,197.6 112.8,197.5 121.3,198.2 129.9,198.2 138.4,197.5 147.0,197.6 155.6,197.0 164.1,196.2 172.7,196.3 181.2,197.0 189.8,198.1 198.3,197.7 206.9,197.0 215.4,198.2 224.0,198.3 232.6,198.2 241.1,197.5 249.7,198.9 258.2,199.3 266.8,198.7 275.3,198.5 283.9,197.9 292.4,197.4 301.0,197.7 309.6,197.3 318.1,197.4 326.7,197.2 335.2,198.1 343.8,198.2 352.3,198.6 360.9,198.5 369.4,198.8 378.0,198.7 386.6,198.9 395.1,197.5 403.7,197.3 412.2,193.2 420.8,190.2 429.3,185.1 437.9,186.6 446.4,185.9 455.0,185.1 463.6,185.2 472.1,185.3 480.7,183.8 489.2,186.2 497.8,185.6 506.3,185.4 514.9,185.4 523.4,186.6 532.0,186.9 540.6,183.1 549.1,184.7 557.7,184.6 566.2,184.0 574.8,185.0 583.3,185.6 591.9,186.1 600.4,187.1 609.0,187.1 617.6,186.7 626.1,187.2 634.7,185.6 643.2,188.0 651.8,188.0 660.3,187.5 668.9,183.4 677.4,183.3 686.0,183.3 694.6,179.0 703.1,179.2 711.7,180.9 720.2,181.0 728.8,181.1 737.3,181.1 745.9,181.0 754.4,181.9 763.0,181.7 771.6,181.9 780.1,180.9 788.7,181.1 797.2,180.7 805.8,179.5 814.3,179.8 822.9,180.5 831.4,182.3 840.0,183.6" fill="none" stroke="#d5a844" stroke-width="1.5" opacity="0.6"/>
+
+  <!-- X axis -->
+  <text x="70" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="198" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="327" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="455" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="583" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="712" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="840" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Oct 2026</text>
+
+  <text x="8" y="137" text-anchor="middle" font-size="9" fill="#ef765f" font-family="IBM Plex Mono,monospace" transform="rotate(-90,8,137)">RSI(14)</text>
+  <text x="{W-6}" y="137" text-anchor="middle" font-size="9" fill="#d5a844" font-family="IBM Plex Mono,monospace" transform="rotate(90,{W-6},137)">MVRV</text>
+
+  <!-- Legend -->
+  <rect x="80" y="268" width="14" height="3" fill="#8bd5bd"/>
+  <text x="100" y="273" font-size="10" fill="#8bd5bd" font-family="Manrope,sans-serif">BTC Price</text>
+  <rect x="210" y="268" width="14" height="3" fill="#ef765f"/>
+  <text x="230" y="273" font-size="10" fill="#ef765f" font-family="Manrope,sans-serif">RSI(14)</text>
+  <rect x="290" y="268" width="14" height="3" fill="#d5a844"/>
+  <text x="310" y="273" font-size="10" fill="#d5a844" font-family="Manrope,sans-serif">MVRV</text>
+
+  <text x="430" y="14" text-anchor="middle" font-size="11" fill="#f4eddd" font-family="Fraunces,serif" font-weight="500">Price + RSI(14) + MVRV</text>
+</svg>

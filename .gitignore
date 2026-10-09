@@ -1,0 +1,51 @@
+# Base de datos (contiene API keys y datos financieros)
+db/
+
+# Logs
+*.log
+
+# Archivos de ejecución/output
+all_series.txt
+all_series_valid.txt
+discover_log.txt
+cron.log
+ingest_all.log
+
+# Reportes diarios (generados automáticamente)
+reports/*.html
+reports/*.json
+reports/*.json.bak
+reports/snapshots/
+reports/rejected/
+
+# Dashboards output
+dashboards/*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+*.egg-info/
+.eggs/
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credenciales y secretos (si se escapan)
+*.pem
+*.key
+.env
+.env.*

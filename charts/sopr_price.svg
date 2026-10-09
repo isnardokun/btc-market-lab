@@ -1,0 +1,37 @@
+<svg viewBox="0 0 860 300" xmlns="http://www.w3.org/2000/svg" style="font-family:Manrope,sans-serif">
+  <rect width="860" height="300" fill="#04201c"/>
+  <rect x="70" y="20" width="{W-PAD_L-PAD_R}" height="{H-PAD_T-PAD_B}" fill="#092b27" opacity="0.4"/>
+
+  <!-- SOPR = 1 baseline -->
+  <line x1="70" y1="63" x2="{W-PAD_R}" y2="63" stroke="rgba(239,118,95,0.5)" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="{W-PAD_R+4}" y="67" font-size="9" fill="#ef765f" font-family="IBM Plex Mono,monospace">1.0</text>
+
+  <!-- Area above 1: green tint -->
+  <rect x="70" y="20" width="{int(W-PAD_L-PAD_R)}" height="{int(y_1-PAD_T)}" fill="rgba(22,163,74,0.06)"/>
+  <rect x="70" y="63" width="{int(W-PAD_L-PAD_R)}" height="{int(H-PAD_B-y_1)}" fill="rgba(220,38,38,0.06)"/>
+
+  <!-- Price -->
+  <polyline points="70.0,186.0 78.6,186.3 87.1,186.6 95.7,196.9 104.2,181.7 112.8,181.4 121.3,186.0 129.9,186.4 138.4,181.8 147.0,181.9 155.6,177.6 164.1,172.0 172.7,172.7 181.2,177.7 189.8,185.8 198.3,182.9 206.9,177.4 215.4,185.9 224.0,186.9 232.6,186.3 241.1,181.5 249.7,191.6 258.2,194.3 266.8,190.5 275.3,188.8 283.9,185.3 292.4,181.9 301.0,184.0 309.6,181.2 318.1,181.3 326.7,180.6 335.2,186.4 343.8,187.4 352.3,190.4 360.9,189.9 369.4,192.0 378.0,191.3 386.6,192.8 395.1,182.7 403.7,181.9 412.2,152.9 420.8,131.8 429.3,95.4 437.9,105.5 446.4,100.6 455.0,94.1 463.6,94.6 472.1,94.8 480.7,84.1 489.2,100.7 497.8,96.4 506.3,95.2 514.9,94.8 523.4,103.1 532.0,105.2 540.6,77.9 549.1,89.0 557.7,88.4 566.2,84.2 574.8,91.0 583.3,94.9 591.9,98.3 600.4,105.8 609.0,105.2 617.6,102.7 626.1,105.9 634.7,95.0 643.2,112.0 651.8,111.7 660.3,108.0 668.9,79.0 677.4,77.9 686.0,78.0 694.6,47.1 703.1,47.5 711.7,59.2 720.2,59.8 728.8,60.4 737.3,59.9 745.9,59.5 754.4,65.3 763.0,63.7 771.6,64.9 780.1,57.3 788.7,58.8 797.2,55.7 805.8,46.9 814.3,48.3 822.9,53.1 831.4,66.0 840.0,75.5" fill="none" stroke="#8bd5bd" stroke-width="2.5"/>
+
+  <!-- STH SOPR -->
+  <polyline points="" fill="none" stroke="#d5a844" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- SOPR -->
+  <polyline points="70.0,65.3 78.6,65.3 87.1,65.3 95.7,67.2 104.2,67.6 112.8,67.5 121.3,67.3 129.9,66.7 138.4,66.8 147.0,66.7 155.6,64.5 164.1,63.4 172.7,63.2 181.2,63.4 189.8,63.4 198.3,62.9 206.9,63.1 215.4,63.4 224.0,64.0 232.6,63.9 241.1,63.9 249.7,63.8 258.2,65.2 266.8,65.3 275.3,65.7 283.9,65.6 292.4,66.0 301.0,65.9 309.6,65.9 318.1,64.7 326.7,64.7 335.2,64.3 343.8,64.4 352.3,64.5 360.9,64.7 369.4,64.7 378.0,64.8 386.6,65.0 395.1,64.9 403.7,64.8 412.2,64.4 420.8,63.5 429.3,61.8 437.9,61.4 446.4,61.0 455.0,59.8 463.6,59.1 472.1,58.8 480.7,58.9 489.2,59.7 497.8,60.2 506.3,60.3 514.9,61.2 523.4,61.7 532.0,62.1 540.6,62.1 549.1,62.1 557.7,61.8 566.2,61.7 574.8,61.8 583.3,61.8 591.9,61.7 600.4,62.0 609.0,62.3 617.6,62.5 626.1,62.7 634.7,62.7 643.2,63.0 651.8,63.3 660.3,63.5 668.9,63.0 677.4,62.7 686.0,62.7 694.6,61.7 703.1,60.2 711.7,60.2 720.2,60.0 728.8,60.1 737.3,60.4 745.9,60.4 754.4,60.9 763.0,62.0 771.6,62.0 780.1,61.9 788.7,61.6 797.2,61.6 805.8,61.5 814.3,61.3 822.9,61.2 831.4,60.9 840.0,61.2" fill="none" stroke="#ef765f" stroke-width="2"/>
+
+  <!-- X axis -->
+  <text x="70" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="198" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="327" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="455" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="583" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="712" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="840" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Oct 2026</text>
+
+  <!-- Left Y axis -->
+  <text x="8" y="137" text-anchor="middle" font-size="9" fill="#ef765f" font-family="IBM Plex Mono,monospace" transform="rotate(-90,8,137)">SOPR</text>
+
+  <!-- Legend -->
+  <rect x="80" y="268" width="14" height="3" fill="#8bd5bd"/>
+  <text x="100" y="273" font-size="10" fill="#8bd5bd" font-family="Manrope,sans-serif">BTC Price</text>
+  <rect x="210" y="268" width="14" height="3" fill="#ef765f"/>
+  <text x="230" y="273" font-size="10" fill="#ef765f" font-family="Manrope,sans-serif">SOPR</text>
+  <rect x="280" y="268" width="14" height="3" fill="#d5a844"/>
+  <text x="300" y="273" font-size="10" fill="#d5a844" font-family="Manrope,sans-serif">STH SOPR</text>
+
+  <text x="430" y="14" text-anchor="middle" font-size="11" fill="#f4eddd" font-family="Fraunces,serif" font-weight="500">SOPR — Spent Output Profit Ratio</text>
+</svg>

@@ -1,0 +1,23 @@
+<svg viewBox="0 0 860 280" xmlns="http://www.w3.org/2000/svg" style="font-family:Manrope,sans-serif">
+  <rect width="860" height="280" fill="#04201c"/>
+  <rect x="70" y="20" width="{int(W-PAD_L-PAD_R)}" height="{int(H-PAD_T-PAD_B)}" fill="#092b27" opacity="0.4"/>
+
+  <!-- Zero line -->
+  <line x1="70" y1="319" x2="{W-PAD_R}" y2="319" stroke="rgba(213,168,68,0.6)" stroke-width="1.5"/>
+  <text x="{W-PAD_R+4}" y="323" font-size="9" fill="#d5a844" font-family="IBM Plex Mono,monospace">$0</text>
+
+  <!-- Above zero: overvaluation (price > realized) -->
+  <rect x="70" y="20" width="{int(W-PAD_L-PAD_R)}" height="{int(y_zero-PAD_T)}" fill="rgba(22,163,74,0.07)"/>
+  <!-- Below zero: undervaluation -->
+  <rect x="70" y="319" width="{int(W-PAD_L-PAD_R)}" height="{int(H-PAD_B-y_zero)}" fill="rgba(220,38,38,0.07)"/>
+
+  <!-- Delta line -->
+  <polyline points="70.0,236.4 78.6,236.8 87.1,237.1 95.7,249.1 104.2,230.4 112.8,229.9 121.3,235.5 129.9,235.8 138.4,230.2 147.0,230.4 155.6,225.2 164.1,218.6 172.7,219.4 181.2,225.3 189.8,235.2 198.3,231.8 206.9,225.0 215.4,235.3 224.0,236.5 232.6,235.8 241.1,229.9 249.7,242.1 258.2,244.9 266.8,240.3 275.3,238.1 283.9,233.7 292.4,229.4 301.0,232.0 309.6,228.5 318.1,228.7 326.7,227.8 335.2,234.8 343.8,235.9 352.3,239.4 360.9,238.8 369.4,241.2 378.0,240.5 386.6,242.2 395.1,229.8 403.7,228.7 412.2,193.5 420.8,168.1 429.3,124.3 437.9,136.9 446.4,131.0 455.0,123.7 463.6,124.7 472.1,125.2 480.7,112.3 489.2,132.7 497.8,127.5 506.3,126.1 514.9,125.8 523.4,135.9 532.0,138.5 540.6,105.6 549.1,119.3 557.7,118.6 566.2,113.6 574.8,122.0 583.3,126.8 591.9,131.0 600.4,140.2 609.0,139.4 617.6,136.5 626.1,140.4 634.7,127.2 643.2,147.9 651.8,147.4 660.3,142.9 668.9,107.8 677.4,106.6 686.0,106.9 694.6,69.9 703.1,71.2 711.7,85.5 720.2,86.3 728.8,87.3 737.3,86.9 745.9,86.3 754.4,93.7 763.0,91.9 771.6,93.5 780.1,84.4 788.7,86.5 797.2,82.8 805.8,72.2 814.3,74.3 822.9,80.3 831.4,96.3 840.0,107.9" fill="none" stroke="#ef765f" stroke-width="2"/>
+
+  <!-- X axis -->
+  <text x="70" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="198" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Jul 2026</text><text x="327" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="455" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Aug 2026</text><text x="583" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="712" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Sep 2026</text><text x="840" y="{H-8}" text-anchor="middle" font-size="9" fill="#63766f" font-family="IBM Plex Mono,monospace">Oct 2026</text>
+
+  <text x="8" y="127" text-anchor="middle" font-size="9" fill="#ef765f" font-family="IBM Plex Mono,monospace" transform="rotate(-90,8,127)">Price — Realized (USD)</text>
+
+  <text x="430" y="14" text-anchor="middle" font-size="11" fill="#f4eddd" font-family="Fraunces,serif" font-weight="500">Delta: Price minus Realized Price (Cost Basis)</text>
+</svg>

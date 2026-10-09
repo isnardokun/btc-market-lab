@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+tests/run_all.py
+================
+Runner centralizado: unit + integration tests.
+Ejecutar con: python3 tests/run_all.py
+"""
+import subprocess, sys, os
+
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(BASE)
+
+TESTS = [
+    ("Unit: Indicators", "python3 tests/unit/test_indicators.py"),
+    ("Unit: Metric Registry", "python3 tests/unit/test_metric_registry.py"),
+    ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
+]
+
+results = []
+for name, cmd in TESTS:
+    print(f"\n{'='*60}")
+    print(f"  {name}")
+    print('='*60)
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    ok = r.returncode == 0
+    results.append((name, ok))
+    if ok:
+        print(f"✅ PASS")
+    else:
+        print(f"❌ FAIL\n{r.stderr[-500:]}")
+        # Print last 20 lines of output
+        lines = r.stdout.strip().split('\n')
+        print("Output:")
+        for l in lines[-20:]:
+            print(f"  {l}")
+
+print(f"\n{'='*60}")
+print("  RESULTS")
+print('='*60)
+for name, ok in results:
+    status = "✅ PASS" if ok else "❌ FAIL"
+    print(f"  {status}  {name}")
+
+all_ok = all(ok for _, ok in results)
+print(f"\n{'✅ All tests passed' if all_ok else '❌ Some tests failed'}")
+sys.exit(0 if all_ok else 1)
