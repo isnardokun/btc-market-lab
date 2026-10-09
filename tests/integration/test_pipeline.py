@@ -83,59 +83,85 @@ def test_daily_metrics_has_data():
     print(f"  ✅ daily_metrics: {count} métricas para {LATEST_STR}")
 
 
-def test_gate_json_exists_and_passed():
-    """Gate existe y es internamente consistente: pass=True requiere score>=95 y critical=0."""
+def resolve_gate_report_path(gate):
+    """JSON gate stores an absolute or root-relative source HTML path."""
+    value = gate.get("report")
+    assert isinstance(value, str) and value.strip(), "Gate sin ruta de informe"
+    report = Path(value)
+    return report if report.is_absolute() else BASE_DIR / report
+
+
+def read_latest_gate():
     gate_path = BASE_DIR / "reports" / f"gate_{LATEST_STR}.json"
-    assert gate_path.exists(), f"Gate JSON no existe: {gate_path}"
-    with open(gate_path) as f:
-        gate = json.load(f)
+    assert gate_path.is_file(), f"Gate JSON no existe: {gate_path}"
+    with gate_path.open(encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def test_gate_json_exists_and_passed():
+    """Verify an approved report or an explicitly documented rejection."""
+    import hashlib
+    gate = read_latest_gate()
     score = gate.get("score_total", gate.get("score", 0))
-    passed = gate.get("pass", False)
+    passed = gate.get("pass")
     critical_count = gate.get("critical_count", 0)
+    report_path = resolve_gate_report_path(gate)
+    assert passed is True or passed is False, "Gate sin campo pass booleano"
+    assert isinstance(score, (int, float)), "Score del gate inválido"
 
-    # Consistencia interna del gate: pass=True implica score>=95 y critical=0
     if passed:
-        assert score >= 95, f"Gate pass=True pero score={score} < 95"
-        assert critical_count == 0, f"Gate pass=True pero tiene {critical_count} errores críticos"
-
-    # Si el reporte fue rechazado, verificar que sea por razón válida
-    report_path_str = gate.get("report", "")
-    report_path = BASE_DIR / report_path_str.lstrip("/")
-    if not report_path.exists():
-        # Reporte rechazado — el gate funcionó correctamente
-        assert critical_count > 0, "Reporte rechazado pero gate no tiene errores críticos"
-        print(f"  ✅ gate correctam. rechazó reporte: critical={critical_count}, score={score}")
-        return
-
-    # Reporte existe — verificar que pasó
-    assert critical_count == 0, f"Gate tiene {critical_count} error(es) crítico(s): {gate.get('all_issues', [])}"
-    assert score >= 95, f"Gate score {score} < 95"
-    assert passed, f"Gate pass=False incluso con score={score}"
-    print(f"  ✅ publication_gate: score={score}/100, pass={passed}, critical=0")
+        assert score >= 95, f"Gate PASS con score={score} < 95"
+        assert critical_count == 0, f"Gate PASS con {critical_count} errores críticos"
+        assert report_path.is_file(), (
+            f"Gate PASS sin HTML de origen: {report_path}"
+        )
+        expected_hash = gate.get("report_sha256")
+        assert expected_hash, "Gate aprobado sin huella SHA256 del reporte"
+        actual_hash = hashlib.sha256(report_path.read_bytes()).hexdigest()
+        assert actual_hash == expected_hash, (
+            f"HTML cambió después de aprobación: {actual_hash} != {expected_hash}"
+        )
+        print(f"  ✅ gate APROBADO: score={score}, critical=0, SHA256 válido")
+    else:
+        assert critical_count > 0 or score < 95, (
+            "Gate rechazó el reporte sin razones críticas ni score insuficiente"
+        )
+        assert gate.get("blocked_reason") in {"critical_errors", "low_score"}, (
+            "Gate rechazó reporte sin motivo estructurado"
+        )
+        print(f"  ⛔ gate RECHAZADO CORRECTAMENTE: score={score}, critical={critical_count}")
 
 
 def test_html_report_exists():
-    """El reporte HTML existe y tiene contenido válido (o fue correctamente rechazado)."""
-    gate_path = BASE_DIR / "reports" / f"gate_{LATEST_STR}.json"
-    if gate_path.exists():
-        with open(gate_path) as f:
-            gate = json.load(f)
-        report_path_str = gate.get("report", "")
-        report_path = BASE_DIR / report_path_str.lstrip("/")
-        if not report_path.exists():
-            # Reporte rechazado — gate funcionó, no es error del test
-            print(f"  ✅ HTML: reporte correctamente rechazado por gate")
-            return
+    """A gated approval MUST point to the actual approved HTML; no silent skip."""
+    gate = read_latest_gate()
+    report_path = resolve_gate_report_path(gate)
+    if gate["pass"] is True:
+        assert report_path.is_file(), (
+            f"El gate aprobó pero el HTML no existe: {report_path}"
+        )
+        actual = report_path
     else:
-        report_path = BASE_DIR / "reports" / f"daily_report_{LATEST_STR}.html"
-    assert report_path.exists(), f"HTML report no existe: {report_path}"
-    size = report_path.stat().st_size
-    assert size > 10000, f"HTML report muy pequeño: {size} bytes"
-    with open(report_path) as f:
-        content = f.read()
-    assert "Mercados Daily Pro" in content, "HTML no tiene título esperado"
-    assert "BTC" in content, "HTML no menciona BTC"
-    print(f"  ✅ HTML report: {size:,} bytes, contiene BTC y título")
+        # On rejection scripts/daily.sh moves the draft to reports/rejected.
+        # Do not conflate a missing approved HTML with a successful publication.
+        rejected = BASE_DIR / "reports" / "rejected" / (
+            report_path.stem + "_REJECTED.html"
+        )
+        assert not report_path.exists(), (
+            "Gate rechazó el borrador, pero sigue en ubicación de publicación"
+        )
+        if not rejected.is_file():
+            print("  ⛔ gate rechazó antes de generar el borrador; no hay HTML")
+            return
+        actual = rejected
+        print(f"  ⛔ revisando borrador rechazado: {actual.name}")
+    size = actual.stat().st_size
+    assert size > 10000, f"HTML inválido o muy pequeño: {size} bytes"
+    with actual.open(encoding="utf-8") as stream:
+        content = stream.read()
+    assert "Mercados Daily Pro" in content, "HTML sin título"
+    assert "BTC" in content, "HTML sin sección de BTC"
+    print(f"  ✅ HTML presente y legible: {size:,} bytes")
 
 
 def test_onchain_metrics_available():
