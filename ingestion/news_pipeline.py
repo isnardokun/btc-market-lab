@@ -191,7 +191,7 @@ def validate_entry(entry, index):
 
     # A source timestamp may not be in the future relative to UTC generation.
     published = str(entry.get("published", "") or "")
-    iso = re.search(r"\b(20\d{2}-\d{2}-\d{2})T(\d{2}:\d{2}(?::\d{2})?)(Z|[+-]\d{2}:?\d{2})\b", published)
+    iso = re.search(r"\b(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}(?::\d{2})?)(Z|[+-]\d{2}:?\d{2})\b", published)
     if iso:
         value = iso.group(0).replace("Z", "+00:00")
         if re.search(r"[+-]\d{4}$", value):
