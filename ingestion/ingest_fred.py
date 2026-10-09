@@ -5,8 +5,7 @@ ingest_fred.py — Ingesta series macro de la FRED API a macro_fred.
 Funcionalidades:
 - Ingesta incremental: solo datos nuevos (ultimo dia en BD + 1)
 - Reconciliación retroactiva: cada execution re-verifica los últimos 60 días
-  para capturar revisiones de FRED (series como CPI, NFP se revisan
-  hasta 2-3 meses después)
+  para capturar revisiones FRED. Los rangos largos se revisan por ventana.
 - Tracking de vintage: almacena observation_date separately del realtime_period
 
 Fuentes FRED con revisiones conocidas:
@@ -47,7 +46,7 @@ def fetch_series_vintage(series_id, observation_start, end_date):
     url = (f"{FRED_ENDPOINT}?series_id={series_id}"
            f"&api_key={FRED_API_KEY}"
            f"&observation_start={observation_start}"
-           f"&end_date={end_date}"
+           f"&observation_end={end_date}"
            f"&file_type=json")
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
@@ -165,12 +164,14 @@ def ingest_series(conn, series_id, freq):
     else:
         start = FETCH_START
     if start > str(TODAY):
-        print(f"  {series_id}: ya actualizado (ultimo: {last})")
+        print(f"  {series_id}: sin fechas nuevas; revisando cambios recientes")
+        reconcile_series(conn, series_id, RECONCILE_DAYS)
         return 0
     print(f"  {series_id}: trayendo desde {start}")
     rows = fetch_series_incremental(series_id, start)
     if not rows:
-        print(f"  {series_id}: sin datos nuevos")
+        print(f"  {series_id}: sin datos nuevos; reconciliando últimas observaciones")
+        reconcile_series(conn, series_id, RECONCILE_DAYS)
         return 0
     inserted = 0
     for date_str, value in rows:
@@ -190,6 +191,9 @@ def ingest_series(conn, series_id, freq):
 
 
 def main():
+    if not FRED_API_KEY:
+        print("ERROR: configura FRED_API_KEY en el entorno de Hermes", file=sys.stderr)
+        return 2
     conn = sqlite3.connect(DB_PATH)
     total = 0
     for series_id, name, freq, desc in FRED_SERIES:
@@ -202,6 +206,7 @@ def main():
     conn.commit()
     conn.close()
     print(f"\nFRED ingestion: {total} filas nuevas insertadas")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
