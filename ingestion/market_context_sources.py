@@ -246,10 +246,10 @@ def parse_bls_calendar(body):
                         date=dt.datetime.strptime(value[:8],"%Y%m%d").date()
                         precision="date_only"
                     elif value.endswith("Z"):
-                        parsed=dt.datetime.strptime(value,"%Y%m%dT%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+                        parsed=dt.datetime.strptime(value,"%Y%m%dT%H%M%SZ" if len(value)==16 else "%Y%m%dT%H%MZ").replace(tzinfo=dt.timezone.utc)
                         stamp=parsed.isoformat();date=parsed.date();precision="utc"
                     elif "TZID=America/New_York" in key or "TZID=US/Eastern" in key:
-                        local=dt.datetime.strptime(value,"%Y%m%dT%H%M%S").replace(tzinfo=ZoneInfo("America/New_York"))
+                        local=dt.datetime.strptime(value,"%Y%m%dT%H%M%S" if len(value)==15 else "%Y%m%dT%H%M").replace(tzinfo=ZoneInfo("America/New_York"))
                         utc=local.astimezone(dt.timezone.utc)
                         stamp=utc.isoformat();date=utc.date();precision="utc"
                     else:
