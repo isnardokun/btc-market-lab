@@ -555,24 +555,26 @@ def analyze_news(news_list):
             "title": title,
             "url": item.get("url", ""),
             "summary": snippet[:280],
-            "bias": "Neutral",   # no calibrated sentiment model
+            "bias": "Sin evaluar",   # no calibrated sentiment model
             "impact": classify_impact((title + " " + snippet).lower()),
         })
     return result
 
 
 def classify_impact(text):
-    if any(k in text for k in ["rate hike","inflation","fed","treasury","yield","recession"]):
-        return "Tasas mas altas o inflacion reduce flujo de capital hacia activos de riesgo."
-    if any(k in text for k in ["etf","institutional","flow","fund"]):
-        return "Flujos ETF/institucionales determinan demanda spot y estructura del mercado."
-    if any(k in text for k in ["liquidation","short","long","leverage","margin"]):
-        return "Niveles de liquidacion actuan como imanes de precio — cascadas amplifican volatilidad."
-    if any(k in text for k in ["breakout","resistance","support","technical"]):
-        return "Estructura tecnica define rango y puntos de decision critica."
-    if any(k in text for k in ["geopolitic","oil","supply","opec","middle east"]):
-        return "Tension geopolitica eleva inflacion energetica — efecto mixto en crypto."
-    return "Noticia mixta — interpretacion dependera del contexto macro en curso."
+    """Fallback thematic label only; no causal prediction from keywords."""
+    topics = [
+        ("Tasas e inflación", ("rate hike", "inflation", "fed", "treasury", "yield")),
+        ("Flujos ETF/institucionales", ("etf", "institutional", "fund", "spot flow")),
+        ("Liquidez y derivados", ("liquidation", "leverage", "margin", "funding")),
+        ("Estructura técnica", ("breakout", "resistance", "support", "technical")),
+        ("Geopolítica", ("geopolitic", "opec", "middle east")),
+    ]
+    for topic, keywords in topics:
+        if any(word in text for word in keywords):
+            return topic
+    return "General"
+
 
 # ── MACRO EVENTS ─────────────────────────────────────────────────────────────
 
