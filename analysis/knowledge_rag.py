@@ -125,7 +125,7 @@ def explain_snapshot(snapshot, observation_dates=None):
                               else "beneficio y pérdida no realizados equilibrados")
             sentence = f"NUPL {value:.3f}: {interpretation}."
         day = observation_dates.get(key)
-        if day and not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: 00:00 UTC)?", day):
+        if day and not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: [0-2]\d:[0-5]\d(?: UTC)?)?", day):
             day = None
         facts.append({
             "metric": key, "observation": sentence,
