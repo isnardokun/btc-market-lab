@@ -16,6 +16,7 @@ TESTS = [
     ("Unit: Portable HTML / Telegram", "python3 tests/unit/test_portable_report.py"),
     ("Unit: Hermes Skill", "python3 tests/unit/test_hermes_skill.py"),
     ("Unit: Hermes Bridge", "python3 tests/unit/test_hermes_bridge.py"),
+    ("Unit: Financial Integrity", "python3 -m unittest -v tests.unit.test_financial_integrity"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
