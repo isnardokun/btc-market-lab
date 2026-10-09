@@ -19,7 +19,7 @@ except ImportError:
 TODAY    = datetime.date.today()
 OUT_PATH = BASE_DIR + "/reports/daily_report_" + TODAY.strftime("%Y-%m-%d") + ".html"
 TODAY_STR = TODAY.strftime("%d %b %Y")
-NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M UTC")
+NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 ts_today  = int(datetime.datetime.combine(TODAY, datetime.time(23,59)).replace(tzinfo=datetime.timezone.utc).timestamp())
 ts_52w    = int((datetime.datetime.combine(TODAY, datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
 
