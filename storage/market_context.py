@@ -137,7 +137,7 @@ def _upsert(db,table,key,fields):
     return True
 
 def store_etf(db,*,provider,trade_date,ticker,amount_m,state,sha):
-    if provider!="farside" or not ticker.isupper() or not ticker.isalnum() or ticker=="TOTAL":
+    if provider!="farside" or not ticker.isupper() or not ticker.isalnum() :
         raise ValueError("Invalid ETF provider/ticker")
     if state not in ("reported","preliminary"):
         raise ValueError("Invalid ETF state")
