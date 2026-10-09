@@ -124,8 +124,9 @@ def check_exactitud():
                 issue("exactitud", "warning",
                       f"BTC precio en reporte vs BD: ${btc_price:,.0f} vs ${db_btc:,.0f} (diff >2%)")
 
-    # 1.6 CPI vigente — verificar que no sea dato antiguo (p.ej. 2.33% de abr-2025)
-    if '2.33' in html and 'CPI' in html:
+    # 1.6 CPI vigente — verificar que no sea dato histórico de abr-2025 (2.33%)
+    # Solo si aparece en contexto de CPI, no cualquier "2.33" (ej. MACD = -532.33)
+    if re.search(r'CPI[^<]{0,60}2\.33\s*%', html, re.I):
         issue("exactitud", "critical", "Reporte contiene CPI 2.33% — dato histórico de abr-2025 usado como vigente")
 
     # 1.7 Verificar ATH correcto

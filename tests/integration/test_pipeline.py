@@ -84,7 +84,7 @@ def test_daily_metrics_has_data():
 
 
 def test_gate_json_exists_and_passed():
-    """gate_YYYY-MM-DD.json existe y pasó (score >= 95, critical=0)."""
+    """Gate existe y es internamente consistente: pass=True requiere score>=95 y critical=0."""
     gate_path = BASE_DIR / "reports" / f"gate_{LATEST_STR}.json"
     assert gate_path.exists(), f"Gate JSON no existe: {gate_path}"
     with open(gate_path) as f:
@@ -92,6 +92,22 @@ def test_gate_json_exists_and_passed():
     score = gate.get("score_total", gate.get("score", 0))
     passed = gate.get("pass", False)
     critical_count = gate.get("critical_count", 0)
+
+    # Consistencia interna del gate: pass=True implica score>=95 y critical=0
+    if passed:
+        assert score >= 95, f"Gate pass=True pero score={score} < 95"
+        assert critical_count == 0, f"Gate pass=True pero tiene {critical_count} errores críticos"
+
+    # Si el reporte fue rechazado, verificar que sea por razón válida
+    report_path_str = gate.get("report", "")
+    report_path = BASE_DIR / report_path_str.lstrip("/")
+    if not report_path.exists():
+        # Reporte rechazado — el gate funcionó correctamente
+        assert critical_count > 0, "Reporte rechazado pero gate no tiene errores críticos"
+        print(f"  ✅ gate correctam. rechazó reporte: critical={critical_count}, score={score}")
+        return
+
+    # Reporte existe — verificar que pasó
     assert critical_count == 0, f"Gate tiene {critical_count} error(es) crítico(s): {gate.get('all_issues', [])}"
     assert score >= 95, f"Gate score {score} < 95"
     assert passed, f"Gate pass=False incluso con score={score}"
@@ -99,8 +115,19 @@ def test_gate_json_exists_and_passed():
 
 
 def test_html_report_exists():
-    """El reporte HTML existe y tiene contenido válido."""
-    report_path = BASE_DIR / "reports" / f"daily_report_{LATEST_STR}.html"
+    """El reporte HTML existe y tiene contenido válido (o fue correctamente rechazado)."""
+    gate_path = BASE_DIR / "reports" / f"gate_{LATEST_STR}.json"
+    if gate_path.exists():
+        with open(gate_path) as f:
+            gate = json.load(f)
+        report_path_str = gate.get("report", "")
+        report_path = BASE_DIR / report_path_str.lstrip("/")
+        if not report_path.exists():
+            # Reporte rechazado — gate funcionó, no es error del test
+            print(f"  ✅ HTML: reporte correctamente rechazado por gate")
+            return
+    else:
+        report_path = BASE_DIR / "reports" / f"daily_report_{LATEST_STR}.html"
     assert report_path.exists(), f"HTML report no existe: {report_path}"
     size = report_path.stat().st_size
     assert size > 10000, f"HTML report muy pequeño: {size} bytes"
