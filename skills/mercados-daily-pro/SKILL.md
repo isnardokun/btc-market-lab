@@ -388,3 +388,76 @@ antes de reenviar cualquier informe. `git pull`, `git restore` y
 PRs, forks ni cachés anteriores.** Credenciales expuestas históricamente
 deben rotarse/revocarse fuera de Git. No reescribir historia pública sin
 decisión explícita del titular.
+
+
+## Procedimiento 11 — Archivo histórico integral obligatorio
+
+**Regla institucional explícita del usuario:** conservar en la SQLite LOCAL
+el histórico **máximo real recuperable** de TODAS las APIs contratadas o
+integradas, no únicamente la foto del último cierre. El proyecto es
+una herramienta de consulta histórica y estudio de ciclos, además de
+un emisor de informes diarios.
+
+Lectura obligatoria: `docs/HISTORICAL_DATA_POLICY.md`. La rutina de
+generación diaria NO sustituye al backfill, ni un gate 100/100 prueba
+que la historia sea exhaustiva. Mantener dos rutas separadas:
+
+- **Backfill / sincronización histórica inicial:** programar lotes
+  acotados y reanudables de Bitview, ResearchBitcoin, FRED, Yahoo y
+  fuentes adicionales; completar toda ventana y serie disponible
+  del plan, sin violar cuotas, formatos, licencias o tier. Anotar
+  ventanas vacías/restringidas y datos no recuperables en vez de
+  inventarlos.
+- **Actualización incremental:** continuar desde la última fecha
+  confirmada, reparar periodos faltantes, reconciliar la fuente,
+  conservar unidad/fecha/URI y verificar integridad contra el
+  informe; ejecución opcional RBN con cuota y aislamiento de errores.
+
+Comandos base SIN red:
+~~~bash
+python3 scripts/history_coverage.py --output reports/history_coverage.json
+python3 ingestion/researchbitcoin_archive.py --history --tier 0 --max-requests 13
+python3 ingestion/bitview_history.py --all-daily --max-requests 8
+python3 ingestion/yahoo_history.py --limit 4
+python3 ingestion/ingest_fred.py --history
+~~~
+
+Los comandos anteriores presentan el plan local. Para descargar
+históricos reales, después de comprobar cuota, respaldo de BD y
+credenciales localmente, repetir por lotes con `--apply` como detalla
+la política histórica. No ejecutar backfill global dentro de
+`scripts/daily.sh` ni usar `ingest_all.py --backfill`.
+
+**Bitview:** cubrir todas las series diarias reconocidas por catálogo;
+las indexadas por altura y distribuciones URPD requieren tratamiento
+distinto (no timestamps interpolados). **ResearchBitcoin:** Tier 0
+está limitado por proveedor a un año y 55k puntos por semana;
+Tier 1/2 tienen acceso histórico declarado ilimitado pero requieren
+sus permisos y cuotas efectivas. La etiqueta de completitud será
+`COBERTURA_ACCESIBLE` o `PARCIAL`, nunca "histórico completo de BTC"
+sin prueba. **Yahoo:** conservar OHLCV por símbolo de
+`ingest_instruments`, no solo BTC. **FRED:** recuperar todas las
+observaciones de series configuradas; los vintages no se presumen
+recuperados sin otro flujo explícito.
+
+Después de cada ciclo o backfill comparar cobertura por fuente,
+métrica y periodo, registrar bloqueos/permisos y mantener SQLite
+privada. Sin captura/operador Hermes, ChatGPT no puede afirmar
+que se descargó el histórico local.
+
+## Procedimiento 12 — Diseño Research Studio exclusivo
+
+El informe Mercados Daily Pro usa exclusivamente
+`/mercados-research-design` para diseño editorial, **no Sereno**.
+El instalador `scripts/install_hermes_skill.sh` mantiene ambos
+skills del proyecto: `/mercados-daily-pro` para operaciones
+y `/mercados-research-design` para presentación, accesibilidad y
+exportación portátil.
+
+Contrato visual: `docs/REPORT_DESIGN_SYSTEM.md`,
+`rendering/market_design.py`. Garantizar que el
+CSS esté embebido ANTES del gate, sin fuentes remotas ni alteración
+de precios, indicadores, RAG, fecha UTC ni metodología. Validar
+móvil 320/768/1440, impresión A4, enlaces de fuentes y tarjetas
+de RBN con advertencia provisional. La estética jamás puede
+saltarse el gate ni autorizar Telegram.
