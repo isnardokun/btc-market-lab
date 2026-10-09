@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import CATALOG, PROVIDER
-from storage.archive_schema import require_archive_schema, save_window
+from storage.archive_schema import require_archive_schema, register_dataset, save_window
 from ingestion.researchbitcoin_v2 import (
     DEFAULT_DB, fetch, last_completed_day, parse_scalar_rows, store_rows,
 )
@@ -160,6 +160,14 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
     if apply:
         with sqlite3.connect(db_path) as db:
             require_archive_schema(db)
+            for metric_slug in sorted(plan):
+                item = CATALOG[metric_slug]
+                register_dataset(
+                    db, PROVIDER, metric_slug, frequency="d1",
+                    unit=item.unit, scale=item.raw_scale,
+                    earliest=history_start if mode == "history" else None,
+                    note="Tier 2 reported by operator; provider token entitlement not checked",
+                )
             db.execute(
                 "INSERT INTO archive_ingest_runs "
                 "(run_id,source_id,operation,started_at_utc,status) "
