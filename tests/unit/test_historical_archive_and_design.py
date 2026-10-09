@@ -10,6 +10,7 @@ import tempfile
 import unittest
 
 from ingestion.researchbitcoin_v2 import query_params_window
+from storage.archive_schema import ensure_archive_schema
 from ingestion.researchbitcoin_archive import (
     allowed_earliest, group_missing_dates, plan_metric, run as run_rbn,
 )
@@ -97,6 +98,8 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
             self.assertNotIn("onchain_external_observations",
                              {r[0] for r in conn.execute(
                                  "SELECT name FROM sqlite_master WHERE type='table'")})
+        with sqlite3.connect(self.db) as db:
+            ensure_archive_schema(db)
         result=run_rbn(self.db,mode="incremental",slugs=[slug],
                        max_requests=1,apply=True,client=client,today=NOW)
         self.assertEqual(result["saved_observations"],1)
