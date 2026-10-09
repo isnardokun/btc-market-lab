@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from rendering.onchain_complement import render_complement
+from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
@@ -1085,7 +1086,9 @@ def main():
     A('<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">')
     A('<title>Mercados Daily Pro - '+TODAY_STR+'</title>')
     A('<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400&family=IBM+Plex+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">')
-    A('<style>'+CSS+'</style></head><body>')
+    # Mercados Research Studio overrides only visual tokens/layout, no data.
+    A('<meta name="market-design-system" content="'+STYLE_VERSION+'">')
+    A('<style>'+CSS+RESEARCH_CSS+'</style></head><body>')
     A('<div class="wrap">')
 
     # HEADER
