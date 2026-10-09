@@ -13,6 +13,7 @@ from ingestion import market_context_sources as sources
 from storage import market_context as dbm
 from rendering.market_context import render_market_context, read_upcoming_calendar
 from scripts import market_context_ingest as ingest
+from validation.market_context_reconciliation import audit_market_context_against_html
 
 FARSIDE=b'''<html><table><tr><th>Date</th><th>IBIT</th><th>FBTC</th><th>GBTC</th><th>Total</th></tr>
 <tr><td>08 Oct 2026</td><td>20.0</td><td>(5.5)</td><td>-</td><td>14.5</td></tr>
@@ -64,6 +65,38 @@ class MarketStorageTests(unittest.TestCase):
         self.assertIn('"net_flow_usd_m": -5.0',old)
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_context_revisions").fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT net_flow_usd_m FROM market_etf_flows").fetchone()[0],-7)
+
+    def test_new_publication_gate_matches_sqlite_values_and_rejects_tampering(self):
+        sha=self.sha(provider="binance",body=BINANCE_OI)
+        dbm.store_derivative(self.db,provider="binance",symbol="BTCUSDT",
+              metric="open_interest",observed_utc="2026-10-08T00:00:00+00:00",
+              interval_label="5m",value=1234.5,unit="BTC",
+              endpoint="https://fapi.binance.com/futures/data/openInterestHist",sha=sha)
+        self.db.commit()
+        now=dt.datetime(2026,10,8,1,tzinfo=dt.timezone.utc)
+        html=render_market_context(self.path,now=now)
+        self.assertEqual(audit_market_context_against_html(html,self.path),[])
+        changed=html.replace('data-raw-value="1234.5"','data-raw-value="9999"')
+        self.assertTrue(any("raw value" in x for x in
+                           audit_market_context_against_html(changed,self.path)))
+        changed=html.replace('1,234.50 BTC','9,999.00 BTC')
+        self.assertTrue(any("displayed financial number" in x for x in
+                           audit_market_context_against_html(changed,self.path)))
+        changed=html.replace('data-raw-unit="BTC"','data-raw-unit="USD"')
+        self.assertTrue(any("unit or payload SHA" in x for x in
+                           audit_market_context_against_html(changed,self.path)))
+
+    def test_etf_report_matches_publisher_total_with_sqlite_provenance(self):
+        sha=self.sha()
+        for ticker,val in (("IBIT",20),("FBTC",-5.5),("TOTAL",14.5)):
+            dbm.store_etf(self.db,provider="farside",trade_date="2026-10-08",
+                          ticker=ticker,amount_m=val,state="preliminary",sha=sha)
+        self.db.commit()
+        html=render_market_context(self.path,now=dt.datetime(2026,10,9,tzinfo=dt.timezone.utc))
+        self.assertIn("Total publicado por Farside",html)
+        self.assertEqual(audit_market_context_against_html(html,self.path),[])
+        changed=html.replace('US$ +14.5M','US$ +999.0M')
+        self.assertTrue(audit_market_context_against_html(changed,self.path))
 
     def test_no_false_revision_on_refetched_unchanged_snapshot(self):
         sha=self.sha()
