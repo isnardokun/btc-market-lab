@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
+from rendering.onchain_complement import render_complement
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
 try:
@@ -1203,6 +1204,10 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Active Addrs</div><div class="sval">{"%d"%oc["addrs"] if oc["addrs"] else "---"}</div><div class="ssub">24h promedio</div></div>')
     A(f'<div class="stat-item"><div class="slbl">SMA 200d</div><div class="sval">{"$%.0f"%oc["sma200"] if oc["sma200"] else "---"}</div><div class="ssub">Yahoo Finance, SMA 200 cierres</div></div>')
     A('</div></div>')
+
+    # Optional RBN enrichment: read verified local sidecar only; no API call.
+    # Empty until Hermes explicitly initializes/syncs the supplemental source.
+    A(render_complement(DB_PATH, last_utc))
 
     # Expert Analysis — REAL DATA NARRATIVE
     A('<div class="expert-box">')
