@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import BASE_URL, CATALOG, PROVIDER
+from storage.archive_schema import ensure_archive_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "db" / "btc_research.db"
@@ -222,6 +223,7 @@ def store_rows(path, slug, rows, *, fetched_at=None):
     metric = CATALOG[slug]
     with sqlite3.connect(path) as db:
         db.executescript(SCHEMA)
+        ensure_archive_schema(db)
         for day, (asof, value) in rows.items():
             if dt.date.fromisoformat(day) != parse_timestamp(asof).date():
                 raise ValueError("Fecha no coincide con timestamp")
