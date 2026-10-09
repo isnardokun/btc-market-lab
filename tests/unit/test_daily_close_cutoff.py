@@ -3,6 +3,8 @@
 import datetime as dt
 import unittest
 
+from validation.content_checks import audit_report_html
+
 from ingestion.daily_cutoff import (
     previous_completed_utc_day, closed_daily_bars, last_complete_day_end_timestamp
 )
@@ -61,6 +63,15 @@ class CompletedUtcDayTests(unittest.TestCase):
         bad["high"] = float("nan")
         good = candle(dt.date(2026, 10, 7))
         self.assertEqual(closed_daily_bars([bad, good], now_utc=now), [good])
+
+    def test_publication_gate_rejects_open_utc_day_price_even_if_recent(self):
+        html = ('<p>Generado 2026-10-09 12:40 UTC</p>'
+                '<div data-btc-asof-utc="2026-10-09 00:00" '
+                'data-onchain-oldest-utc="2026-10-08 00:00"></div>')
+        errors = audit_report_html(
+            html, report_day=dt.date(2026, 10, 9), strict_asof=True
+        )
+        self.assertTrue(any("vela del día UTC" in x for x in errors), errors)
 
     def test_naive_datetime_not_accepted(self):
         with self.assertRaises(ValueError):
