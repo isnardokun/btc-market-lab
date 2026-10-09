@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS archive_datasets (
   frequency TEXT NOT NULL,
   raw_unit TEXT,
   raw_scale TEXT,
+  data_shape TEXT NOT NULL DEFAULT 'scalar'
+    CHECK(data_shape IN ('scalar','histogram','distribution','matrix','unknown')),
   first_requested_utc TEXT,
   availability_note TEXT,
   registered_at_utc TEXT NOT NULL,
@@ -76,6 +78,19 @@ CREATE TABLE IF NOT EXISTS archive_observation_revisions (
 );
 CREATE INDEX IF NOT EXISTS idx_archive_revisions_lookup
 ON archive_observation_revisions(source_id,metric,observed_at_utc,revision_id);
+CREATE TABLE IF NOT EXISTS archive_multidimensional_observations (
+  source_id TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  observed_at_utc TEXT NOT NULL,
+  dimensions_key TEXT NOT NULL,
+  value REAL NOT NULL,
+  unit TEXT,
+  source_endpoint TEXT NOT NULL,
+  fetched_at_utc TEXT NOT NULL,
+  PRIMARY KEY(source_id,metric,observed_at_utc,dimensions_key)
+);
+CREATE INDEX IF NOT EXISTS idx_archive_multidimensional_metric_date
+ON archive_multidimensional_observations(source_id,metric,observed_at_utc);
 CREATE TABLE IF NOT EXISTS archive_fred_vintages (
   series_id TEXT NOT NULL,
   observed_date TEXT NOT NULL,
@@ -202,22 +217,26 @@ def attach_available_triggers(conn, existing=None):
 
 
 def register_dataset(conn, source_id, metric, *, frequency="d1",
-                     unit=None, scale="native", earliest=None, note=None):
+                     unit=None, scale="native", shape="scalar",
+                     earliest=None, note=None):
     require_archive_schema(conn)
     if source_id not in {p for p,_,_ in PROVIDERS} or not metric:
         raise ValueError("Dataset inválido")
+    if shape not in {"scalar","histogram","distribution","matrix","unknown"}:
+        raise ValueError("Forma de datos fuera de catálogo")
     conn.execute(
         "INSERT INTO archive_datasets "
-        "(source_id,metric,frequency,raw_unit,raw_scale,first_requested_utc,"
-        "availability_note,registered_at_utc) VALUES (?,?,?,?,?,?,?,?) "
+        "(source_id,metric,frequency,raw_unit,raw_scale,data_shape,first_requested_utc,"
+        "availability_note,registered_at_utc) VALUES (?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(source_id,metric) DO UPDATE SET "
         "raw_unit=COALESCE(excluded.raw_unit,archive_datasets.raw_unit),"
         "raw_scale=COALESCE(excluded.raw_scale,archive_datasets.raw_scale),"
+        "data_shape=COALESCE(excluded.data_shape,archive_datasets.data_shape),"
         "first_requested_utc=COALESCE("
         "archive_datasets.first_requested_utc,excluded.first_requested_utc),"
         "availability_note=COALESCE(excluded.availability_note,"
         "archive_datasets.availability_note)",
-        (source_id,metric,frequency,unit,scale,
+        (source_id,metric,frequency,unit,scale,shape,
          str(earliest) if earliest else None,note,
          dt.datetime.now(dt.timezone.utc).isoformat()),
     )
