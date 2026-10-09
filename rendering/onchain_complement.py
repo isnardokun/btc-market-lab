@@ -46,7 +46,8 @@ def read_complement(db_path, cutoff, *, max_age_days=4):
         if (stamp.tzinfo is None or stamp.astimezone(dt.timezone.utc).date() != day
                 or not 0 <= age <= max_age_days
                 or not isinstance(value, (int, float)) or not math.isfinite(value)
-                or endpoint != metric.endpoint + "/" + slug):
+                or endpoint != metric.endpoint + "/" + slug
+                or (metric.raw_scale == "fraction_0_1" and not 0 <= value <= 1)):
             continue
         seen.add(slug)
         result.append((metric, day, value))
@@ -57,6 +58,9 @@ def format_metric(metric, value):
     if metric.unit == "USD":
         return f"US$ {value:,.0f}"
     if metric.unit == "percent":
+        if metric.raw_scale == "fraction_0_1":
+            # Display-only normalization; SQLite retains exact original 0..1.
+            return f"≈{100 * value:.1f}%*"
         return f"{value:.1f}%"
     if metric.unit == "z_score":
         return f"{value:.2f} z"
@@ -70,15 +74,21 @@ def render_complement(db_path, cutoff):
         return ""
     blocks = []
     for metric, day, value in items:
+        fraction = metric.raw_scale == "fraction_0_1"
+        raw_attr = f' data-api-raw="{value:.10g}"' if fraction else ""
+        caveat = ('<div class="ssub">*Normalización provisional: '
+                  'dato bruto × 100 (API 0–1); confirmar escala y '
+                  'denominador con el proveedor.</div>') if fraction else ""
         blocks.append(
             '<div class="stat-item" data-provider="researchbitcoin" '
             f'data-metric="{html.escape(metric.slug, quote=True)}" '
-            f'data-asof-utc="{day.isoformat()}">'
+            f'data-asof-utc="{day.isoformat()}"{raw_attr}>'
             f'<div class="slbl">{html.escape(metric.title)}</div>'
             f'<div class="sval">{html.escape(format_metric(metric, value))}</div>'
             f'<div class="ssub">{day.isoformat()} UTC · '
             f'<a href="{html.escape(metric.docs, quote=True)}" '
-            'rel="noopener noreferrer">Ficha metodológica</a></div></div>'
+            'rel="noopener noreferrer">Ficha metodológica</a></div>'
+            f'{caveat}</div>'
         )
     return (
         '<div class="card" id="onchain-complement">'
