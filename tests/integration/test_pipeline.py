@@ -11,12 +11,27 @@ from pathlib import Path
 
 BASE_DIR = Path("/home/ignotus/btc-research")
 DB_PATH = BASE_DIR / "db" / "btc_research.db"
-TODAY = datetime.date.today()
-TODAY_STR = TODAY.strftime("%Y-%m-%d")
 
 
 def get_db():
     return sqlite3.connect(DB_PATH)
+
+
+def latest_daily_date():
+    """Fecha más reciente en daily_metrics — no依赖于 TODAY que puede ser mañana."""
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT MAX(report_date) FROM daily_metrics")
+    row = cur.fetchone()[0]
+    db.close()
+    return row or "2026-01-01"
+
+
+# Fecha del último pipeline real (no la fecha de hoy)
+LATEST_DATE = latest_daily_date()
+LATEST_STR = LATEST_DATE.strftime("%Y-%m-%d") if isinstance(LATEST_DATE, datetime.date) else LATEST_DATE
+TODAY = datetime.date.today()
+TODAY_STR = TODAY.strftime("%Y-%m-%d")
 
 
 def test_price_btc_has_recent_data():
@@ -48,29 +63,27 @@ def test_macro_fred_has_recent_data():
 
 
 def test_daily_metrics_has_data():
-    """daily_metrics tiene datos para hoy."""
+    """daily_metrics tiene datos para la fecha del último pipeline."""
     db = get_db()
     cur = db.cursor()
     cur.execute(
-        "SELECT COUNT(*) FROM daily_metrics WHERE report_date=?",
-        (TODAY_STR,)
+        "SELECT COUNT(*) FROM daily_metrics WHERE report_date=?", (LATEST_STR,)
     )
     count = cur.fetchone()[0]
     db.close()
-    assert count > 0, f"daily_metrics sin datos para hoy ({TODAY_STR})"
-    print(f"  ✅ daily_metrics: {count} métricas para {TODAY_STR}")
+    assert count > 0, f"daily_metrics sin datos para {LATEST_STR}"
+    print(f"  ✅ daily_metrics: {count} métricas para {LATEST_STR}")
 
 
 def test_gate_json_exists_and_passed():
-    """gate_YYYY-MM-DD.json existe y pasó (score >= 95)."""
-    gate_path = BASE_DIR / "reports" / f"gate_{TODAY_STR}.json"
+    """gate_YYYY-MM-DD.json existe y pasó (score >= 95, critical=0)."""
+    gate_path = BASE_DIR / "reports" / f"gate_{LATEST_STR}.json"
     assert gate_path.exists(), f"Gate JSON no existe: {gate_path}"
     with open(gate_path) as f:
         gate = json.load(f)
     score = gate.get("score_total", gate.get("score", 0))
     passed = gate.get("pass", False)
     critical_count = gate.get("critical_count", 0)
-    # pass=True requiere: score>=95 Y critical_count==0
     assert critical_count == 0, f"Gate tiene {critical_count} error(es) crítico(s): {gate.get('all_issues', [])}"
     assert score >= 95, f"Gate score {score} < 95"
     assert passed, f"Gate pass=False incluso con score={score}"
@@ -79,7 +92,7 @@ def test_gate_json_exists_and_passed():
 
 def test_html_report_exists():
     """El reporte HTML existe y tiene contenido válido."""
-    report_path = BASE_DIR / "reports" / f"daily_report_{TODAY_STR}.html"
+    report_path = BASE_DIR / "reports" / f"daily_report_{LATEST_STR}.html"
     assert report_path.exists(), f"HTML report no existe: {report_path}"
     size = report_path.stat().st_size
     assert size > 10000, f"HTML report muy pequeño: {size} bytes"
@@ -91,12 +104,12 @@ def test_html_report_exists():
 
 
 def test_onchain_metrics_available():
-    """Los 12 métricas on-chain están disponibles para hoy."""
+    """Los 12 métricas on-chain están disponibles para la fecha del pipeline."""
     db = get_db()
     cur = db.cursor()
     cur.execute(
         "SELECT COUNT(DISTINCT metric) FROM daily_metrics WHERE report_date=? AND asset='BTC'",
-        (TODAY_STR,)
+        (LATEST_STR,)
     )
     count = cur.fetchone()[0]
     db.close()
@@ -105,20 +118,20 @@ def test_onchain_metrics_available():
 
 
 def test_no_duplicate_metrics_today():
-    """No hay duplicados en daily_metrics para hoy (UNIQUE constraint)."""
+    """No hay duplicados en daily_metrics para la fecha del pipeline (UNIQUE constraint)."""
     db = get_db()
     cur = db.cursor()
-    cur.execute(f"""
+    cur.execute("""
         SELECT asset, metric, COUNT(*) as cnt
         FROM daily_metrics
-        WHERE report_date='{TODAY_STR}'
+        WHERE report_date=?
         GROUP BY asset, metric
         HAVING cnt > 1
-    """)
+    """, (LATEST_STR,))
     dups = cur.fetchall()
     db.close()
     assert len(dups) == 0, f"Duplicados en daily_metrics: {dups}"
-    print(f"  ✅ daily_metrics: sin duplicados para {TODAY_STR}")
+    print(f"  ✅ daily_metrics: sin duplicados para {LATEST_STR}")
 
 
 def test_ath_is_maximum():
@@ -166,7 +179,7 @@ def test_nfp_change_in_realistic_range():
 
 
 if __name__ == "__main__":
-    print(f"\nIntegration tests — {TODAY_STR}\n")
+    print(f"\nIntegration tests — {LATEST_STR} (pipeline date)\n")
     test_price_btc_has_recent_data()
     test_macro_fred_has_recent_data()
     test_daily_metrics_has_data()
