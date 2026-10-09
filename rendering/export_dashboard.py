@@ -4,7 +4,8 @@ export_dashboard.py — Genera dashboard_latest.json con el estado
 actual del sistema: precios, macro, predicciones, niveles, hit rates.
 Corre diariamente via cron.
 """
-import sys, os, json, sqlite3, datetime
+import sys, os, json, sqlite3, datetime, tempfile, re
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.config import DB_PATH, BASE_DIR
 
@@ -205,11 +206,25 @@ def recent_reports(conn, limit=10):
             "asset":     r[2],
             "section":   r[3],
             "version":   r[4],
-            "filename":  r[5],
+            "filename":  ("reports/" + os.path.basename(r[5]) if r[5] and re.fullmatch(r"daily_report_\d{4}-\d{2}-\d{2}\.html", os.path.basename(r[5])) else None),
             "created_at": r[6],
         }
         for r in rows
     ]
+
+def atomic_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".dashboard-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
 
 def main():
     conn = sqlite3.connect(DB_PATH)
@@ -229,8 +244,25 @@ def main():
         "reports":    recent_reports(conn),
     }
 
-    with open(OUT_PATH, "w") as f:
-        json.dump(dashboard, f, default=str, ensure_ascii=False, indent=2)
+    payload = json.dumps(dashboard, default=str, ensure_ascii=False, indent=2)
+    atomic_text(Path(OUT_PATH), payload)
+
+    # Offline dashboard is optional; it has the full snapshot embedded and does
+    # not attempt file:// fetch. Unlike reports, it is for local archival use.
+    source = Path(BASE_DIR) / "dashboards" / "dashboard.html"
+    if source.is_file():
+        template = source.read_text(encoding="utf-8")
+        marker = "const INLINE_DATA = null;"
+        if template.count(marker) != 1:
+            raise ValueError("Dashboard template marker missing or ambiguous")
+        inline_json = json.dumps(dashboard, default=str, ensure_ascii=True)
+        inline_json = inline_json.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        standalone = template.replace(marker, "const INLINE_DATA = " + inline_json + ";")
+        standalone = re.sub(
+            r'<link\b(?=[^>]*\brel\s*=\s*["\x27]?stylesheet\b)[^>]*>',
+            "", standalone, flags=re.IGNORECASE
+        )
+        atomic_text(Path(BASE_DIR) / "dashboards" / "dashboard_standalone.html", standalone)
 
     conn.close()
     print(f"Dashboard exportado: {OUT_PATH}")
