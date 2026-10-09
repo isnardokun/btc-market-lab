@@ -199,7 +199,7 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
             results["failed"].append(result)
         finally:
             with sqlite3.connect(db_path) as db:
-                ensure_archive_schema(db)
+                require_archive_schema(db)
                 save_window(db,PROVIDER,slug,start,end,status,len(observed),
                             run_id=run_id)
         results["requested"].append(result)
