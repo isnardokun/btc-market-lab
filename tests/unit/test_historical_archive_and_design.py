@@ -17,6 +17,7 @@ from ingestion.bitview_history import (
     EPOCH, windows as bitview_windows, decode_day1_response, run as run_bitview,
 )
 from ingestion.yahoo_history import extract_daily, symbols_in_catalog, archive
+from ingestion.news_archive import archive_news
 from scripts.history_coverage import coverage
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 
@@ -155,6 +156,26 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
                if t["table"]=="market_ohlc_history"][0]
         self.assertEqual(match["series"][0]["observations"],1)
         self.assertEqual(match["series"][0]["first_utc"],"2026-10-08")
+
+    def test_news_metadata_keeps_url_provenance_without_article_body(self):
+        items = {"BTC":[{"title":"Bitcoin network research update",
+                         "url":"https://example.org/research/btc",
+                         "summary":"Full proprietary copyrighted article body",
+                         "date":"2026-10-08", "source":"Research desk",
+                         "source_type":"research"},
+                        {"title":"Unsafe URL",
+                         "url":"javascript:alert(1)", "source":"Unknown"}]}
+        saved=archive_news(self.db,"2026-10-09",items,at=NOW)
+        self.assertEqual(saved,1)
+        self.assertEqual(archive_news(self.db,"2026-10-09",items,at=NOW),0)
+        with sqlite3.connect(self.db) as conn:
+            rows=conn.execute("SELECT title,url,source_type FROM research_news_archive").fetchall()
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0][2],"research")
+        self.assertNotIn("Full proprietary",str(rows))
+        data=coverage(self.db)
+        entry=next(x for x in data["datasets"] if x["table"]=="research_news_archive")
+        self.assertEqual(entry["series"][0]["observations"],1)
 
     def test_private_research_studio_visual_contract(self):
         self.assertEqual(STYLE_VERSION,"mercados-research-studio-v1")
