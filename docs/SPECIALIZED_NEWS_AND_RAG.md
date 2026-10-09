@@ -44,9 +44,10 @@ Una nota de prensa no prueba que causó una variación de precio.
 - Se conserva la búsqueda Exa anterior. Si un RSS responde 403, formato
   incorrecto o no está disponible, el informe sigue con otros proveedores.
 - La búsqueda dirigida solo acepta resultados en dominios explícitos y con
-  fecha ISO comprobable hasta 21 días; se ejecuta **una búsqueda adicional**
+  fecha ISO comprobable hasta 21 días; se ejecuta **dos búsquedas adicionales**
   para BTC cuando está habilitada.
-- Solo se publican artículos con fecha ISO verificable (prensa general hasta 7 días de antigüedad; investigación hasta 21 días). No se aceptan páginas genéricas sin fecha ni la página de «Latest Numbers» del BLS como si fuera un comunicado oficial.\n- Se prioriza origen primario o investigación y se eliminan repeticiones por
+- Solo se publican artículos con fecha ISO verificable (prensa general hasta 7 días de antigüedad; investigación hasta 21 días). No se aceptan páginas genéricas sin fecha ni la página de «Latest Numbers» del BLS como si fuera un comunicado oficial.
+- Se prioriza origen primario o investigación y se eliminan repeticiones por
   URL normalizada y título. No se extrae contenido protegido tras paywall,
   no se almacena copia completa de noticias.
 - Para cada noticia el HTML muestra origen y rol editorial y enlaza
