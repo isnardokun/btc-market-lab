@@ -149,6 +149,37 @@ class ArchiveSchemaTests(unittest.TestCase):
         self.assertEqual(statuses,[("empty",2)])
         self.assertEqual(len(runs),2)
 
+    def test_tier2_distribution_shape_has_isolated_schema(self):
+        with sqlite3.connect(self.path) as db:
+            ensure_archive_schema(db)
+            register_dataset(db,"researchbitcoin","utxo_price_bins",
+                             unit="BTC",shape="distribution",
+                             earliest="2009-01-01")
+            db.execute(
+                "INSERT INTO archive_multidimensional_observations "
+                "(source_id,metric,observed_at_utc,dimensions_key,value,unit,"
+                "source_endpoint,fetched_at_utc) VALUES (?,?,?,?,?,?,?,?)",
+                ("researchbitcoin","utxo_price_bins",
+                 "2026-10-08T00:00:00+00:00",
+                 '{"price_bucket":"60000-61000","cohort":"STH"}',
+                 12.5,"BTC","/v2/unverified_bin_sample",
+                 "2026-10-09T00:00:00+00:00"),
+            )
+            shape=db.execute(
+                "SELECT data_shape FROM archive_datasets WHERE "
+                "source_id='researchbitcoin' AND metric='utxo_price_bins'"
+            ).fetchone()[0]
+            self.assertEqual(shape,"distribution")
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM archive_multidimensional_observations"
+            ).fetchone()[0],1)
+            # No scalar sidecar data should be fabricated by the new table.
+            self.assertFalse(db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='onchain_external_observations'"
+            ).fetchone())
+            with self.assertRaises(ValueError):
+                register_dataset(db,"researchbitcoin","badshape",shape="vector_unsafe")
+
     def test_strict_window_and_metric_registration(self):
         with sqlite3.connect(self.path) as db:
             ensure_archive_schema(db)
