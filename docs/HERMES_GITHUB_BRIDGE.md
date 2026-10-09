@@ -144,6 +144,73 @@ python3 scripts/hermes_bridge.py reply --pr NUMERO_DEL_PR --message-file /tmp/re
 
 Los comentarios y resultados constituyen un historial legible por ambos.
 
+### Primera migración desde un commit anterior a la limpieza
+
+**No ejecutar todavía el actualizador antiguo ni `git pull`:** el
+actualizador seguro se incorpora en el mismo commit que deja de
+versionar los reportes, por lo que no está presente en el PC viejo.
+Primero validar `master`, remoto y cambios locales. Luego:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git remote -v
+git fetch origin master
+tmp="$(mktemp)"
+git show origin/master:scripts/local_artifact_retention.py > "$tmp"
+BTC_RESEARCH_HOME="$PWD" python3 "$tmp" bootstrap
+rm -f "$tmp"
+bash scripts/update_local_and_test.sh --no-update
+~~~
+
+Este bootstrap aborta con staged o cambios de código locales y
+respalda con SHA256 todo archivo generado aún rastreado. Hace
+fast-forward y restaura copias privadas y recibos de idempotencia.
+No imprime ni publica los datos. Guardar el directorio de respaldo
+`reports/local-retained/<timestamp>/` localmente. El archivo temporal
+contiene código público del repositorio, no los datos de mercado ni secretos.
+
+Las actualizaciones futuras sí utilizan el nuevo actualizador:
+`bash scripts/update_local_and_test.sh`.
+
+## Retención y limpieza de artefactos operativos públicos (2026-10-09)
+
+Una revisión detectó reportes HTML portátiles, manifiestos, un recibo
+Telegram y un snapshot standalone versionados por error. La limpieza de
+`master` **solo los deja de rastrear**; no borra su historial público.
+No se altera SQLite y no se impone una publicación nueva.
+
+**No ejecutar `git pull` o `git reset --hard` directo tras esa limpieza:**
+Git elimina del working tree los archivos previamente rastreados cuando
+la rama remota deja de incluirlos. Si se pierde el recibo, el bloqueo
+de envíos duplicados de Telegram puede dejar de funcionar.
+
+En su lugar, en el PC de Hermes:
+
+~~~bash
+cd /home/ignotus/btc-research
+bash scripts/update_local_and_test.sh
+~~~
+
+El actualizador guarda los artefactos previamente rastreados en
+`reports/local-retained/<timestamp>/` con SHA256 y restaura los originales
+después del fast-forward. Esta carpeta está ignorada y es de acceso
+restringido local. El script se detiene si hay cambios staged o cambios
+de código no guardados. Tras actualizar, comprobar recibos e informes en
+`reports/deliveries/` y `reports/portable/` antes de usar Telegram.
+
+GitHub Actions rechaza cualquier incorporación futura de estos tres
+grupos de artefactos generados:
+- `reports/portable/`
+- `reports/deliveries/`
+- `dashboards/dashboard_standalone.html`
+
+**Aviso de privacidad:** los archivos que ya estuvieron en un commit
+público continúan accesibles mediante ese commit, archivos descargados y
+posibles forks. Rotar los tokens históricos expuestos, no copiar secretos
+a PRs ni asumir que el nuevo `.gitignore` limpia el historial.
+
 ## Seguridad y límites
 
 - El reporte HTML puede no haber aprobado el gate y nunca debe interpretarse

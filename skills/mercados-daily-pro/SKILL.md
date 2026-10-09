@@ -34,7 +34,7 @@ La fuente de verdad es el repositorio isnardokun/btc-market-lab y la base SQLite
 
 ## Procedimiento 1 — Actualizar en local y probar
 
-**No ejecutar git pull a ciegas.** Inspeccionar siempre rama, origen y estado del repositorio. Si hay modificaciones locales rastreadas, avisar y detenerse sin descartarlas.
+**No ejecutar git pull a ciegas.** Inspeccionar siempre rama, origen y estado del repositorio. Si hay cambios de código/documentos rastreados, avisar y detenerse sin descartarlos. Excepción segura: el actualizador conserva con SHA256 los reportes/recibos generados ya rastreados, en `reports/local-retained/` privado, antes de actualizar y los restaura; no sobrescribir ni borrar esos respaldos.
 
 Tras integrar en master el PR que incluye este skill, ejecutar:
 
@@ -228,9 +228,9 @@ Para el siguiente ciclo **después del merge del fix**:
 cd /home/ignotus/btc-research
 git status --short
 git branch --show-current
-git fetch origin master
-git merge --ff-only origin/master
-bash scripts/install_hermes_skill.sh
+# Este actualizador respalda/restaura recibos de Telegram e informes
+# todavía rastreados antes de un fast-forward. NO hacer git pull directo.
+bash scripts/update_local_and_test.sh
 SEND_TELEGRAM_AUTO=0 bash scripts/hermes_review_cycle.sh --no-update --pipeline --include-html
 ~~~
 
@@ -315,3 +315,68 @@ Guía de operación y límites: `docs/SPECIALIZED_NEWS_AND_RAG.md`.
   No subir corpus privados, cookies, tokens ni fuentes licenciadas al
   repositorio público. Para un LLM local futuro, requerir autorización,
   versionado del corpus y evaluación formal de alucinaciones.
+
+
+## Migración inicial obligatoria tras la retirada de artefactos rastreados
+
+**IMPORTANTE:** en un checkout anterior a la limpieza, el script
+`scripts/update_local_and_test.sh` es la versión VIEJA y no sabe
+preservar los recibos rastreados. La primera actualización debe
+usar el helper nuevo leído desde la rama remota, ANTES del fast-forward:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git remote -v
+git fetch origin master
+tmp="$(mktemp)"
+git show origin/master:scripts/local_artifact_retention.py > "$tmp"
+BTC_RESEARCH_HOME="$PWD" python3 "$tmp" bootstrap
+rm -f "$tmp"
+bash scripts/update_local_and_test.sh --no-update
+~~~
+
+El helper exige rama master y remoto esperado; aborta ante archivos
+staged o cambios de código locales; respalda las salidas operativas
+rastreables con SHA256, limpia únicamente esas salidas generadas si
+estaban modificadas, hace fast-forward y las restaura. No reinicia
+datos, no envía Telegram ni hace push. **Nunca ejecutar un
+`git pull` manual como sustituto.** Si cualquier validación falla,
+detenerse y conservar el backup en `reports/local-retained/`.
+
+En actualizaciones POSTERIORES se usa solo
+`bash scripts/update_local_and_test.sh`, ya con respaldo incorporado.
+
+## Procedimiento 10 — Higiene Git público y preservación local de artefactos
+
+El repositorio de GitHub es PÚBLICO; las copias de reportes HTML,
+manifiestos de validación, capturas standalone y recibos de envío Telegram
+son **resultados operativos**, no código fuente. No versionar ni subir
+`reports/portable/`, `reports/deliveries/` ni
+`dashboards/dashboard_standalone.html`. CI impide rastrearlos en nuevas
+revisiones. `reports/bridge/` sigue siendo LOCAL salvo permiso explícito.
+
+En octubre de 2026 estos archivos se habían rastreado indebidamente.
+Al dejar de rastrearlos en Git, un `git pull` directo puede **borrar
+las copias locales**, incluido el recibo con que `send_report.py` evita
+reenvíos duplicados. La recuperación segura es:
+
+~~~bash
+cd /home/ignotus/btc-research
+bash scripts/update_local_and_test.sh
+~~~
+
+El script guarda todas las salidas rastreadas existentes en
+`reports/local-retained/<timestamp>/` con SHA256, restaura los originales
+después del fast-forward y conserva el respaldo privado. Admite cambios
+locales SIN stage en estos artefactos generados, pero NO cambios de código
+sin guardar ni archivos staged. Nunca ejecuta envío Telegram. No cambiar
+estas garantías para forzar una actualización. Comprobar recibos/HTML
+antes de reenviar cualquier informe. `git pull`, `git restore` y
+`git reset --hard` manuales no están protegidos por el script.
+
+**Eliminar los archivos del árbol Git actual no los elimina de commits,
+PRs, forks ni cachés anteriores.** Credenciales expuestas históricamente
+deben rotarse/revocarse fuera de Git. No reescribir historia pública sin
+decisión explícita del titular.

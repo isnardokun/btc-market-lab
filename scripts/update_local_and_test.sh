@@ -41,17 +41,55 @@ echo "Repositorio: $PROJECT"
 echo "Rama: $(git branch --show-current)"
 echo "Commit inicial: $(git rev-parse --short HEAD)"
 
+# Explicitly private/local preservation of tracked runtime outputs.
+# A Git cleanup deletion would otherwise remove receipts (breaking Telegram
+# deduplication) and generated reports during the next fast-forward.
+BACKUP_FOLDER=""
+restore_backups() {
+    if [[ -n "$BACKUP_FOLDER" && "$BACKUP_FOLDER" != "-" ]]; then
+        python3 scripts/local_artifact_retention.py restore --folder "$BACKUP_FOLDER" || {
+            echo "ERROR: restauración automática falló. Backup privado: $BACKUP_FOLDER" >&2
+            return 1
+        }
+    fi
+}
+
 if [[ "$UPDATE" = "1" ]]; then
     if [[ "$(git branch --show-current)" != "master" ]]; then
         echo "ERROR: Para actualizar debes estar en master. En la rama del PR usa --no-update." >&2
         exit 1
     fi
-    if ! git diff --quiet || ! git diff --cached --quiet; then
-        echo "ERROR: Hay cambios locales rastreados. Respáldalos o haz commit antes de actualizar." >&2
+    if ! git diff --cached --quiet; then
+        echo "ERROR: Hay cambios staged; no se descarta ni mezcla ningún cambio." >&2
         exit 1
+    fi
+    # Permitir solamente cambios sin staged en SALIDAS generadas conocidas.
+    # Esas salidas se respaldan con SHA256 antes de limpiar la working tree.
+    mapfile -d '' changed < <(git diff --name-only -z)
+    for path in "${changed[@]}"; do
+        case "$path" in
+            reports/portable/*|reports/deliveries/*|dashboards/dashboard_standalone.html) ;;
+            *)
+                echo "ERROR: Hay cambios de código o documentos sin guardar: $path" >&2
+                echo "Detenido. No usar reset --hard ni git clean." >&2
+                exit 1
+                ;;
+        esac
+    done
+    BACKUP_FOLDER="$(python3 scripts/local_artifact_retention.py backup)"
+    if [[ -n "$BACKUP_FOLDER" && "$BACKUP_FOLDER" != "-" ]]; then
+        echo "Respaldo privado SHA256 de artefactos Git: $BACKUP_FOLDER"
+        trap 'restore_backups' EXIT
+    fi
+    if (( ${#changed[@]} )); then
+        # Solo rutas generadas pre-respaldadas. El resto de cambios está protegido.
+        git restore --worktree -- "${changed[@]}"
     fi
     git fetch origin master
     git merge --ff-only origin/master
+    restore_backups
+    trap - EXIT
+    BACKUP_FOLDER=""
 fi
 
 echo "Commit ejecutado: $(git rev-parse --short HEAD)"
