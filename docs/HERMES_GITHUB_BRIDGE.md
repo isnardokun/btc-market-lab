@@ -144,6 +144,43 @@ python3 scripts/hermes_bridge.py reply --pr NUMERO_DEL_PR --message-file /tmp/re
 
 Los comentarios y resultados constituyen un historial legible por ambos.
 
+## Retención y limpieza de artefactos operativos públicos (2026-10-09)
+
+Una revisión detectó reportes HTML portátiles, manifiestos, un recibo
+Telegram y un snapshot standalone versionados por error. La limpieza de
+`master` **solo los deja de rastrear**; no borra su historial público.
+No se altera SQLite y no se impone una publicación nueva.
+
+**No ejecutar `git pull` o `git reset --hard` directo tras esa limpieza:**
+Git elimina del working tree los archivos previamente rastreados cuando
+la rama remota deja de incluirlos. Si se pierde el recibo, el bloqueo
+de envíos duplicados de Telegram puede dejar de funcionar.
+
+En su lugar, en el PC de Hermes:
+
+~~~bash
+cd /home/ignotus/btc-research
+bash scripts/update_local_and_test.sh
+~~~
+
+El actualizador guarda los artefactos previamente rastreados en
+`reports/local-retained/<timestamp>/` con SHA256 y restaura los originales
+después del fast-forward. Esta carpeta está ignorada y es de acceso
+restringido local. El script se detiene si hay cambios staged o cambios
+de código no guardados. Tras actualizar, comprobar recibos e informes en
+`reports/deliveries/` y `reports/portable/` antes de usar Telegram.
+
+GitHub Actions rechaza cualquier incorporación futura de estos tres
+grupos de artefactos generados:
+- `reports/portable/`
+- `reports/deliveries/`
+- `dashboards/dashboard_standalone.html`
+
+**Aviso de privacidad:** los archivos que ya estuvieron en un commit
+público continúan accesibles mediante ese commit, archivos descargados y
+posibles forks. Rotar los tokens históricos expuestos, no copiar secretos
+a PRs ni asumir que el nuevo `.gitignore` limpia el historial.
+
 ## Seguridad y límites
 
 - El reporte HTML puede no haber aprobado el gate y nunca debe interpretarse
