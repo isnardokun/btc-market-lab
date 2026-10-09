@@ -6,10 +6,10 @@ Precios: Yahoo Finance | On-chain: bitview | News: Exa
 """
 import os, sys, datetime, sqlite3, json, subprocess, re
 from html import escape as html_escape
-from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
 try:
