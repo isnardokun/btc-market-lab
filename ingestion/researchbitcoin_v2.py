@@ -149,8 +149,12 @@ def parse_scalar_rows(payload, slug, now=None):
         # ResearchBitcoin API usa el slug como key de valor (ej. {"realized_price_sth": 45000, "time": ...})
         # También acepta formato genérico {"value": ..., "time": ...}
         value_key = next((k for k in (slug,) + tuple(CATALOG.keys()) if k in row and k != time_key), None)
-        if value_key is None or row.get(value_key) is None:
-            raise ValueError(f"Fila sin valor para {slug}; revisar --sample")
+        if value_key is None:
+            # Formato genérico: {"time": ..., "value": ...}
+            if "value" in row:
+                value_key = "value"
+            else:
+                raise ValueError(f"Fila sin valor para {slug}; revisar --sample")
         stamp = parse_timestamp(row[time_key])
         day = stamp.date()
         if day > cutoff:

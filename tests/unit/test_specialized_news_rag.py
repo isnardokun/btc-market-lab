@@ -1,7 +1,12 @@
 """Offline checks for specialized news, provenance, and evidence-first local RAG."""
 import datetime as dt
 import os
+import sys
 import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from unittest.mock import patch
 
 from ingestion.specialized_news import SOURCES, parse_feed, collect_specialized_news, MAX_XML_BYTES
