@@ -8,7 +8,7 @@ import html as htmllib
 import math
 import re
 
-SPAN_PRICE = re.compile(r'<div class="price-row">\s*<span class="big-price">([^<]+)</span>', re.I)
+SPAN_PRICE = re.compile(r'<div class="price-row">\s*<span class="big-price"(?:\s[^>]*)?>([^<]+)</span>', re.I)
 SCENARIO = re.compile(r'<div class="scenario s-(bull|base|bear)">([\s\S]*?)</div>', re.I)
 MONTHS = {
     "ene": 1, "jan": 1, "feb": 2, "mar": 3, "abr": 4, "apr": 4,
@@ -42,10 +42,25 @@ def parse_day(raw):
         return None
 
 
+def extract_report_date(source):
+    """Extrae la fecha del reporte del HTML para validar ventanas de 52s."""
+    m = re.search(r'(\d{1,2})\s+([a-zA-Z]{3})\s+(20\d{2})', source)
+    if m:
+        month_map = {"ene":1,"jan":1,"feb":2,"mar":3,"abr":4,"apr":4,
+                     "may":5,"jun":6,"jul":7,"ago":8,"aug":8,"sep":9,
+                     "oct":10,"nov":11,"dic":12,"dec":12}
+        mon = month_map.get(m.group(2).lower())
+        if mon:
+            try:
+                return dt.date(int(m.group(3)), mon, int(m.group(1)))
+            except ValueError:
+                pass
+    return dt.date.today()
+
 def audit_report_html(source, *, report_day=None):
     """Return specific hard-block issues; NEVER automatically repair bad claims."""
     errors = []
-    day = report_day or dt.date.today()
+    day = report_day or extract_report_date(source)
 
     if re.search(r"\{(?:usd|usd0|pct|[a-zA-Z_]+)\s*\([^{}]*\)\}", source):
         errors.append("Expresión de plantilla sin interpolar en HTML")
@@ -65,7 +80,7 @@ def audit_report_html(source, *, report_day=None):
             asset = "BTC"
         elif "SPDR S&P 500 ETF" in section and "section-title" in section:
             asset = "SPY"
-        elif ("Oro Futuro" in section or "Oro" in section[:300]) and "section-title" in section:
+        elif ("Oro Futuro" in section or section[:500].count("Oro") >= 1) and "section-title" in section:
             asset = "GOLD"
         else:
             continue

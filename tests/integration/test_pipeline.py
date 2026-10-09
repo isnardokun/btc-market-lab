@@ -69,9 +69,12 @@ def test_gate_json_exists_and_passed():
         gate = json.load(f)
     score = gate.get("score_total", gate.get("score", 0))
     passed = gate.get("pass", False)
-    assert passed, f"Gate no pasó: score={score}, gate={gate}"
+    critical_count = gate.get("critical_count", 0)
+    # pass=True requiere: score>=95 Y critical_count==0
+    assert critical_count == 0, f"Gate tiene {critical_count} error(es) crítico(s): {gate.get('all_issues', [])}"
     assert score >= 95, f"Gate score {score} < 95"
-    print(f"  ✅ publication_gate: score={score}/100, pass={passed}")
+    assert passed, f"Gate pass=False incluso con score={score}"
+    print(f"  ✅ publication_gate: score={score}/100, pass={passed}, critical=0")
 
 
 def test_html_report_exists():
