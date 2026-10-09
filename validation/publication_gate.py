@@ -12,12 +12,14 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from validation.content_checks import audit_report_html, extract_cpi_yoy_from_macro_strip
+from validation.archive_reconciliation import audit_archive_against_html
+from ingestion.daily_cutoff import previous_completed_utc_day, last_complete_day_end_timestamp
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
 
-TODAY = datetime.date.today()
+TODAY = datetime.datetime.now(datetime.timezone.utc).date()
 TODAY_STR = TODAY.strftime("%Y-%m-%d")
 REPORT_PATH = Path(__file__).parent.parent / "reports" / f"daily_report_{TODAY_STR}.html"
-ts_52w = int((datetime.datetime.combine(TODAY, datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
+ts_52w = int(datetime.datetime.combine(previous_completed_utc_day() - datetime.timedelta(weeks=52), datetime.time.min, tzinfo=datetime.timezone.utc).timestamp())
 
 # ─── Pesos ────────────────────────────────────────────────────────────────
 WEIGHTS = {
@@ -232,7 +234,7 @@ def check_consistencia():
     ath_row = cur.fetchone()
     if ath_row:
         ath_val = ath_row[0]
-        cur.execute("SELECT MAX(price) FROM price_btc WHERE ts >= ?", (ts_52w,))
+        cur.execute("SELECT MAX(price) FROM price_btc WHERE ts BETWEEN ? AND ?", (ts_52w, last_complete_day_end_timestamp()))
         high52_row = cur.fetchone()
         if high52_row and high52_row[0]:
             high52_val = high52_row[0]
@@ -427,6 +429,16 @@ def run():
             issue("consistencia", "critical", message)
     else:
         issue("exactitud", "critical", "Reporte ausente, no se puede publicar")
+
+    if REPORT_PATH.is_file():
+        try:
+            with sqlite3.connect(DB_PATH) as archive_db:
+                for message in audit_archive_against_html(
+                    REPORT_PATH.read_text(encoding="utf-8"), archive_db, TODAY_STR
+                ):
+                    issue("consistencia", "critical", message)
+        except (sqlite3.Error, OSError, ValueError) as exc:
+            issue("consistencia", "critical", f"Auditoría HTML/SQLite no disponible: {exc}")
 
     check_exactitud()
     check_consistencia()
