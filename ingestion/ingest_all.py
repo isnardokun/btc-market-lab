@@ -235,6 +235,14 @@ def main():
     parser.add_argument("--limit",    type=int, default=None)
     args = parser.parse_args()
 
+    if args.backfill:
+        parser.error("ingest_all.py --backfill legacy no garantiza cobertura y puede "
+                     "sobrecargar Bitview. Usar ingestion/bitview_history.py "
+                     "--all-daily [--max-requests N] [--apply].")
+    if args.dry_run:
+        parser.error("ingest_all.py --dry-run legacy puede escribir estado local. "
+                     "Usar ingestion/bitview_history.py sin --apply.")
+
     db = get_db()
     init_db(db)
     print(f"DB: {DB_PATH}")
