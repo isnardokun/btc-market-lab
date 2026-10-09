@@ -23,14 +23,14 @@ python3 ingestion/ingest_price.py
 ### FRED (Federal Reserve Economic Data)
 - **Script:** `ingestion/ingest_fred.py`
 - **API:** FRED REST API (`https://api.stlouisfed.org/fred/`)
-- **Auth:** `FRED_API_KEY` (query param `?api_key=`)
+- **Auth:** `FRED_API_KEY` (el parámetro de autenticación se construye desde el entorno)
 - **Series:** 15 series (ver `DATABASE_SCHEMA.md`)
 - **Tabla destino:** `macro_fred`
 - ** Reconciliation:** cada run re-ingesta últimos 60 días (detecta revisiones)
 - **Dependencias:** ninguna (requests stdlib)
 
 ```bash
-FRED_API_KEY="$FRED_API_KEY" python3 ingestion/ingest_fred.py
+python3 ingestion/ingest_fred.py
 ```
 
 ---
@@ -156,7 +156,7 @@ def exa_search(query, n=5):
 
 **FRED:** editar `ingestion/config.py`:
 ```python
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
+Usar la variable de entorno FRED_API_KEY; el lector está implementado en ingestion/config.py.
 ```
 
 **No hardcodear keys en scripts** — usar `os.environ.get()`.
@@ -184,5 +184,5 @@ tail -20 logs/news_errors.log
 grep -i "fred\|error" cron.log | tail -10
 
 # Test ingest individual
-FRED_API_KEY="$FRED_API_KEY" python3 ingestion/ingest_fred.py
+python3 ingestion/ingest_fred.py
 ```
