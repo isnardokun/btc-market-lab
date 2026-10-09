@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
+from storage.archive_schema import archive_schema_installed, attach_available_triggers, register_dataset
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS market_ohlc_history (
@@ -82,6 +83,10 @@ def archive(db, symbol, rows):
     stamp = dt.datetime.now(dt.timezone.utc).isoformat()
     with sqlite3.connect(db) as conn:
         conn.executescript(SCHEMA)
+        if archive_schema_installed(conn):
+            attach_available_triggers(conn)
+            register_dataset(conn, "yahoo", symbol, frequency="d1",
+                             unit="USD", scale="native")
         conn.executemany(
             "INSERT INTO market_ohlc_history "
             "(provider,symbol,ts,open,high,low,close,volume,fetched_at_utc) "
