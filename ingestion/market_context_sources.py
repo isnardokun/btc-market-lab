@@ -11,7 +11,7 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from storage.market_context import raw_payload, store_derivative, store_etf, store_event
+from storage.market_context import raw_payload, store_derivative, store_etf, store_event, get_cursor, save_cursor
 
 SOURCE_URLS={
  "binance":"https://fapi.binance.com",
@@ -67,9 +67,11 @@ def fetch_binance(db,*,fetch=download,history=False,max_pages=2):
              quote_usd=row.get("sumOpenInterestValue")))
     endpoint=SOURCE_URLS["binance"]+"/fapi/v1/fundingRate"
     newest=db.execute("SELECT MAX(observed_utc) FROM market_derivatives WHERE provider='binance' AND metric='funding_settled' AND symbol='BTCUSDT'").fetchone()[0]
-    start_ms=(int(dt.datetime.fromisoformat(newest).timestamp()*1000)+1 if newest and not history
-              else (int(dt.datetime(2019,1,1,tzinfo=dt.timezone.utc).timestamp()*1000) if history
-              else int((dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=45)).timestamp()*1000)))
+    previous=get_cursor(db,"binance","funding-history") if history else None
+    start_ms=(int(previous) if previous is not None else
+              int(dt.datetime(2019,1,1,tzinfo=dt.timezone.utc).timestamp()*1000)
+              if history else int(dt.datetime.fromisoformat(newest).timestamp()*1000)+1
+              if newest else int((dt.datetime.now(dt.timezone.utc)-dt.timedelta(days=45)).timestamp()*1000))
     for _ in range(max_pages):
         body=fetch(endpoint,{"symbol":"BTCUSDT","startTime":start_ms,"limit":1000});requests+=1
         rows=parse_api_json(body)
@@ -85,11 +87,13 @@ def fetch_binance(db,*,fetch=download,history=False,max_pages=2):
                 metric="funding_settled",observed_utc=_ms(stamp),
                 interval_label="settlement",value=row["fundingRate"],unit="fraction",
                 endpoint=endpoint,sha=sha))
+        if history and rows:
+            save_cursor(db,"binance","funding-history",last+1)
         if len(rows)<1000 or last<start_ms:break
         start_ms=last+1
     return requests,points
 
-def fetch_bybit(db,*,fetch=download,max_pages=2):
+def fetch_bybit(db,*,fetch=download,max_pages=2,history=False):
     """OI Bybit BTCUSDT linear raw units BTC; funding settled not projected."""
     requests=points=0
     root=SOURCE_URLS["bybit"]
@@ -100,10 +104,15 @@ def fetch_bybit(db,*,fetch=download,max_pages=2):
        {"category":"linear","symbol":"BTCUSDT","limit":200})
     ):
         cursor=None; end=None;seen=set()
+        if history:
+            previous=get_cursor(db,"bybit",metric+"-backfill")
+            if previous:
+                if metric=="open_interest":end=int(previous)
+                else:end=int(previous)
         for _ in range(max_pages):
             query=dict(params)
             if cursor and metric=="open_interest":query["cursor"]=cursor
-            if end is not None and metric=="funding_settled":query["endTime"]=end
+            if end is not None:query["endTime"]=end
             body=fetch(endpoint,query);requests+=1
             result=parse_api_json(body)
             if not isinstance(result,dict) or result.get("retCode")!=0:
@@ -126,6 +135,10 @@ def fetch_bybit(db,*,fetch=download,max_pages=2):
                    value=row["openInterest"] if metric=="open_interest" else row["fundingRate"],
                    unit="BTC" if metric=="open_interest" else "fraction",endpoint=endpoint,sha=sha))
             if not rows:break
+            if history and oldest is not None:
+                # On the next run continue strictly before oldest observed
+                # point, rather than restarting at today's most recent page.
+                save_cursor(db,"bybit",metric+"-backfill",oldest-1)
             if metric=="open_interest":
                 nxt=part.get("nextPageCursor")
                 if not nxt or nxt==cursor:break
