@@ -167,6 +167,25 @@ Tras cada lote histórico:
 - preservar fechas reales, fuente y metodología de las observaciones;
 - no publicar históricos operativos, tokens, recibos o informes por defecto.
 
+## Consultas históricas (sin APIs ni cambios en SQLite)
+
+La nueva CLI permite estudiar intervalos específicos de manera local
+y aislada por fuente; responde valores crudos, fecha UTC y atribución.
+No une series solo porque compartan nombre:
+
+~~~bash
+python3 scripts/history_query.py --provider bitview --metric mvrv --from 2024-01-01 --to 2024-12-31
+python3 scripts/history_query.py --provider researchbitcoin --metric mvrv_sth --from 2026-09-01 --to 2026-10-08
+python3 scripts/history_query.py --provider fred --metric DGS10 --from 2018-01-01 --to 2020-12-31
+python3 scripts/history_query.py --provider yahoo --metric BTC-USD --from 2019-01-01 --to 2019-12-31
+python3 scripts/history_query.py --provider news --metric BTC --from 2026-10-01 --to 2026-10-09
+~~~
+
+`--limit` recorta resultados (1..5000), marcando `truncated` si
+se alcanza el límite. Los valores RBN se devuelven en **escala raw**
+sin conversión implícita: cualquier comparación requiere declarar
+la escala y método. No enviar resultados de la SQLite a GitHub.
+
 ## Definición verificable de completo
 
 Para una métrica no basta con `COUNT(*) > 0`.
