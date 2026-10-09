@@ -74,7 +74,8 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual({x["provider"] for x in state["derivatives"]},{"binance","bybit"})
         self.assertIn("historical_completeness_claim",state)
         self.assertNotIn("fixture",str(state["raw_payloads"]))
-        self.assertEqual(main(["--db",str(self.db),"--strict"]),0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--db",str(self.db),"--strict"]),0)
 
     def test_strict_mode_returns_nonzero_when_no_ingestion(self):
         with contextlib.redirect_stdout(io.StringIO()):
@@ -111,7 +112,7 @@ class FredEntrypointTests(unittest.TestCase):
              patch.object(mod,"archive_schema_installed",return_value=False), \
              patch.object(mod,"ingest_series",side_effect=RuntimeError("provider failure")):
             with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
-                status=mod.main()
+                status=mod.main([])
         self.assertEqual(status,1)
 
     def test_module_help_works(self):
