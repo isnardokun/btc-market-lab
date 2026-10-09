@@ -144,13 +144,18 @@ def parse_scalar_rows(payload, slug, now=None):
         if not isinstance(row, dict):
             raise ValueError("Fila no estructurada; revisar esquema --sample")
         time_key = next((k for k in ("time", "timestamp", "datetime", "date") if k in row), None)
-        if time_key is None or "value" not in row:
-            raise ValueError("Fila sin fecha o value; revisar --sample")
+        if time_key is None:
+            raise ValueError("Fila sin campo de fecha/time; revisar --sample")
+        # ResearchBitcoin API usa el slug como key de valor (ej. {"realized_price_sth": 45000, "time": ...})
+        # También acepta formato genérico {"value": ..., "time": ...}
+        value_key = next((k for k in (slug,) + tuple(CATALOG.keys()) if k in row and k != time_key), None)
+        if value_key is None or row.get(value_key) is None:
+            raise ValueError(f"Fila sin valor para {slug}; revisar --sample")
         stamp = parse_timestamp(row[time_key])
         day = stamp.date()
         if day > cutoff:
             continue  # Explicitly reject uncompleted UTC day.
-        value = row["value"]
+        value = row[value_key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError("Valor no escalar finito")
         if item.unit == "percent" and not (0 <= value <= 100):
