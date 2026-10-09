@@ -122,3 +122,30 @@ revisión por PR de ChatGPT.
 
 **Responsabilidad operativa:** Hermes prepara diagnóstico/render y comprueba;
 ChatGPT mantiene el código de producción por PR y CI.
+
+## Contrato editorial Research Studio v2 — Hermes 2026-10-09
+
+Este skill debe verificar que la portada inicial distinga **Hechos
+observados**, **Lectura condicional** y **Riesgos y datos pendientes**.
+La sección `rbn-diagnostic` se debe contrastar con SQLite y solo
+comparar datos RBN del **mismo día UTC** que BTC. La diferencia
+aritmética de profit/loss/net STH obliga a reportar conciliación
+pendiente, no a alterar o descartar registros.
+
+RSI: interpretar umbrales 30/70 como convenciones descriptivas sin
+señales automáticas de compra/venta; las medias móviles expresan
+posición del precio, no una orden. No introducir calendarios o eventos
+macroeconómicos estáticos sin fuente oficial vigente. Separar noticias
+primarias de extractos Exa de descubrimiento: las clasificaciones
+temáticas no demuestran causalidad.
+
+La existencia de código de backfill NO implica que todo el histórico
+Tier 2 se encuentre descargado. Ejecutar inventario de cobertura,
+migraciones respaldadas explícitas y lotes bajo cuota y supervisión;
+no activar envíos Telegram, cron ni backfills automáticos.
+
+Para cada reporte adjuntar evidencia del hash aprobado, datos UTC,
+cobertura, capturas 320/390/768/1440 y A4, suite de pruebas y revisión
+de inferencias. **Gate 100/100 no equivale a investigación validada.**
+
+Consultar el playbook: `docs/HERMES_REVIEW_ACTIONS_2026-10-09.md`.
