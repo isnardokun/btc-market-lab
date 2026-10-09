@@ -5,6 +5,7 @@ Estructura profesional: Bitfinex Alpha + CoinMarketCap + Glassnode
 Precios: Yahoo Finance | On-chain: bitview | News: Exa
 """
 import os, sys, datetime, sqlite3, json, subprocess, re
+from html import escape as html_escape
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,7 +19,7 @@ except ImportError:
 TODAY    = datetime.date.today()
 OUT_PATH = BASE_DIR + "/reports/daily_report_" + TODAY.strftime("%Y-%m-%d") + ".html"
 TODAY_STR = TODAY.strftime("%d %b %Y")
-NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M UTC")
+NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 ts_today  = int(datetime.datetime.combine(TODAY, datetime.time(23,59)).replace(tzinfo=datetime.timezone.utc).timestamp())
 ts_52w    = int((datetime.datetime.combine(TODAY, datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
 
@@ -507,13 +508,28 @@ def osc_card(name, value, signal_txt, cls):
             f'<div class="o-signal">{signal_txt}</div></div>')
 
 def news_span(n):
-    bc = {"Bullish":"up","Bearish":"dn","Volatilidad":"vol","Tecnico":"tec","Neutral":"neu"}.get(n["bias"],"neu")
+    """Render Exa content strictly as text; titles/snippets/URLs are untrusted."""
+    from urllib.parse import urlsplit
+    bc = {"Bullish": "up", "Bearish": "dn", "Neutral": "neu"}.get(n.get("bias"), "neu")
+    url = str(n.get("url", ""))
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("https", "http") or not parsed.netloc:
+        url = ""
+    date = html_escape(str(n.get("date") or "Fecha no confirmada"))
+    title = html_escape(str(n.get("title") or "Sin título"))
+    summary = html_escape(str(n.get("summary") or "Extracto no disponible"))
+    category = html_escape(str(n.get("impact") or "Sin categoría"))
+    bias = html_escape(str(n.get("bias") or "Neutral"))
+    link = (f'<a href="{html_escape(url, quote=True)}" rel="noopener noreferrer" '
+            f'class="readmore" target="_blank">Leer fuente original &#8594;</a>'
+            if url else '<span class="readmore">Enlace no verificado</span>')
     return (f'<div class="news-item">'
-            f'<div class="news-date">{n["date"]} &nbsp; <span class="news-bias b-{bc}">{n["bias"]}</span></div>'
-            f'<h3>{n["title"]}</h3>'
-            f'<p class="news-summary">{n["summary"]}</p>'
-            f'<div class="news-impact"><strong>Impacto: </strong>{n["impact"]}</div>'
-            f'<a href="{n["url"]}" class="readmore" target="_blank">Leer noticia completa &#8594;</a></div>')
+            f'<div class="news-date">{date} &nbsp; <span class="news-bias b-{bc}">{bias}</span></div>'
+            f'<h3>{title}</h3>'
+            f'<p class="news-summary">{summary}</p>'
+            f'<div class="news-impact"><strong>Tema identificado automáticamente: </strong>{category}</div>'
+            f'{link}</div>')
+
 
 def bias_section(asset, chg, bull_txt, base_txt, bear_txt):
     vc = bcls(chg)
@@ -529,40 +545,36 @@ def bias_section(asset, chg, bull_txt, base_txt, bear_txt):
 # ── NEWS ANALYZER ─────────────────────────────────────────────────────────────
 
 def analyze_news(news_list):
-    results = []
-    for n in news_list:
-        title = n.get("title","")
-        hl    = n.get("highlight","")
-        text  = (title + " " + hl).lower()
-        bias  = "Neutral"
-        if any(k in text for k in ["bullish","buy","long","surge","recovery","rebound","all-time high"," ath","breakout","strong buy","upgrade"]): bias = "Bullish"
-        elif any(k in text for k in ["bearish","sell","short","plunge","crash","breakdown","rejection","liquidat","selloff"]): bias = "Bearish"
-        elif any(k in text for k in ["support","resistance","range","consolidation","technical","RSI","moving average"]): bias = "Tecnico"
-        title_es = translate_text(title)
-        hl_es    = translate_text(hl)
-        impact   = classify_impact(text)
-        results.append({
-            "date":    n.get("date",""),
-            "title":   title_es or title,
-            "url":     n.get("url",""),
-            "summary": (hl_es or hl)[:280],
-            "bias":    bias,
-            "impact":  impact,
+    """Fallback news: leave source wording intact; avoid false translation."""
+    result = []
+    for item in news_list:
+        title = item.get("title", "")
+        snippet = item.get("highlight", "")
+        result.append({
+            "date": item.get("date") or "Fecha no confirmada",
+            "title": title,
+            "url": item.get("url", ""),
+            "summary": snippet[:280],
+            "bias": "Sin evaluar",   # no calibrated sentiment model
+            "impact": classify_impact((title + " " + snippet).lower()),
         })
-    return results
+    return result
+
 
 def classify_impact(text):
-    if any(k in text for k in ["rate hike","inflation","fed","treasury","yield","recession"]):
-        return "Tasas mas altas o inflacion reduce flujo de capital hacia activos de riesgo."
-    if any(k in text for k in ["etf","institutional","flow","fund"]):
-        return "Flujos ETF/institucionales determinan demanda spot y estructura del mercado."
-    if any(k in text for k in ["liquidation","short","long","leverage","margin"]):
-        return "Niveles de liquidacion actuan como imanes de precio — cascadas amplifican volatilidad."
-    if any(k in text for k in ["breakout","resistance","support","technical"]):
-        return "Estructura tecnica define rango y puntos de decision critica."
-    if any(k in text for k in ["geopolitic","oil","supply","opec","middle east"]):
-        return "Tension geopolitica eleva inflacion energetica — efecto mixto en crypto."
-    return "Noticia mixta — interpretacion dependera del contexto macro en curso."
+    """Fallback thematic label only; no causal prediction from keywords."""
+    topics = [
+        ("Tasas e inflación", ("rate hike", "inflation", "fed", "treasury", "yield")),
+        ("Flujos ETF/institucionales", ("etf", "institutional", "fund", "spot flow")),
+        ("Liquidez y derivados", ("liquidation", "leverage", "margin", "funding")),
+        ("Estructura técnica", ("breakout", "resistance", "support", "technical")),
+        ("Geopolítica", ("geopolitic", "opec", "middle east")),
+    ]
+    for topic, keywords in topics:
+        if any(word in text for word in keywords):
+            return topic
+    return "General"
+
 
 # ── MACRO EVENTS ─────────────────────────────────────────────────────────────
 
@@ -621,7 +633,7 @@ def gen_btc_narrative(oc, btc_price_data, btc_rsi, btc_hist, btc_chg, btc_sma200
         elif mvrv < 1.5:
             mvrv_int = f"MVRV de {mvrv:.2f}x indica fase de acumulacion. El mercado esta relativamente barato vs costo realizado de ${rcap:.2f}T."
         elif mvrv < 2.5:
-            mvrv_int = f"MVRV de {mvrv:.2f}x es tipico de fases intermedias del ciclo. Precio a {mvrv:.2f}x del costo base de ${rcap:.2f}T — sin euforia."
+            mvrv_int = f"MVRV de {mvrv:.2f}x es tipico de fases intermedias del ciclo. Capitalización de mercado equivalente a {mvrv:.2f} veces la capitalización realizada (${rcap:.2f}T); el ratio no demuestra una fase de ciclo por sí solo."
         elif mvrv < 3.5:
             mvrv_int = f"MVRV de {mvrv:.2f}x comienza a indicar sobrevaloracion.鳌"
         else:
@@ -642,13 +654,13 @@ def gen_btc_narrative(oc, btc_price_data, btc_rsi, btc_hist, btc_chg, btc_sma200
     # aSOPR
     if asopr:
         if asopr < 1.0:
-            asopr_int = f"aSOPR 1W en {asopr:.4f} indica que los outputs gastados se realizan en perdida agregada — senal de acumulacion."
+            asopr_int = f"aSOPR 1W en {asopr:.4f} sugiere pérdidas realizadas agregadas; no prueba acumulación."
         elif asopr < 1.1:
             asopr_int = f"aSOPR 1W en {asopr:.4f} muestra gastos agregados con ganancia moderada."
         elif asopr < 1.3:
             asopr_int = f"aSOPR 1W en {asopr:.4f} sugiere realizacion de ganancias pero sin euforia."
         else:
-            asopr_int = f"aSOPR 1W en {asopr:.4f} indica top cercano — realizacion masiva."
+            asopr_int = f"aSOPR 1W en {asopr:.4f} refleja un múltiplo alto de beneficio realizado en salidas gastadas, sin pronosticar un techo."
     else:
         asopr_int = "aSOPR 1W no disponible."
 
@@ -669,7 +681,7 @@ def gen_btc_narrative(oc, btc_price_data, btc_rsi, btc_hist, btc_chg, btc_sma200
 
     # Hash rate / mining
     if hr:
-        hr_int = f"Hash rate en {int(hr):,} EH/s con dificultad en {diff:.0f}T sigue en maximos historicos — mineros siguen invirtiendo en capacidad."
+        hr_int = f"Hash rate en {int(hr):,} EH/s y dificultad en {diff:.0f}T describen el estado de la red, sin inferir inversión minera."
     else:
         hr_int = "Hash rate no disponible en la base de datos."
 
@@ -1112,7 +1124,7 @@ def main():
 
     A('<div class="price-row">')
     A(f'<span class="big-price">{usd0(btc_price)}</span>')
-    A(f'<span class="big-chg {bcls(btc_chg)}">{arr(btc_chg)} {pct(btc_chg)} (24h)</span>')
+    A(f'<span class="big-chg {bcls(btc_chg)}">{arr(btc_chg)} {pct(btc_chg)} (cierre previo)</span>')
     A('</div>')
 
     A('<div class="stats-bar">')
@@ -1130,7 +1142,7 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Act. Addrs</div><div class="sval">{"%d"%oc["addrs"] if oc["addrs"] else "---"}</div><div class="ssub">promedio 24h</div></div>')
     A('</div>')
 
-    A('<div class="chart-box"><h3>Precio BTC — 90 dias (SMA 20 dorado, SMA 50 verde)</h3>'+btc_chart+'</div>')
+    A('<div class="chart-box"><h3>Precio BTC — 90 cierres diarios (SMA 20 dorado, SMA 50 verde)</h3>'+btc_chart+'</div>')
 
     # On-chain grid
     A('<div class="card"><h3>Datos On-Chain — bitview.space (datos reales de la red BTC)</h3>')
@@ -1153,10 +1165,10 @@ def main():
     A('<h3>Analisis del ciclo y estructura de mercado</h3>')
     A('<span class="source">JHODLers — ' + TODAY_STR + ' | Datos: bitview.local + Yahoo Finance</span>')
     A(f'<p>{btc_narr["rsi_sig"]} {btc_narr["macd_sig"]} '
-      f'BTC opera en ${usd0(btc_price)} ({pct(btc_chg)} en 24h) con un MVRV de '
+      f'BTC opera en {usd0(btc_price)} ({pct(btc_chg)} frente al cierre diario previo) con un MVRV de '
       f'{"%.2fx" % oc["mvrv"] if oc["mvrv"] else "---"} ({btc_narr["mvrv_int"]})</p>')
     A(f'<div class="highlight"><strong>Estructura del ciclo:</strong> {btc_narr["cycle_txt"]}</div>')
-    A(f'<p><strong>Realized Cap vs Market Cap:</strong> el capital realizado de ${oc["rcap"]:.2f}T representa el costo promedio de todos los holders en la red. '
+    A(f'<p><strong>Realized Cap vs Market Cap:</strong> el capital realizado de ${oc["rcap"]:.2f}T representa una valoración agregada de monedas según su último movimiento en cadena; no es el costo promedio por BTC. '
       f'El ratio actual de {"%.2fx" % (oc["mcap"]/oc["rcap"]) if oc["mcap"] and oc["rcap"] else "---"} indica que el mercado esta en '
       f'{"fase de acumulacion" if oc["mvrv"] and oc["mvrv"] < 1.5 else "fase intermedia del ciclo" if oc["mvrv"] and oc["mvrv"] < 2.5 else "fase de distribucion"}. '
       f'{btc_narr["asopr_int"]}</p>')
@@ -1199,7 +1211,7 @@ def main():
     )
     A(bias_section("Bitcoin (BTC)", btc_chg, btc_bull, btc_base, btc_bear))
 
-    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias y Analisis en Espanol</h3>')
+    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias — extractos en idioma original; clasificación orientativa</h3>')
     A('<div class="news-wrap">'+''.join(news_span(n) for n in nb)+'</div>')
     A('</section>')
 
@@ -1220,7 +1232,7 @@ def main():
 
     A('<div class="price-row">')
     A(f'<span class="big-price">{usd(spy_price)}</span>')
-    A(f'<span class="big-chg {bcls(spy_chg)}">{arr(spy_chg)} {pct(spy_chg)} (24h)</span>')
+    A(f'<span class="big-chg {bcls(spy_chg)}">{arr(spy_chg)} {pct(spy_chg)} (cierre previo)</span>')
     A('</div>')
 
     A('<div class="stats-bar">')
@@ -1247,7 +1259,7 @@ def main():
       f'SPY vs SPX: SPY es un ETF que puede distribuir dividendos; su precio por participación y el nivel del índice son magnitudes distintas.</p>')
     A('</div>')
 
-    A('<div class="chart-box"><h3>SPDR S&P 500 ETF (SPY) — 90 dias</h3>'+spy_chart+'</div>')
+    A('<div class="chart-box"><h3>SPDR S&P 500 ETF (SPY) — 90 sesiones</h3>'+spy_chart+'</div>')
 
     A('<div class="card"><h3>Medias Moviles (SPY)</h3><div class="ma-grid">'+spy_ma_items+'</div></div>')
     A('<div class="card"><h3>Osciladores (SPY)</h3><div class="osc-grid">'+spy_osc_items+'</div></div>')
@@ -1267,7 +1279,7 @@ def main():
     )
     A(bias_section("SPY (S&P 500 ETF)", spy_chg, spy_bull, spy_base, spy_bear))
 
-    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias y Analisis en Espanol</h3>')
+    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias — extractos en idioma original; clasificación orientativa</h3>')
     A('<div class="news-wrap">'+''.join(news_span(n) for n in ns)+'</div>')
     A('</section>')
 
@@ -1280,7 +1292,7 @@ def main():
 
     A('<div class="price-row">')
     A(f'<span class="big-price" style="color:var(--gold)">{usd0(gold_price)}</span>')
-    A(f'<span class="big-chg {bcls(gold_chg)}">{arr(gold_chg)} {pct(gold_chg)} (24h)</span>')
+    A(f'<span class="big-chg {bcls(gold_chg)}">{arr(gold_chg)} {pct(gold_chg)} (cierre previo)</span>')
     A('</div>')
 
     A('<div class="stats-bar">')
@@ -1307,13 +1319,13 @@ def main():
       f'{"encima" if gold_sma200 and gold_price and gold_price > gold_sma200 else "debajo"} de SMA 200 ({"$%.0f"%gold_sma200 if gold_sma200 else "---"}), '
       f'{"encima" if gold_sma50 and gold_price and gold_price > gold_sma50 else "debajo"} de SMA 50 ({"$%.0f"%gold_sma50 if gold_sma50 else "---"}). '
       f'Resistencias: SMA 100 en {"$%.0f"%gold_sma100 if gold_sma100 else "---"}. '
-      f'Soporte critico en zona $4,100-$4,000. '
+      f'Los niveles técnicos calculados se presentan en su tabla. '
       f'Nota: no tenemos datos de inventario, demanda fisica ni orden flow para oro — el analisis es puramente tecnico y macro.</div>')
     A(f'<p><strong>Plata:</strong> {usd(silver_price)} ({pct(silver_chg)}) — sigue al oro con mayor volatilidad. '
-      f'<strong>WTI:</strong> {usd(oil_price)} ({pct(oil_chg)}) — reflejamos tension geopolitica en mercados energeticos.</p>')
+      f'<strong>WTI:</strong> {usd(oil_price)} ({pct(oil_chg)}) — variación del futuro WTI sin interpretación causal no verificada.</p>')
     A('</div>')
 
-    A('<div class="chart-box"><h3>Oro Futuro (GC=F) — 90 dias</h3>'+gold_chart+'</div>')
+    A('<div class="chart-box"><h3>Oro Futuro (GC=F) — 90 sesiones</h3>'+gold_chart+'</div>')
 
     A('<div class="card"><h3>Resumen Tecnico</h3><table class="signal-table">')
     A('<thead><tr><th>Indicador</th><th>Valor</th><th>Senal</th></tr></thead><tbody>')
@@ -1343,20 +1355,20 @@ def main():
     )
     A(bias_section("Oro Futuro (GC=F)", gold_chg, gold_bull, gold_base, gold_bear))
 
-    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias y Analisis en Espanol</h3>')
+    A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias — extractos en idioma original; clasificación orientativa</h3>')
     A('<div class="news-wrap">'+''.join(news_span(n) for n in nm)+'</div>')
     A('</section>')
 
-    # VERDICT
+    # Cierre numérico auditable: sin forecast ad hoc ni eventos sin verificar.
     A('<div class="signal-band">')
-    A('<div class="signal-lbl">JHODLers Verdict — '+TODAY_STR+'</div>')
-    A(f'<p><strong>Catalizador clave:</strong> CPI EE.UU. 14-oct. '
-      f'Si viene caliente (core {">"}0.3%) -> risk-off: BTC -{">"}5%, renta variable bajo presion. '
-      f'Si suave -> rally hacia $87-92K en BTC y extension en bolsa. '
-      f'Oro necesita ruptura decisiva sobre $4,200 para revertir tendencia. '
-      f'<strong>Sesgo BTC: Neutral-Constructivo</strong> mientras sostenga $80K. '
-      f'Vigilancia: flujo ETF diario y sesion US como determinantes del proximo movimiento.</p>')
-    A(f'<p><strong>Datos macro今晚:</strong> {macro_narr}</p>')
+    A('<div class="signal-lbl">Resumen de datos observados — '+TODAY_STR+'</div>')
+    A(f'<p><strong>Bitcoin:</strong> {usd0(btc_price)} '
+      f'({pct(btc_chg)} frente al cierre anterior); '
+      f'RSI(14) {btc_rsi:.1f} y MVRV {oc["mvrv"]:.2f}x. '
+      'Los escenarios son condicionales, no probabilidades calibradas. '
+      'No se dispone aquí de flujos ETF verificados ni de un modelo '
+      'calibrado que permita cuantificar retornos futuros.</p>')
+    A(f'<p><strong>Datos macro disponibles:</strong> {macro_narr}</p>')
     A('</div>')
 
     A('<div class="footer">Mercados Daily Pro — Fuentes: Yahoo Finance (precios) | bitview.space DB (on-chain BTC) | FRED (macro) | Exa Search (noticias)<br>'
