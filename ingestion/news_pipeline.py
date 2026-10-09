@@ -289,6 +289,43 @@ def merge_validated_news(exa_entries, rss_entries, limit=7):
     return items
 
 
+SPECIALIST_DOMAINS = {
+    "insights.glassnode.com": "Glassnode Insights",
+    "bitcoinops.org": "Bitcoin Optech",
+    "coinmetrics.io": "Coin Metrics",
+}
+
+
+def targeted_research_news(asset, *, today=None):
+    """Opt-in, domain-verified Exa research discovery. Never claims source fact-check."""
+    if asset != "BTC" or os.getenv("NEWS_TARGETED_EXA", "0") != "1":
+        return []
+    today = today or datetime.datetime.now(datetime.timezone.utc).date()
+    period = today.strftime("%B %Y")
+    query = ("Bitcoin onchain network realized value investor cohorts "
+             "site:insights.glassnode.com OR site:bitcoinops.org OR "
+             f"site:coinmetrics.io {period}")
+    entries = parse_mcporter_raw(exa_search(query, n=4))
+    selected = []
+    for entry in entries:
+        host = (urlsplit(entry.get("url", "")).hostname or "").lower()
+        matched = next(((d, name) for d, name in SPECIALIST_DOMAINS.items()
+                        if host == d or host.endswith("." + d)), None)
+        if not matched:
+            continue
+        date_string = entry.get("date", "")
+        try:
+            age = (today - datetime.date.fromisoformat(date_string)).days
+        except (ValueError, TypeError):
+            continue
+        if not 0 <= age <= 21 or not validate_entry(entry, len(selected))[0]:
+            continue
+        entry["source"] = matched[1]
+        entry["source_type"] = "research"
+        selected.append(entry)
+    return selected
+
+
 def run_news_pipeline(queries):
     """Exa discovery plus optional primary research RSS; fail-open per provider."""
     results = {}
@@ -307,7 +344,8 @@ def run_news_pipeline(queries):
             entry["source"] = urlsplit(entry["url"]).hostname or "Exa search"
             entry["source_type"] = "discovery"
             validated.append(entry)
-        results[asset] = merge_validated_news(validated, specialized.get(asset, []))
+        expert = targeted_research_news(asset)
+        results[asset] = merge_validated_news(validated, specialized.get(asset, []) + expert)
         if not results[asset]:
             print(f"[news_pipeline] {asset}: 0 noticias válidas", file=sys.stderr)
 
