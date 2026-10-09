@@ -40,6 +40,26 @@ class Tests(unittest.TestCase):
             errors = audit_archive_against_html(html(), db, DAY)
             self.assertTrue(any("vela del día" in e for e in errors), errors)
 
+    def test_archiver_excludes_today_open_utc_bar(self):
+        from validation.archive_metrics import _completed_yahoo
+        from unittest.mock import patch
+        now = dt.datetime.now(dt.timezone.utc)
+        prior = now.date() - dt.timedelta(days=1)
+        old = prior - dt.timedelta(days=1)
+        def candle(day, price):
+            ts = int(dt.datetime.combine(day, dt.time.min, tzinfo=dt.timezone.utc).timestamp())
+            return {"ts": ts, "open": price, "high": price+10,
+                    "low": price-10, "close": price, "volume": 100}
+        with patch("validation.archive_metrics.yahoo_ohlc",
+                   return_value=[candle(prior, 81676), candle(now.date(), 83010)]):
+            with self.assertRaises(RuntimeError):
+                _completed_yahoo("BTC-USD", 252)
+        with patch("validation.archive_metrics.yahoo_ohlc",
+                   return_value=[candle(old, 82000), candle(prior, 81676),
+                                 candle(now.date(), 83010)]):
+            rows = _completed_yahoo("BTC-USD", 252)
+        self.assertEqual([r["close"] for r in rows], [82000, 81676])
+
     def test_missing_data_rejected(self):
         with make_db() as db:
             db.execute("DELETE FROM daily_metrics WHERE asset='GOLD' AND metric='price'")
