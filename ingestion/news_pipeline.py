@@ -287,36 +287,70 @@ def run_news_pipeline(queries):
     return results
 
 # ─── Normalizar para el reporte ─────────────────────────────────────────
-def normalize_for_report(news_items):
-    """Preserve original headlines/extracts without pseudo-translation.
+def clean_source_excerpt(title, highlight, max_chars=280):
+    """Clean search-result boilerplate without inventing or translating facts.
 
-    An uncalibrated keyword rule cannot establish bullish/bearish market
-    impact. Expose the thematic category as a heuristic, not as a factual
-    causal effect or confirmed outlook.
+    Do not append synthetic conclusions. Keep the exact underlying wording
+    except for repeated leading titles/markdown headings and whitespace.
+    Truncate at a word boundary, ending with an explicit ellipsis.
     """
+    title = re.sub(r"\s+", " ", str(title or "")).strip()
+    excerpt = re.sub(r"\s+", " ", str(highlight or "")).strip()
+    excerpt = re.sub(r"^(?:[.\s-]+)", "", excerpt)
+    if not excerpt:
+        return ""
+    # Search highlights frequently begin with the same headline multiple times.
+    for _ in range(4):
+        leading = excerpt.lstrip(" #-:–")
+        if title and leading.casefold().startswith(title.casefold()):
+            following = leading[len(title):].lstrip(" #:-–")
+            if following == leading or not following:
+                break
+            excerpt = following
+        else:
+            break
+    excerpt = re.sub(r"^(?:#{1,4}\s+)", "", excerpt)
+    if len(excerpt) <= max_chars:
+        return excerpt
+    head = excerpt[:max_chars].rstrip()
+    at = head.rfind(" ")
+    if at >= max_chars * 0.7:
+        head = head[:at]
+    return head.rstrip(" ,.;:") + "…"
+
+
+def normalize_for_report(news_items):
+    """Preserve original-language excerpts; use uncalibrated topic categories."""
     report_items = []
     for n in news_items:
-        title = str(n.get("title", "") or "")
-        highlight = str(n.get("highlight", "") or "")
-        category = classify_impact((title + " " + highlight).lower())
+        title = re.sub(r"\s+", " ", str(n.get("title", "") or "")).strip()
+        summary = clean_source_excerpt(title, n.get("highlight", ""), max_chars=280)
+        topic = classify_impact((title + " " + summary).lower())
         report_items.append({
             "date": n.get("date") or "Fecha no confirmada",
             "title": title,
             "url": n.get("url", ""),
-            "summary": highlight[:280],
+            "summary": summary or "Extracto de fuente no disponible",
             "bias": "Sin evaluar",
-            "impact": category,
+            "impact": topic,
         })
     return report_items
 
 
 # ─── Query definitions ────────────────────────────────────────────────────
-DEFAULT_QUERIES = {
-    "BTC":   "Bitcoin BTC crypto price analysis market October 2026",
-    "SPY":   "S&P 500 stock market equities analysis October 2026",
-    "GOLD":  "gold oil commodities price analysis October 2026",
-    "MACRO": "Federal Reserve interest rates inflation macro economic October 2026",
-}
+def default_news_queries(run_day=None):
+    """News search terms follow the UTC report date; never hardcode a month."""
+    day = run_day or datetime.datetime.now(datetime.timezone.utc).date()
+    period = day.strftime("%B %Y")
+    return {
+        "BTC": f"Bitcoin BTC crypto price analysis market {period}",
+        "SPY": f"S&P 500 stock market equities analysis {period}",
+        "GOLD": f"gold oil commodities price analysis {period}",
+        "MACRO": f"Federal Reserve interest rates inflation macro economic {period}",
+    }
+
+
+DEFAULT_QUERIES = default_news_queries()
 
 # ─── CLI ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
@@ -328,7 +362,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     assets = args.asset.split(",")
-    queries = {a: DEFAULT_QUERIES.get(a, f"{a} analysis October 2026") for a in assets}
+    queries = {a: DEFAULT_QUERIES.get(a, f"{a} analysis {datetime.datetime.now(datetime.timezone.utc).strftime('%B %Y')}") for a in assets}
 
     print(f"News pipeline — {datetime.date.today()}")
     raw_results = run_news_pipeline(queries)

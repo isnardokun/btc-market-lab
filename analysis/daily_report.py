@@ -955,23 +955,25 @@ def main():
     gold_narr = gen_gold_narrative(gold_price, gold_chg, gold_rsi, gold_hist, m10y, mvix, mdxy)
     macro_narr = gen_macro_narrative(macro)
 
-    # News via separate pipeline module
+    # News query window follows the report's UTC year/month.
+    # Query results are headlines/excerpts, not independently verified claims.
+    news_period = datetime.datetime.now(datetime.timezone.utc).strftime("%B %Y")
+    news_queries = {
+        "BTC": f"Bitcoin BTC crypto price analysis {news_period}",
+        "SPY": f"S&P 500 stock market equities analysis {news_period}",
+        "GOLD": f"gold oil commodities price analysis {news_period}",
+    }
     if HAS_NEWS_PIPELINE:
-        news_raw = run_news_pipeline({
-            "BTC":   "Bitcoin BTC crypto price analysis October 2026",
-            "SPY":   "S&P 500 stock market equities analysis October 2026",
-            "GOLD":  "gold oil commodities price analysis October 2026",
-        })
+        news_raw = run_news_pipeline(news_queries)
         nb = normalize_for_report(news_raw.get("BTC", []))
         ns = normalize_for_report(news_raw.get("SPY", []))
         nm = normalize_for_report(news_raw.get("GOLD", []))
         if not nb and not ns and not nm:
             print("WARNING: No valid news from any source", file=sys.stderr)
     else:
-        # Fallback: legacy inline search
-        news_btc    = exa_search("Bitcoin BTC crypto price analysis October 2026", n=5)
-        news_stocks = exa_search("S&P 500 stock market equities analysis October 2026", n=5)
-        news_metals = exa_search("gold oil commodities price analysis October 2026", n=5)
+        news_btc = exa_search(news_queries["BTC"], n=5)
+        news_stocks = exa_search(news_queries["SPY"], n=5)
+        news_metals = exa_search(news_queries["GOLD"], n=5)
         nb = analyze_news(news_btc)
         ns = analyze_news(news_stocks)
         nm = analyze_news(news_metals)

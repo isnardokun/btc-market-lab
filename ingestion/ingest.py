@@ -10,7 +10,7 @@ Usage:
     python3 ingest.py --dry-run     # test API without writing to DB
 """
 import sys, os, json, time, argparse
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -147,10 +147,32 @@ def get_last_ts(db, series_name: str) -> int | None:
     return row[0] if row else None
 
 def ts_to_date(ts: int) -> str:
-    return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d")
+
 
 def date_to_ts(d: str) -> int:
-    return int(datetime.strptime(d, "%Y-%m-%d").timestamp())
+    """Calendar dates in bitview.daily are UTC, regardless of host timezone."""
+    return int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+
+
+def complete_utc_window(last_ts: int | None, now_utc: datetime | None = None):
+    """Incremental inclusive dates ending on last *completed* UTC day.
+
+    A daily series should never request data for the still-open calendar day.
+    The provider can publish late: completed-day gaps are still retried and
+    logged, while truly up-to-date series skip unnecessary HTTP requests.
+    """
+    now = now_utc or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("now_utc must be timezone-aware")
+    cutoff = now.astimezone(timezone.utc).date() - timedelta(days=1)
+    if last_ts is not None:
+        start = datetime.fromtimestamp(last_ts, timezone.utc).date() + timedelta(days=1)
+    else:
+        start = cutoff - timedelta(days=90)
+    if start > cutoff:
+        return None
+    return start.isoformat(), cutoff.isoformat()
 
 # ─── Ingestion per series ────────────────────────────────────────────────────
 
@@ -159,20 +181,17 @@ def ingest_series(db, short_name: str, series_name: str, index: str,
                   dry_run: bool = False):
     """Ingest one series. Returns count of rows saved."""
 
-    # Determine start/end
-    if force_start and force_end:
+    # Determine start/end without requesting the incomplete current UTC date.
+    if force_start is not None or force_end is not None:
+        if force_start is None or force_end is None:
+            raise ValueError("force_start and force_end must be provided together")
         start_str, end_str = force_start, force_end
     else:
-        last_ts = get_last_ts(db, short_name)
-        if last_ts:
-            start_date = ts_to_date(last_ts + 86400)  # day after last
-            end_date   = datetime.utcnow().strftime("%Y-%m-%d")
-        else:
-            # No data yet — backfill 90 days
-            end_date   = datetime.utcnow().strftime("%Y-%m-%d")
-            start_date = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
-
-        start_str, end_str = start_date, end_date
+        window = complete_utc_window(get_last_ts(db, short_name))
+        if window is None:
+            print(f"  [CURRENT] {short_name}: all completed UTC days already stored")
+            return 0
+        start_str, end_str = window
 
     series_desc = config.SERIES[short_name][2] if short_name in config.SERIES else ""
     series_id = get_series_id(db, short_name, series_desc)
@@ -186,7 +205,8 @@ def ingest_series(db, short_name: str, series_name: str, index: str,
 
     count = 0
     if not data:
-        print(f"  [WARN] {short_name}: no data returned ({start_str} → {end_str})")
+        print(f"  [WARN] {short_name}: provider missing completed UTC observations "
+              f"({start_str} → {end_str}); will retry next run")
         return 0
 
     # result["start"] = days since 2009-01-01
@@ -239,10 +259,10 @@ def backfill_full(db, short_name: str, series_name: str, index: str):
             start -= chunk_size
     else:
         # For date-indexed series
-        end = datetime.utcnow().strftime("%Y-%m-%d")
+        end = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
         # Go back 5 years in 1-year chunks, then everything before that in one shot
         for years_back in [1, 2, 3, 4, 5]:
-            start = (datetime.utcnow() - timedelta(days=365*years_back)).strftime("%Y-%m-%d")
+            start = (datetime.now(timezone.utc) - timedelta(days=365*years_back)).strftime("%Y-%m-%d")
             try:
                 ingest_series(db, short_name, series_name, index,
                               force_start=start, force_end=end)
@@ -280,7 +300,7 @@ def main():
     init_db(db)
 
     print(f"\n{'='*60}")
-    print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"BTC Research Ingestion  {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"DB: {config.DB_PATH}")
     print(f"{'='*60}\n")
 
