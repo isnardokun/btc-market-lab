@@ -205,7 +205,7 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
                 )
                 if hit:
                     when = parse_day(hit.group(1))
-                    if when is None or not (day - dt.timedelta(days=365) <= when <= day):
+                    if when is None or not (day - dt.timedelta(days=366) <= when <= day):
                         errors.append(f"BTC: fecha de {label} fuera de ventana de 52 semanas")
 
             # Catch the specific cross-value contradiction in the historical report.
