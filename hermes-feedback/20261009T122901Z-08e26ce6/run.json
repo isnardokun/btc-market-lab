@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "run_id": "20261009T122901Z-08e26ce6",
+  "timestamp_utc": "2026-10-09T12:29:01.271221+00:00",
+  "exit_code": 0,
+  "result": "PASS",
+  "machine": {
+    "distribution": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+    "architecture": "x86_64",
+    "python": "3.14.7",
+    "sqlite_version": "3.53.1",
+    "git_branch": "master",
+    "git_commit": "ed2e8fa9c8a8da60e8917459d3f589aa421de4ee",
+    "cpu": "Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz",
+    "ram_gib": 15.55,
+    "db_present": true,
+    "db_gib": 0.634,
+    "db_tables": [
+      "blocks",
+      "daily",
+      "daily_metrics",
+      "ingest_instruments",
+      "macro_fred",
+      "macro_fred_old",
+      "market_levels",
+      "meta",
+      "metrics_latest",
+      "prediction_scores",
+      "predictions",
+      "price_btc",
+      "reports",
+      "series"
+    ]
+  },
+  "gate": {
+    "available": true,
+    "date": "2026-10-09",
+    "pass": true,
+    "score_total": 100.0,
+    "critical_count": 0,
+    "issues": [],
+    "mtime_utc": "2026-10-09T12:29:00.977170+00:00"
+  },
+  "report": {
+    "kind": "approved_portable",
+    "included": true,
+    "filename": "daily_report_2026-10-09.html",
+    "source_mtime_utc": "2026-10-09T12:29:01.032239+00:00",
+    "source_sha256": "fa8905547bf29af7bbf6288b4822d89fa351873596d2c0eae57e343f7440dd9a"
+  },
+  "visibility": "PUBLIC only if explicitly published"
+}
