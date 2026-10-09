@@ -24,6 +24,7 @@ TESTS = [
     ("Unit: Archive/UTC Reconciliation", "python3 -m unittest -v tests.unit.test_archive_reconciliation"),
     ("Unit: ResearchBitcoin On-chain Complement", "python3 -m unittest -v tests.unit.test_researchbitcoin_complement"),
     ("Unit: Specialist News and Knowledge RAG", "python3 -m unittest -v tests.unit.test_specialized_news_rag"),
+    ("Unit: Historical API Archive + Research Design", "python3 -m unittest -v tests.unit.test_historical_archive_and_design"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
