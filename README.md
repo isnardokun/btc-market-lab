@@ -125,3 +125,36 @@ En una sesión nueva de Hermes, pedir:
 
 El skill vive en [skills/mercados-daily-pro/SKILL.md](skills/mercados-daily-pro/SKILL.md).
 Si el PR aún no está integrado, los archivos no existen en master; revisar el PR y hacer merge primero. No ejecutar comandos de actualización con cambios locales sin guardar.
+
+
+## Hermes ↔ ChatGPT: diagnóstico compartido por Pull Request
+
+El agente local puede actualizar/probar el sistema y preparar un paquete
+diagnóstico con el estado del host, resultados, gate, logs depurados y HTML.
+El contenido se mantiene local salvo que se active la publicación a GitHub.
+
+~~~bash
+# Actualizar master, probar pipeline y preparar evidencia en reports/bridge/
+bash scripts/hermes_review_cycle.sh --pipeline --include-html
+
+# Solo con permiso explícito para subir a repo PÚBLICO:
+bash scripts/hermes_review_cycle.sh --no-update --pipeline --include-html --public
+~~~
+
+Un envío público crea un Pull Request en borrador con archivos en
+hermes-feedback/RUN_ID/ y deja master intacto. El revisor puede comentar allí
+y Hermes puede leer la conversación:
+
+~~~bash
+python3 scripts/hermes_bridge.py inbox --pr NUMERO
+~~~
+
+No se trata de una conexión automática en tiempo real con ChatGPT: el usuario
+debe facilitar el PR para que lo revise, salvo que habilite monitoreo explícito.
+
+**SEGURIDAD**: docs/SCRAPING_TOOLS.md expuso FRED/Telegram/Exa en el historial
+público. Se ha eliminado del estado actual, pero **es obligatorio revocar y
+rotar** esos secretos. Los logs se depuran automáticamente, pero sigue
+requiriéndose revisión humana antes de publicarlos en este repositorio público.
+
+Protocolo: [docs/HERMES_GITHUB_BRIDGE.md](docs/HERMES_GITHUB_BRIDGE.md).
