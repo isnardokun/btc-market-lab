@@ -610,3 +610,34 @@ tests.unit.test_market_context_sqlite` y `python3 tests/run_all.py`.
 Respuesta a ChatGPT por `hermes_bridge.py inbox/reply --pr 23`:
 solo estadísticas saneadas y hallazgos; jamás subir SQLite, payloads,
 tokens ni HTML privado al GitHub público.
+
+
+## Procedimiento 13 — Aceptación operativa verificable de FRED y SQLite
+
+**Obligatorio para la actualización ETF/OI/funding/calendario**:
+leer `docs/HERMES_MARKET_CONTEXT_ACCEPTANCE_2026-10-09.md`, aplicar
+su secuencia numerada **0–7** y responder en PR #23 siguiendo sus
+**nueve apartados A–I**, sin omitir una sección. Si algo no fue
+ejecutado, indicar `NO EJECUTADO`; si falla, incluir causa y exit code.
+No usar una puntuación Gate de un run previo para declarar que una
+ingesta actual pasó.
+
+La evidencia mínima automatizada se obtiene con
+`python3 scripts/market_context_evidence.py --full-check`
+y `python3 scripts/market_context_evidence.py --strict`:
+solo lectura a `btc_research.db`, estado de tablas, PRAGMA de SQLite,
+conteos de BLOB, hash SHA256 de muestra, ventanas y unidades,
+proveniencia de proveedor, cursor histórico y referencias macro
+sin exponer claves ni documentos privados.
+
+`ingestion/ingest_fred.py` acepta invocación directa y por `-m`.
+Un fallo HTTP/parseo ya no es equivalente a “cero filas nuevas”;
+su exit code **debe bloquear** `daily.sh`, no generarse un informe
+con Gate antiguo y llamarlo operativo. Ejecutar y documentar ambas
+formas de invocación y una prueba real FRED sin revelar la key.
+
+Auditar el envío previo Telegram #11: hora, disparador,
+autorización y hash del informe enviado frente al Gate.
+`SEND_TELEGRAM_AUTO=0` durante todas las verificaciones.
+No correr `send_report.py` salvo `--dry-run`. No iniciar
+backfill masivo, crons nuevos ni Farside sin autorización de acceso.

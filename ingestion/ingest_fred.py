@@ -19,8 +19,8 @@ ADVERTENCIA: FRED tiene dos fechas por observación:
   - date: el período de la observación (ej: "2026-08-01" para dato de agosto)
 """
 import sys, os, datetime, sqlite3, json, time, argparse
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ingestion.config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
 from storage.archive_schema import archive_schema_installed, register_dataset
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -28,6 +28,7 @@ from urllib.error import HTTPError, URLError
 TODAY = datetime.date.today()
 FETCH_START = "2024-01-01"  # backfill inicial
 RECONCILE_DAYS = 60  # re-verificar últimos 60 días en cada ejecución
+FETCH_ERRORS = 0  # Network/parser failures must never masquerade as 0 new rows.
 
 
 def last_date_in_db(conn, series_id):
@@ -71,9 +72,12 @@ def fetch_series_vintage(series_id, observation_start, end_date):
                 continue
         return rows
     except HTTPError as e:
+        global FETCH_ERRORS
+        FETCH_ERRORS += 1
         print(f"  HTTP {e.code} para {series_id}: {e.reason}", file=sys.stderr)
         return []
     except (URLError, json.JSONDecodeError, TimeoutError) as e:
+        FETCH_ERRORS += 1
         print(f"  Error {series_id}: {e}", file=sys.stderr)
         return []
 
@@ -101,9 +105,12 @@ def fetch_series_incremental(series_id, start):
                 continue
         return rows
     except HTTPError as e:
+        global FETCH_ERRORS
+        FETCH_ERRORS += 1
         print(f"  HTTP {e.code} para {series_id}: {e.reason}", file=sys.stderr)
         return []
     except (URLError, json.JSONDecodeError, TimeoutError) as e:
+        FETCH_ERRORS += 1
         print(f"  Error {series_id}: {e}", file=sys.stderr)
         return []
 
@@ -206,11 +213,11 @@ def ingest_series(conn, series_id, freq, *, full_history=False):
     return inserted
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="FRED incremental (default) or explicit historical archive")
     parser.add_argument("--history", action="store_true", help="Recover all available old FRED observations")
     parser.add_argument("--apply", action="store_true", help="Required for historical API/DB mutations")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.history and not args.apply:
         print("PLAN: --history requerirá --apply. Recuperará historia FRED disponible para 12 series.")
         return 0
@@ -219,8 +226,11 @@ def main():
     if not FRED_API_KEY:
         print("ERROR: configura FRED_API_KEY en el entorno de Hermes", file=sys.stderr)
         return 2
+    global FETCH_ERRORS
+    FETCH_ERRORS = 0
     conn = sqlite3.connect(DB_PATH)
     total = 0
+    failed_series = 0
     for series_id, name, freq, desc in FRED_SERIES:
         try:
             if archive_schema_installed(conn):
@@ -230,11 +240,15 @@ def main():
             total += n
             time.sleep(0.3)  # ser civico con la API (120 req/min)
         except Exception as e:
-            print(f"  Error general en {series_id}: {e}", file=sys.stderr)
+            failed_series += 1
+            print(f"  Error general en {series_id}: {type(e).__name__}", file=sys.stderr)
     conn.commit()
     conn.close()
-    print(f"\nFRED ingestion: {total} filas nuevas insertadas")
-    return 0
+    print(f"\nFRED ingestion: {total} filas nuevas insertadas; "
+          f"{FETCH_ERRORS} errores de API; {failed_series} series fallidas")
+    # A response with 0 new rows may be normal; an API exception is not.
+    # The production daily.sh must not generate a report after a failed ingest.
+    return 1 if FETCH_ERRORS or failed_series else 0
 
 if __name__ == "__main__":
     sys.exit(main())
