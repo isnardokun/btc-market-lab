@@ -204,142 +204,67 @@ def find_supp_res(closes, highs, lows, lookback=20):
     return supports, resistances
 
 
+def price_relative_levels(price, supports, resistances):
+    """Return price-relative historical pivots, without invented target levels."""
+    import math
+    if price is None or not math.isfinite(price) or price <= 0:
+        raise ValueError("Precio actual no válido para clasificar niveles")
+    def finite_values(values):
+        return {float(v) for v in (values or [])
+                if isinstance(v, (float, int)) and math.isfinite(v) and v > 0}
+    below = sorted((v for v in finite_values(supports) if v < price), reverse=True)
+    above = sorted(v for v in finite_values(resistances) if v > price)
+    return below, above
+
+
 def compute_scenarios(price, closes, highs, lows, supports, resistances,
-                     rsi, atr_val, macd_hist, asset, macro_data=None):
-    """
-    Genera escenarios condicionales para BTC, SPY y GOLD.
-
-    Cada escenario incluye:
-      - Nivel de activación (precio que activa este escenario)
-      - Objetivo condicional (si se activa, hacia dónde)
-      - Catalizadores (qué eventos podrían provocar la activación)
-      - Invalidez (cuándo este escenario deja de ser válido)
-      - Horizonte: no derivado de ATR, sino basado en catalizadores concretos
-
-    NO incluye:
-      - Confianza "alta/media" (sin backtesting no es calibrable)
-      - Horizontes estimados desde distancias ATR (no predictivo)
-
-    Returns (bull_txt, base_txt, bear_txt).
-    """
-    md = macro_data or {}
-
-    # ── Niveles de referencia ────────────────────────────────────────────
-    s1 = supports[-1] if supports else None
-    s2 = supports[-2] if len(supports) >= 2 else None
-    r1 = resistances[-1] if resistances else None
-    r2 = resistances[-2] if len(resistances) >= 2 else None
-
-    # ── Clasificación RSI ────────────────────────────────────────────────
-    rsi_zone = "sobreventa" if (rsi and rsi < 40) else \
-               "sobrecompra" if (rsi and rsi > 65) else "neutral"
-    macd_dir = "positivo" if (macd_hist is not None and macd_hist > 0) else "negativo"
-
-    # ── Helper: objetivo en % ───────────────────────────────────────────
-    def pct(target):
-        if not target:
-            return "?"
-        return f"{((target / price) - 1) * 100:+.1f}%"
-
-    if asset == "BTC":
-        r1 = r1 or round(price * 1.05, 0)
-        r2 = r2 or round(price * 1.10, 0)
-        s1 = s1 or round(price * 0.93, 0)
-        s2 = s2 or round(price * 0.85, 0)
-
-        bull_txt = (
-            f"Escenario alcista.\n"
-            f"  Activación: BTC supera ${r1:,.0f} con volumen y cierre diario encima. "
-            f"Indicadores: RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${r2:,.0f} ({pct(r2)} desde hoy) si momentum se confirma.\n"
-            f"  Catalizadores: flujo ETF neto positivo sostenido, hash ribbon bullish crossover, "
-            f"pivot dovish de la Fed, o datos macro fríos.\n"
-            f"  Invalidez: cierre diario debajo de ${s1:,.0f} invalida este escenario. "
-            f"Resolución esperada: depende de catalizador — días a varias semanas."
-        )
-        base_txt = (
-            f"Escenario base.\n"
-            f"  Precio en rango ${s1:,.0f}-${r1:,.0f}. "
-            f"RSI {rsi_zone} ({rsi:.0f}), MACD {macd_dir}.\n"
-            f"  Resistente a {r1:,.0f} ({pct(r1)}) — soporte en {s1:,.0f} ({pct(s1)}).\n"
-            f"  Catalizador necesario para romper rango: señal macro clara, flujo ETF, "
-            f"o dato de inflación/decisión Fed.\n"
-            f"  Invalidez: ruptura confirmada debajo de ${s2:,.0f} cambia a escenario bajista."
-        )
-        bear_txt = (
-            f"Escenario bajista.\n"
-            f"  Activación: BTC pierde ${s1:,.0f} con volumen y cierra debajo. "
-            f"RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${s2:,.0f} ({pct(s2)}) si soporte no recupera.\n"
-            f"  Catalizadores: outflows ETF sostenidos, regulación hostil, riesgo geopolítico, "
-            f"fortaleza inesperada del DXY, o corrección de hashrate.\n"
-            f"  Invalidez: cierre diario encima de ${r1:,.0f} invalida este escenario y favorece alza."
-        )
-
-    elif asset in ("SPY", "SPX"):
-        r1 = r1 or round(price * 1.02, 2)
-        r2 = r2 or round(price * 1.05, 2)
-        s1 = s1 or round(price * 0.97, 2)
-        s2 = s2 or round(price * 0.93, 2)
-
-        bull_txt = (
-            f"Escenario alcista.\n"
-            f"  Activación: SPY supera ${r1:,.2f} con breadth mejorando (>60% stocks sobre SMA50). "
-            f"RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${r2:,.2f} ({pct(r2)}) si rompe resistencia y sostiene arriba.\n"
-            f"  Catalizadores: NFP fuerte, ventas minoristas calientes, Fed dovish, "
-            f"earnings encima de expectativas.\n"
-            f"  Invalidez: cierre debajo de ${s1:,.2f} invalida. Horizonte: días a semanas."
-        )
-        base_txt = (
-            f"Escenario base.\n"
-            f"  SPY en rango ${s1:,.2f}-${r1:,.2f}. "
-            f"RSI {rsi_zone} ({rsi:.0f}), MACD {macd_dir}.\n"
-            f"  VIX {md.get('vix', 'N/A')} — {'eleva riesgo' if md.get('vix', 0) > 25 else 'condiciones normales'}.\n"
-            f"  Catalizador para dirección: decisión Fed, dato inflación, o sorpresa earnings.\n"
-            f"  Invalidez: ruptura debajo de ${s2:,.2f} cambia a escenario bajista."
-        )
-        bear_txt = (
-            f"Escenario bajista.\n"
-            f"  Activación: SPY pierde ${s1:,.2f} con volumen. "
-            f"RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${s2:,.2f} ({pct(s2)}) si soporte no recupera.\n"
-            f"  Catalizadores: sorpresa negativa en empleo, inflación caliente, inversión curva yield, "
-            f"earnings decepcionantes, o riesgo geopolítico.\n"
-            f"  Invalidez: recuperación encima de ${r1:,.2f} neutraliza. Horizonte: días a semanas."
-        )
-
-    else:  # GOLD
-        r1 = r1 or round(price * 1.03, 0)
-        r2 = r2 or round(price * 1.07, 0)
-        s1 = s1 or round(price * 0.96, 0)
-        s2 = s2 or round(price * 0.90, 0)
-
-        bull_txt = (
-            f"Escenario alcista.\n"
-            f"  Activación: oro supera ${r1:,.0f} con demanda de refugio. "
-            f"RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${r2:,.0f} ({pct(r2)}) si rompe y sostiene.\n"
-            f"  Catalizadores: debilidad DXY, bancos centrales comprando, riesgo geopolítico, "
-            f"inflación superior a expectativas.\n"
-            f"  Invalidez: pérdida de ${s1:,.0f} invalida. Horizonte: semanas a meses."
-        )
-        base_txt = (
-            f"Escenario base.\n"
-            f"  Oro en rango ${s1:,.0f}-${r1:,.0f}. "
-            f"RSI {rsi_zone} ({rsi:.0f}), MACD {macd_dir}.\n"
-            f"  DXY {md.get('dxy', 'N/A')}, VIX {md.get('vix', 'N/A')}.\n"
-            f"  Resistente a ${r1:,.0f} — soporte ${s1:,.0f}.\n"
-            f"  Invalidez: ruptura debajo de ${s2:,.0f} activa escenario bajista."
-        )
-        bear_txt = (
-            f"Escenario bajista.\n"
-            f"  Activación: oro pierde ${s1:,.0f} con fortaleza del DXY. "
-            f"RSI {rsi_zone}, MACD {macd_dir}.\n"
-            f"  Objetivo: ${s2:,.0f} ({pct(s2)}) si soporte cede.\n"
-            f"  Catalizadores: fortaleza DXY sostenida, profits en commodities, "
-            f"mejora riesgo-on, o demanda física débil.\n"
-            f"  Invalidez: recuperación encima de ${r1:,.0f} neutraliza."
-        )
-
-    return bull_txt, base_txt, bear_txt
+                      rsi, atr_val, macd_hist, asset, macro_data=None):
+    """Directional scenarios with valid triggers and no invented objectives."""
+    below, above = price_relative_levels(price, supports, resistances)
+    s1, s2 = (below + [None, None])[:2]
+    r1, r2 = (above + [None, None])[:2]
+    rsi_zone = ("sobreventa" if rsi is not None and rsi < 40 else
+                "sobrecompra" if rsi is not None and rsi > 65 else "neutral")
+    macd_dir = ("positivo" if macd_hist is not None and macd_hist > 0 else
+                "negativo" if macd_hist is not None else "no disponible")
+    precision = 2 if asset in ("SPY", "SPX") else 0
+    fmt = lambda n: f"$" + f"{n:,.{precision}f}"
+    pct = lambda target: f"{(target / price - 1) * 100:+.1f}%"
+    market = {"BTC": "BTC", "SPY": "SPY", "SPX": "SPY", "GOLD": "oro"}.get(asset, asset)
+    if r1 is not None:
+        bull = (f"Escenario alcista. Activación: {market} supera {fmt(r1)} con cierre "
+                f"confirmado y volumen. RSI {rsi_zone}; MACD {macd_dir}. ")
+        if r2 is not None:
+            bull += f"Objetivo condicional: {fmt(r2)} ({pct(r2)} respecto al precio actual). "
+        else:
+            bull += "Objetivo no estimable: no hay otra resistencia superior validada. "
+        bull += ("Catalizadores a vigilar: demanda spot, flujos y datos macro. "
+                 "No se asume que ya se hayan producido. ")
+        if s1 is not None:
+            bull += f"Invalidez: cierre sostenido bajo {fmt(s1)}."
+    else:
+        bull = (f"Escenario alcista para {market} sin nivel de activación "
+                "cuantificable: no hay resistencia histórica validada por encima "
+                "del precio actual. No se publica objetivo inventado.")
+    if s1 is not None and r1 is not None:
+        base = (f"Escenario base. {market} cotiza entre soporte {fmt(s1)} y "
+                f"resistencia {fmt(r1)} (spot {fmt(price)}). "
+                f"RSI {rsi_zone}; MACD {macd_dir}. "
+                "Una ruptura confirmada fuera del rango invalida el escenario.")
+    else:
+        base = (f"Escenario base de {market} sin rango completo verificable "
+                f"(spot {fmt(price)}). No se presenta rango ajeno al precio.")
+    if s1 is not None:
+        bear = (f"Escenario bajista. Activación: {market} pierde {fmt(s1)} "
+                f"con cierre confirmado y volumen. RSI {rsi_zone}; MACD {macd_dir}. ")
+        if s2 is not None:
+            bear += f"Objetivo condicional: {fmt(s2)} ({pct(s2)} respecto al precio actual). "
+        else:
+            bear += "Objetivo no estimable: no hay otro soporte inferior validado. "
+        bear += "Catalizadores a vigilar: flujos, riesgo macro y demanda. "
+        if r1 is not None:
+            bear += f"Invalidez: recuperación sostenida sobre {fmt(r1)}."
+    else:
+        bear = (f"Escenario bajista para {market} sin soporte de activación "
+                "cuantificable bajo el precio actual. No se publica objetivo inventado.")
+    return bull, base, bear
