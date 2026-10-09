@@ -32,11 +32,13 @@ class HermesSkillTests(unittest.TestCase):
                 self.assertIn(phrase, text)
 
     def test_shell_scripts_parse(self):
-        result = subprocess.run(
-            ["bash", "-n", str(INSTALLER), str(UPDATER)],
-            cwd=ROOT, text=True, capture_output=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        for script in (INSTALLER, UPDATER, ROOT / "scripts" / "daily.sh"):
+            with self.subTest(script=script.name):
+                result = subprocess.run(
+                    ["bash", "-n", str(script)],
+                    cwd=ROOT, text=True, capture_output=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_skill_installs_without_exposing_secrets(self):
         with tempfile.TemporaryDirectory() as scratch:
