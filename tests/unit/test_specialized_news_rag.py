@@ -102,9 +102,9 @@ class SpecializedNewsTests(unittest.TestCase):
 URL: https://coinmetrics.substack.com/p/bitcoin-market-macro-sensitivity
 Published: 2026-10-08
 Highlights: The State of the Network team discusses the changing sensitivity of Bitcoin markets to macroeconomic news and interest rates."""
-        with patch.dict(os.environ, {"NEWS_TARGETED_EXA": "1"}), \\
-             patch.object(news_pipeline, "exa_search", return_value=raw):
-            result = news_pipeline.targeted_research_news("BTC", today=dt.date(2026, 10, 9))
+        with patch.dict(os.environ, {"NEWS_TARGETED_EXA": "1"}):
+            with patch.object(news_pipeline, "exa_search", return_value=raw):
+                result = news_pipeline.targeted_research_news("BTC", today=dt.date(2026, 10, 9))
         self.assertGreaterEqual(len(result), 1)
         self.assertEqual(result[0]["source"], "Coin Metrics State of the Network")
         self.assertEqual(result[0]["source_type"], "research")
