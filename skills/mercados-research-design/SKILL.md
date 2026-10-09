@@ -149,3 +149,31 @@ cobertura, capturas 320/390/768/1440 y A4, suite de pruebas y revisión
 de inferencias. **Gate 100/100 no equivale a investigación validada.**
 
 Consultar el playbook: `docs/HERMES_REVIEW_ACTIONS_2026-10-09.md`.
+
+
+## Corpus Research Studio v2: base de evidencia obligatoria
+
+Antes de explicar una métrica, consultar
+`docs/KNOWLEDGE_CORPUS_V2.md` y el manifest en
+`python3 scripts/corpus_query.py --manifest`. En investigaciones concretas,
+usar la consulta con filtro de ámbito:
+`python3 scripts/corpus_query.py --query 'SOPR STH' --family onchain`.
+El catálogo `knowledge/corpus_v2.json` contiene **36 fichas** versionadas:
+no son valores de mercado ni artículos completos copiados de terceros.
+
+Verificar `data-corpus-version` y `data-corpus-sha256` cuando aparezca
+`id="research-methodology"` en el HTML. El gate bloquea incoherencias
+entre el manifest editorial aprobado y el HTML v2. Nunca editar el hash
+a mano ni desactivar el gate para recuperar puntuación.
+
+Distinguir la fuente metodológica de la fuente de observación: una cita
+de BLS/FRED/CFTC/RBN enseña cómo se mide, pero no demuestra un número
+concreto. No incorporar ETF flows, funding, OI ni derivados sin API validada
+y fecha/escala; no sustituir valores faltantes por cifras de noticias.
+Mantener reportes de QA por fuente, cohorte, unidad, fecha y cambios de
+definición. No activar backfill o Telegram para consultar este corpus.
+
+Para cada actualización de fichas: PR de código, diferencia de SHA256,
+tests `test_knowledge_corpus_v2`, `test_specialized_news_rag`,
+`test_research_studio_v2` y revisión humana del contenido, fuentes y
+licencias.

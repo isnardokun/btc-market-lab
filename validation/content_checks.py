@@ -117,6 +117,23 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
                          'Lectura condicional', 'Riesgos y datos pendientes'):
             if expected not in source:
                 errors.append("Research Studio v2: síntesis ejecutiva incompleta: " + expected)
+    # When methodological RAG is rendered, verify the exact approved corpus.
+    # This is a local code/data fingerprint, never an external fetch.
+    if ('content="mercados-research-studio-v2"' in source
+            and 'id="research-methodology"' in source):
+        from analysis.knowledge_rag import corpus_manifest
+        manifest = corpus_manifest()
+        match = re.search(
+            r'<div class="card" id="research-methodology"\s+'
+            r'data-corpus-version="([^"]+)"\s+'
+            r'data-corpus-sha256="([0-9a-f]{64})">', source
+        )
+        if not match:
+            errors.append("RAG: bloque metodológico sin versión y SHA256 del corpus")
+        elif (match.group(1) != manifest["version"] or
+              match.group(2) != manifest["sha256"]):
+            errors.append("RAG: corpus publicado no coincide con el JSON versionado")
+
     # Indicators are descriptive; reject an RSI label contradicting 30/70.
     for raw, label in re.findall(
         r'<div class="o-name">RSI\(14\)</div>\s*'

@@ -1,0 +1,368 @@
+{
+  "schema_version": 2,
+  "corpus_version": "2.0.0",
+  "reviewed_utc": "2026-10-09",
+  "licensing": "Solo resúmenes originales del proyecto y enlaces; no copia de contenido de terceros ni datos históricos.",
+  "records": [
+    {
+      "metric": "mvrv",
+      "family": "onchain",
+      "title": "MVRV y capitalización realizada",
+      "keywords": "mvrv market realized cap valuation bitcoin btc valoracion capitalizacion",
+      "method": "MVRV compara capitalización de mercado con capitalización realizada; refleja valoración contable agregada en el conjunto definido por el proveedor.",
+      "caveat": "Un cociente alto o bajo no determina suelo, techo, valor razonable ni retorno futuro.",
+      "url": "https://researchbitcoin.net/metrics/mvrv/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "asopr",
+      "family": "onchain",
+      "title": "aSOPR y gasto de monedas",
+      "keywords": "asopr sopr spent output profit ratio utxo gasto beneficio realizada",
+      "method": "SOPR compara el valor de salida gastada con su referencia de costo; aSOPR aplica reglas de filtrado particulares.",
+      "caveat": "No convertirlo en flujos netos de exchanges ni equiparar aSOPR con SOPR bruto o cohortes STH.",
+      "url": "https://researchbitcoin.net/metrics/sopr/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "nupl",
+      "family": "onchain",
+      "title": "NUPL agregado",
+      "keywords": "nupl unrealized profit loss bitcoin ganancias perdidas no realizadas",
+      "method": "NUPL resume ganancias y pérdidas no realizadas en relación con la capitalización de mercado bajo la metodología del proveedor.",
+      "caveat": "No describe distribución individual ni confirma que los tenedores venderán.",
+      "url": "https://docs.glassnode.com/basic-api/endpoints/indicators",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "active_addrs",
+      "family": "onchain",
+      "title": "Direcciones activas",
+      "keywords": "active addresses users wallets active addrs direcciones activas usuarios",
+      "method": "Las direcciones activas son observaciones de actividad de direcciones, no individuos únicos.",
+      "caveat": "Se deben revisar filtros de actividad y transferencias internas; no inferir usuarios o adopción uno a uno.",
+      "url": "https://gitbook-docs.coinmetrics.io/network-data/network-data-overview/addresses/active-addresses",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "sth_sopr",
+      "family": "onchain",
+      "title": "SOPR de corto plazo",
+      "keywords": "sth sopr realized spending cohort losses corto plazo",
+      "method": "SOPR STH restringe la observación a una cohorte de monedas de corta antigüedad; exige preservar umbral de edad y filtros.",
+      "caveat": "No igualar aSOPR semanal o SOPR de todo el mercado ni traducirlo a recomendación operativa.",
+      "url": "https://researchbitcoin.net/metrics/sopr_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "sth_cost",
+      "family": "onchain",
+      "title": "Precio realizado STH",
+      "keywords": "sth cost realized price holder cost basis costo base 155",
+      "method": "El precio realizado STH aproxima el costo base agregado de monedas de la cohorte STH conforme a su clasificación.",
+      "caveat": "No es soporte garantizado ni precio promedio de compra de cada persona.",
+      "url": "https://researchbitcoin.net/metrics/realized_price_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "sth_mvrv",
+      "family": "onchain",
+      "title": "MVRV específico STH",
+      "keywords": "mvrv_sth mvrv short term holder cohort 155",
+      "method": "MVRV STH se calcula para la cohorte de corto plazo y no es idéntico al MVRV agregado.",
+      "caveat": "Verificar edad de la cohorte, capitalización y reglas del proveedor antes de comparar.",
+      "url": "https://researchbitcoin.net/metrics/mvrv_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "lth_cost",
+      "family": "onchain",
+      "title": "Precio realizado LTH",
+      "keywords": "lth realized price long term holder costo base holder",
+      "method": "El precio realizado LTH representa una referencia agregada de costo de la cohorte de largo plazo.",
+      "caveat": "No trata a todos los participantes como compradores al mismo nivel y no asegura soporte.",
+      "url": "https://researchbitcoin.net/metrics/realized_price_lth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "true_market_mean",
+      "family": "onchain",
+      "title": "True Market Mean",
+      "keywords": "true market meanprice active investor price cointime cost basis",
+      "method": "El True Market Mean es una referencia de costo del marco Cointime Economics para monedas consideradas económicamente activas.",
+      "caveat": "No debe sustituir de forma silenciosa el realized price de otra metodología.",
+      "url": "https://researchbitcoin.net/metrics/true_market_meanprice/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "supply_profit",
+      "family": "onchain",
+      "title": "Oferta total en beneficios",
+      "keywords": "supply_in_profit_percent supply in profit ganancias supply total",
+      "method": "El indicador estima la proporción de oferta cuya referencia de costo es inferior a la valoración actual bajo la definición de la fuente.",
+      "caveat": "Verificar si la API expresa porcentajes como 0–1 o 0–100 y conservar el valor crudo.",
+      "url": "https://researchbitcoin.net/metrics/supply_in_profit_percent/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "supply_profit_sth",
+      "family": "onchain",
+      "title": "Oferta STH en beneficios",
+      "keywords": "supply_in_profit_sth_percent supply short term holder profit",
+      "method": "Mide oferta de la cohorte STH cuya referencia de costo se sitúa por debajo del precio observado.",
+      "caveat": "Denominador de la cohorte y representación porcentual requieren verificación explícita; no inferir presión vendedora futura.",
+      "url": "https://researchbitcoin.net/metrics/supply_in_profit_sth_percent/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "realized_profit_sth",
+      "family": "onchain",
+      "title": "Beneficio realizado STH",
+      "keywords": "realized_profit_sth realized profit realizedgain realized benefit",
+      "method": "Métrica agregada del beneficio económico realizado en outputs de la cohorte STH durante un intervalo.",
+      "caveat": "No sumar series de distinta cohorte, ventana o filtros; no equivale a entradas de efectivo en exchanges.",
+      "url": "https://researchbitcoin.net/metrics/realized_profit_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "realized_loss_sth",
+      "family": "onchain",
+      "title": "Pérdidas realizadas STH",
+      "keywords": "realized_loss_sth realized losses short term holder",
+      "method": "Métrica agregada de las pérdidas realizadas al gastar outputs de la cohorte STH.",
+      "caveat": "No inferir que la pérdida reportada corresponda a venta spot ni que anticipe un suelo.",
+      "url": "https://researchbitcoin.net/metrics/realized_loss_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "net_realized_sth",
+      "family": "onchain",
+      "title": "Neto realizado STH",
+      "keywords": "net_realized_profit_loss_sth net realized profit loss reconciliation",
+      "method": "El neto de beneficios y pérdidas realizados es una serie independiente del proveedor y debe conservarse tal como se publicó.",
+      "caveat": "No forzar profit menos loss a coincidir sin comprobar cohortes, filtros y redondeos; registrar diferencias.",
+      "url": "https://researchbitcoin.net/metrics/net_realized_profit_loss_sth/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "liveliness",
+      "family": "onchain",
+      "title": "Liveliness y actividad acumulada",
+      "keywords": "liveliness cointime long term holder activity coin days destroyed",
+      "method": "Liveliness relaciona actividad de gasto con la acumulación de coin-days según el esquema del proveedor.",
+      "caveat": "Una variación de la métrica no identifica directamente ventas de ballenas ni flujos a exchanges.",
+      "url": "https://researchbitcoin.net/metrics/liveliness/",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "cpi",
+      "family": "macro",
+      "title": "IPC estadounidense",
+      "keywords": "cpi inflation consumer price index cpi_yoy usa ipc inflacion",
+      "method": "El CPI mide variaciones de precios de una cesta de consumo definida por BLS; distinguir índice, variación mensual y anual.",
+      "caveat": "No comparar inflación anual con nivel de índice ni atribuir movimientos de BTC al dato sin estudio de eventos.",
+      "url": "https://www.bls.gov/cpi/methods-overview.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "cpi_seasonality",
+      "family": "macro",
+      "title": "Ajuste estacional CPI",
+      "keywords": "cpi seasonal adjusted sa nsa estacionalidad revision",
+      "method": "BLS publica índices ajustados y sin ajustar estacionalmente; factores estacionales pueden recalcularse y revisar series previas.",
+      "caveat": "No combinar SA y NSA ni usar cifras revisadas para simular información conocida en una fecha pasada.",
+      "url": "https://www.bls.gov/cpi/seasonal-adjustment/",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "ppi",
+      "family": "macro",
+      "title": "IPP estadounidense",
+      "keywords": "ppi producer price index wholesale inflation ipp productor precios",
+      "method": "PPI mide cambios de precios recibidos por productores nacionales y difiere del CPI, centrado en consumidores.",
+      "caveat": "Una sorpresa PPI no acredita por sí sola transmisión causal a activos financieros.",
+      "url": "https://www.bls.gov/ppi/overview.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "payrolls",
+      "family": "macro",
+      "title": "Nóminas no agrícolas",
+      "keywords": "payems nfp payrolls establishment survey empleo nominas no agricola",
+      "method": "La variación de nóminas no agrícolas procede de la encuesta de establecimientos y puede sufrir revisiones.",
+      "caveat": "No mezclar los cambios PAYEMS con tasas de desempleo de la encuesta de hogares.",
+      "url": "https://www.bls.gov/bls/news-release/empsit.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "unemployment",
+      "family": "macro",
+      "title": "Desempleo y encuestas BLS",
+      "keywords": "unrate unemployment household cps tasa desempleo",
+      "method": "La tasa de desempleo corresponde al marco de encuesta de hogares y a sus propias definiciones poblacionales.",
+      "caveat": "No confundir tasa de desempleo, variación de nóminas y fuerza laboral.",
+      "url": "https://www.bls.gov/news.release/empsit.faq.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "fred_observations",
+      "family": "macro",
+      "title": "Observaciones FRED",
+      "keywords": "fred observations series id offset limit observation_start historical series",
+      "method": "La API FRED pagina observaciones por series_id y fechas de observación, con offset y límite.",
+      "caveat": "La fecha observada no es necesariamente fecha de publicación ni instante de disponibilidad al operador.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/series_observations.html",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "fred_vintages",
+      "family": "macro",
+      "title": "Revisiones y vintages FRED",
+      "keywords": "fred vintages alfred realtime_start realtime_end point in time revised revisions",
+      "method": "FRED permite recuperar información conocida en intervalos de tiempo real y vintages de observaciones.",
+      "caveat": "En backtesting usar vintage disponible entonces, no el dato revisado hoy para afirmar capacidad predictiva histórica.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/realtime_period.html",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "fred_units",
+      "family": "macro",
+      "title": "Metadatos y unidades FRED",
+      "keywords": "fred series units frequency seasonal_adjustment last_updated",
+      "method": "La descripción de cada serie informa unidades, frecuencia y ajuste estacional; deben acompañar toda transformación.",
+      "caveat": "No sumar frecuencias diferentes ni tratar una serie indexada como porcentaje sin transformación verificable.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/series.html",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "cpi_revision",
+      "family": "macro",
+      "title": "Revisión histórica del IPC",
+      "keywords": "cpi revision revised seasonal historical release data",
+      "method": "Los factores estacionales del CPI pueden actualizarse y modificar cifras históricas ajustadas.",
+      "caveat": "La reconstrucción retrospectiva debe preservar revisiones y fecha de conocimiento.",
+      "url": "https://www.bls.gov/cpi/seasonal-adjustment/",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "nfp_revision",
+      "family": "macro",
+      "title": "Revisiones de empleo",
+      "keywords": "nfp payroll revisions benchmark employment situation backtesting",
+      "method": "La publicación de empleo puede revisar meses previos, por lo que la sorpresa inicial y el último dato no son equivalentes.",
+      "caveat": "Guardar valor inicial, publicación y revisiones con marca temporal.",
+      "url": "https://www.bls.gov/bls/news-release/empsit.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "futures_oi",
+      "family": "derivatives",
+      "title": "Interés abierto en derivados",
+      "keywords": "oi open_interest open interest derivatives futures contratos abiertos",
+      "method": "El interés abierto cuenta contratos vigentes no compensados, no volumen negociado ni apuestas netas de una sola dirección.",
+      "caveat": "No confundir open interest de mercados regulados CFTC con agregado de perpetuos de exchanges cripto.",
+      "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/ExplanatoryNotes/index.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "cot",
+      "family": "derivatives",
+      "title": "Commitments of Traders",
+      "keywords": "cot report commitments traders positions commercial noncommercial positioning",
+      "method": "COT presenta posiciones agregadas reportables y no reportables por mercado en informes periódicos.",
+      "caveat": "La fecha de posición difiere de la fecha de publicación; no usarlo como dato intradiario instantáneo.",
+      "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/AbouttheCOTReports/index.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "cot_disagg",
+      "family": "derivatives",
+      "title": "Desagregación de participantes COT",
+      "keywords": "cot disaggregated managed money swap dealers commercial positions",
+      "method": "El formato desagregado distingue categorías de participantes según definiciones CFTC.",
+      "caveat": "No extrapolar posiciones de futuros regulados a todo el mercado cripto spot y perpetuo.",
+      "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/DisaggregatedExplanatoryNotes/index.htm",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "etp_spot",
+      "family": "derivatives",
+      "title": "ETP spot Bitcoin",
+      "keywords": "etf etp spot bitcoin flows sec creación reembolsos",
+      "method": "La aprobación de cotización de ETP spot Bitcoin no equivale a aprobación o respaldo de Bitcoin como inversión.",
+      "caveat": "La noticia de aprobación no contiene flujos ETF exactos: para cifras se necesita fuente cuantitativa y fecha.",
+      "url": "https://www.sec.gov/newsroom/speeches-statements/gensler-statement-spot-bitcoin-011023",
+      "source_kind": "primary_methodology"
+    },
+    {
+      "metric": "funding_warning",
+      "family": "derivatives",
+      "title": "Funding perpetuo no es OI",
+      "keywords": "funding perpetual futures open interest derivatives tasas apalancamiento",
+      "method": "El funding de futuros perpetuos es una transferencia contractual entre posiciones, distinta del interés abierto.",
+      "caveat": "Para calcularlo exigen fórmula, intervalo, exchange y unidad del contrato; no inferir dirección spot sin observación.",
+      "url": "https://www.binance.com/en/academy/articles/what-are-funding-rates-in-crypto-markets",
+      "source_kind": "provider_methodology"
+    },
+    {
+      "metric": "rbf",
+      "family": "protocol",
+      "title": "Reemplazo de transacciones RBF",
+      "keywords": "rbf replace by fee mempool bitcoin policy fees",
+      "method": "RBF permite reemplazar transacciones no confirmadas conforme a políticas de retransmisión y tasas aplicables.",
+      "caveat": "La actividad mempool/RBF no equivale a volumen económico final confirmado en bloques.",
+      "url": "https://bitcoinops.org/en/topics/replace-by-fee/",
+      "source_kind": "protocol_reference"
+    },
+    {
+      "metric": "data_cutoff",
+      "family": "quality",
+      "title": "Cierre diario UTC",
+      "keywords": "utc cutoff snapshot close daily lag historical data",
+      "method": "Las métricas con resoluciones distintas deben normalizar fechas de cierre, zona horaria y disponibilidad efectiva antes de compararse.",
+      "caveat": "No mezclar d1 incompleto con el último cierre confirmado ni utilizar información publicada después del corte.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/series_observations.html",
+      "source_kind": "editorial_rule"
+    },
+    {
+      "metric": "source_provenance",
+      "family": "quality",
+      "title": "Linaje de fuentes y métodos",
+      "keywords": "provenance source unit observed_at published_at revisions audit lineage",
+      "method": "Cada cifra publicada debe conservar proveedor, métrica, escala, unidad, periodo de observación, revisión y transformación aplicada.",
+      "caveat": "Una tarjeta con URL metodológica no certifica el dato API ni equivale a auditoría independiente.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/series.html",
+      "source_kind": "editorial_rule"
+    },
+    {
+      "metric": "cohort_comparability",
+      "family": "quality",
+      "title": "Comparabilidad de cohortes",
+      "keywords": "cohort sth lth denominador definitions methodology cross provider comparison",
+      "method": "Cohortes y filtros forman parte de la definición de una métrica y deben conservarse en cualquier comparación entre proveedores.",
+      "caveat": "No promediar ResearchBitcoin y Bitview cuando solo coincida el nombre comercial del indicador.",
+      "url": "https://researchbitcoin.net/metrics/mvrv_sth/",
+      "source_kind": "editorial_rule"
+    },
+    {
+      "metric": "point_in_time",
+      "family": "quality",
+      "title": "Evitar look-ahead en investigación",
+      "keywords": "backtest lookahead point in time real time vintages asof",
+      "method": "Una validación histórica debe usar exclusivamente observaciones disponibles antes o en el instante de decisión.",
+      "caveat": "No utilizar el valor actual revisado como sustituto de la observación conocida entonces.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/realtime_period.html",
+      "source_kind": "editorial_rule"
+    },
+    {
+      "metric": "missing_data",
+      "family": "quality",
+      "title": "Ausencia de datos y cobertura",
+      "keywords": "missing gaps completeness unavailable source missingness coverage",
+      "method": "Ausencia de una serie no equivale a cero, y un adaptador de descarga no prueba que exista archivo histórico completo.",
+      "caveat": "No rellenar vacíos a mano, no afirmar cobertura total sin mínimo, máximo, lagunas y cuotas comprobadas.",
+      "url": "https://fred.stlouisfed.org/docs/api/fred/series_observations.html",
+      "source_kind": "editorial_rule"
+    }
+  ]
+}

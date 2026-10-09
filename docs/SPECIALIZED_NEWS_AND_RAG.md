@@ -153,3 +153,28 @@ es público aunque sea borrador: revisar cualquier archivo compartido.
   requieren fuentes numéricas propias, no extraer una cifra de un titular.
 - Calibración cuantitativa, backtesting y causalidad: no existen en este
   módulo y no deben confundirse con recuperación documental.
+
+
+## Actualización: corpus metodológico Research Studio v2 (2026-10-09)
+
+El corpus de seis fichas originales se ha ampliado a **36 fichas** estructuradas
+en `knowledge/corpus_v2.json`: on-chain (15), macro (10), derivados (5),
+protocolo Bitcoin (1) y aseguramiento de calidad (5). Cada entrada tiene
+identificador único, ámbito, fuente/clasificación, método redactado para el
+proyecto, precaución, URL y versión editorial.
+
+`analysis/knowledge_rag.py` mantiene el RAG determinista existente e incorpora
+validación fail-closed de fuentes y metadatos, recuperación SQLite FTS5 con
+ranking y fallback lexical, `evidence_bundle()` y `corpus_manifest()` con
+SHA256 del JSON exacto. Si la nota RAG aparece en un informe v2, incorpora
+versión y SHA y el gate comprueba que coincidan con el corpus instalado.
+
+La publicación continúa interpretando **únicamente MVRV/aSOPR/NUPL respaldados
+por snapshot**: añadir fichas de CPI, COT, ETF, funding o RBN no autoriza
+publicar cifras nuevas de esas fuentes, ni sustituye históricos descargados.
+No se descarga documentación protegida, ni se consulta red en el recuperador.
+
+Consultar `docs/KNOWLEDGE_CORPUS_V2.md`; CLI local de Hermes:
+`python3 scripts/corpus_query.py --manifest` o
+`python3 scripts/corpus_query.py --query 'vintages FRED' --family macro`.
+Las pruebas están incluidas en GitHub Actions y en `tests/run_all.py`.
