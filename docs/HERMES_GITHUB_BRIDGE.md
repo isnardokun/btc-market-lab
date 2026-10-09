@@ -144,6 +144,36 @@ python3 scripts/hermes_bridge.py reply --pr NUMERO_DEL_PR --message-file /tmp/re
 
 Los comentarios y resultados constituyen un historial legible por ambos.
 
+### Primera migración desde un commit anterior a la limpieza
+
+**No ejecutar todavía el actualizador antiguo ni `git pull`:** el
+actualizador seguro se incorpora en el mismo commit que deja de
+versionar los reportes, por lo que no está presente en el PC viejo.
+Primero validar `master`, remoto y cambios locales. Luego:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git remote -v
+git fetch origin master
+tmp="$(mktemp)"
+git show origin/master:scripts/local_artifact_retention.py > "$tmp"
+BTC_RESEARCH_HOME="$PWD" python3 "$tmp" bootstrap
+rm -f "$tmp"
+bash scripts/update_local_and_test.sh --no-update
+~~~
+
+Este bootstrap aborta con staged o cambios de código locales y
+respalda con SHA256 todo archivo generado aún rastreado. Hace
+fast-forward y restaura copias privadas y recibos de idempotencia.
+No imprime ni publica los datos. Guardar el directorio de respaldo
+`reports/local-retained/<timestamp>/` localmente. El archivo temporal
+contiene código público del repositorio, no los datos de mercado ni secretos.
+
+Las actualizaciones futuras sí utilizan el nuevo actualizador:
+`bash scripts/update_local_and_test.sh`.
+
 ## Retención y limpieza de artefactos operativos públicos (2026-10-09)
 
 Una revisión detectó reportes HTML portátiles, manifiestos, un recibo
