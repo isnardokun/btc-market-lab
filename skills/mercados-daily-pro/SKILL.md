@@ -208,3 +208,48 @@ Mostrar primero al usuario el paquete para revisión antes de hacerlo público.
 No enviar SQLite, ~/.hermes/.env, tokens ni datos identificables.
 
 Guía integral: docs/HERMES_GITHUB_BRIDGE.md.
+
+## Procedimiento 7 — Ciclo de corrección dirigido desde ChatGPT (preferido)
+
+**Responsabilidades separadas para este proyecto:**
+- **ChatGPT/revisor:** analiza PR diagnóstico y logs, modifica el código de
+  btc-market-lab en una rama de desarrollo, añade pruebas, verifica CI y
+  fusiona el Pull Request de código a master.
+- **Hermes/ejecutor local:** actualiza master con fast-forward, instala skill,
+  ejecuta tests + pipeline con la SQLite real, revisa gate y prepara nuevo HTML,
+  log y perfil de máquina. No modifica código por iniciativa propia cuando
+  el usuario pidió que las correcciones las haga ChatGPT.
+- **ChatGPT/revisor:** vuelve a leer nuevo PR diagnóstico; repite ciclo
+  hasta que se corrijan P0 y no existan discrepancias funcionales.
+
+Para el siguiente ciclo **después del merge del fix**:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git fetch origin master
+git merge --ff-only origin/master
+bash scripts/install_hermes_skill.sh
+SEND_TELEGRAM_AUTO=0 bash scripts/hermes_review_cycle.sh --no-update --pipeline --include-html
+~~~
+
+El comando genera evidencia local. Antes de publicar, revisar que el paquete
+no contenga secretos o información privada. Solo bajo autorización para
+publicar en este repositorio GitHub PÚBLICO:
+
+~~~bash
+python3 scripts/hermes_bridge.py publish reports/bridge/RUN_ID --approve-public
+~~~
+
+Al finalizar Hermes informa commit local, puntuación y estado del gate,
+exit code real, hash del HTML, número de PR borrador y estado de envío:
+**Telegram no enviado** salvo autorización por separado.
+
+**NO corregir el publication gate manualmente ni publicar por Telegram
+informes rechazados.** Si el gate rechaza un P0, eso es un resultado
+esperado y útil del circuito de validación; compartir el HTML REJECTED
+y el log para que ChatGPT corrija el código.
+
+Las instrucciones previas que sugieran a Hermes implementar él mismo
+las correcciones quedan subordinadas a este reparto de responsabilidades.
