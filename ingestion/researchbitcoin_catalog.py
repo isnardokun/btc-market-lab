@@ -15,6 +15,9 @@ class Metric:
     unit: str
     group: str
     priority: int = 2  # 1 = headline complementary metric; 2 = supporting metric
+    # Representation of API raw numeric values, separate from display unit.
+    # Only two observed Supply-in-Profit percentages currently use fractions.
+    raw_scale: str = "native"
 
     @property
     def docs(self):
@@ -35,8 +38,8 @@ CATALOG = {
         Metric("realized_loss_sth", "/v2/realizedloss", "Pérdida realizada STH", "USD", "spending", 1),
         Metric("realized_profit_sth", "/v2/realizedprofit", "Ganancia realizada STH", "USD", "spending"),
         Metric("net_realized_profit_loss_sth", "/v2/net_realized_profit_loss", "P/L realizado neto STH", "USD", "spending"),
-        Metric("supply_in_profit_sth_percent", "/v2/supply_in_profitloss", "Oferta STH en ganancias", "percent", "supply", 1),
-        Metric("supply_in_profit_percent", "/v2/supply_in_profitloss", "Oferta total en ganancias", "percent", "supply", 1),
+        Metric("supply_in_profit_sth_percent", "/v2/supply_in_profitloss", "Oferta STH en ganancias", "percent", "supply", 1, "fraction_0_1"),
+        Metric("supply_in_profit_percent", "/v2/supply_in_profitloss", "Oferta total en ganancias", "percent", "supply", 1, "fraction_0_1"),
         Metric("liveliness", "/v2/cointime_statistics", "Liveliness", "ratio", "activity"),
     )
 }
