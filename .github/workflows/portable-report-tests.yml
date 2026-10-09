@@ -14,5 +14,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Reject tracked runtime outputs in public Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden="$(git ls-files -- 'reports/portable/**' 'reports/deliveries/**' 'dashboards/dashboard_standalone.html')"
+          if [[ -n "$forbidden" ]]; then
+            echo "::error::Private/runtime artifacts are tracked in Git. Remove them from HEAD."
+            printf '%s\\n' "$forbidden"
+            exit 1
+          fi
+          echo "No generated portable HTML, manifest, Telegram receipts, or dashboard snapshot tracked."
       - name: Offline HTML and Telegram transport regression tests
         run: python3 -m unittest -v tests.unit.test_portable_report tests.unit.test_hermes_skill tests.unit.test_hermes_bridge tests.unit.test_financial_integrity tests.unit.test_editorial_integrity tests.unit.test_ingest_and_news_quality tests.unit.test_daily_close_cutoff tests.unit.test_52week_and_partial_archive tests.unit.test_archive_reconciliation tests.unit.test_researchbitcoin_complement tests.unit.test_specialized_news_rag
