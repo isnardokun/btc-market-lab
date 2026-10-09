@@ -63,7 +63,9 @@ fi
 bash scripts/install_hermes_skill.sh
 
 echo "=== Verificaciones estáticas ==="
-bash -n scripts/daily.sh scripts/install_hermes_skill.sh scripts/update_local_and_test.sh
+for script in scripts/daily.sh scripts/install_hermes_skill.sh scripts/update_local_and_test.sh; do
+    bash -n "$script"
+done
 python3 -m compileall -q rendering/portable_report.py scripts/send_report.py rendering/export_dashboard.py ingestion/ingest_fred.py
 echo "[PASS] bash -n y compileall"
 
