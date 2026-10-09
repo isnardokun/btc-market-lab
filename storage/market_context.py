@@ -13,6 +13,9 @@ import sqlite3
 DDL = """
 CREATE TABLE IF NOT EXISTS market_context_migrations(
  version INTEGER PRIMARY KEY, applied_at_utc TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS market_source_cursors(
+ provider TEXT NOT NULL, stream TEXT NOT NULL, cursor TEXT NOT NULL,
+ updated_utc TEXT NOT NULL, PRIMARY KEY(provider,stream));
 CREATE TABLE IF NOT EXISTS market_source_runs(
  run_id TEXT PRIMARY KEY, provider TEXT NOT NULL, started_utc TEXT NOT NULL,
  ended_utc TEXT, status TEXT NOT NULL CHECK(status IN ('running','success','empty','failed')),
@@ -115,7 +118,7 @@ def _upsert(db,table,key,fields):
     if old is not None:
         previous=dict(zip(old_fields,old))
         # fetched_utc intentionally does NOT create a revision on identical data
-        meaningful={n:fields[n] for n in names if n!="fetched_utc"}
+        meaningful={n:fields[n] for n in names if n not in ("fetched_utc","raw_sha256")}
         if all(previous[n]==v for n,v in meaningful.items()):
             return False
         revised=dict(previous)
@@ -183,3 +186,17 @@ def store_event(db,*,provider,uid,title,scheduled_utc,event_date,precision,sourc
        dict(provider=provider,uid=uid,title=title,scheduled_utc=stamp,
             time_precision=precision,event_date=_date(event_date),source_url=source_url,
             state=state,raw_sha256=sha,fetched_utc=now_utc()))
+
+def get_cursor(db,provider,stream):
+    require(db)
+    row=db.execute("SELECT cursor FROM market_source_cursors WHERE provider=? AND stream=?",
+                   (provider,stream)).fetchone()
+    return row[0] if row else None
+
+def save_cursor(db,provider,stream,cursor):
+    require(db)
+    db.execute("INSERT INTO market_source_cursors VALUES(?,?,?,?) "
+               "ON CONFLICT(provider,stream) DO UPDATE SET cursor=excluded.cursor,"
+               "updated_utc=excluded.updated_utc",
+               (provider,stream,str(cursor),now_utc()))
+
