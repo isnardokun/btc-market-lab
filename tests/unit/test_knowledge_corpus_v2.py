@@ -127,6 +127,27 @@ class KnowledgeCorpusV2Tests(unittest.TestCase):
         self.assertNotEqual(manifest["sha256"], rag.corpus_manifest()["sha256"])
         self.assertEqual(manifest["count"], len(rag.CARDS))
 
+    def test_rendered_html_carries_matching_corpus_sha_and_gate_rejects_tamper(self):
+        import datetime as dt
+        from validation.content_checks import audit_report_html
+        html = ('<meta name="market-design-system" '
+                'content="mercados-research-studio-v2">'
+                + rag.render_research_note({"mvrv": 1.5}))
+        self.assertIn('data-corpus-version="2.0.0"', html)
+        self.assertIn('data-corpus-sha256="' + rag.corpus_manifest()["sha256"], html)
+        day = dt.date(2026, 10, 9)
+        errors = audit_report_html(html, report_day=day)
+        self.assertFalse(any("RAG:" in issue for issue in errors), errors)
+        changed = html.replace('data-corpus-sha256="' + rag.corpus_manifest()["sha256"],
+                               'data-corpus-sha256="' + "0" * 64)
+        issues = audit_report_html(changed, report_day=day)
+        self.assertTrue(any("RAG: corpus publicado no coincide" in issue
+                            for issue in issues), issues)
+        missing = html.replace(' data-corpus-version="2.0.0"', "")
+        issues = audit_report_html(missing, report_day=day)
+        self.assertTrue(any("RAG: bloque metodológico sin versión" in issue
+                            for issue in issues), issues)
+
     def _bad(self, payload, expected):
         with tempfile.TemporaryDirectory() as folder:
             p = Path(folder) / "corpus.json"
