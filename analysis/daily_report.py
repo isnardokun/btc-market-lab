@@ -718,13 +718,13 @@ def gen_spy_narrative(spy_price, spy_chg, spy_rsi, spy_sma50, spy_sma200, m10y_v
     # DXY
     if mdxy:
         if mdxy > 125:
-            dxy_txt = f"DXY en {mdxy:.1f} siguehistoricamente fuerte — headwind para activos de riesgo."
+            dxy_txt = f"USD Broad Index en {mdxy:.1f} siguehistoricamente fuerte — headwind para activos de riesgo."
         elif mdxy > 110:
-            dxy_txt = f"DXY en {mdxy:.1f} en niveles elevados pero contenidos."
+            dxy_txt = f"USD Broad Index en {mdxy:.1f} en niveles elevados pero contenidos."
         else:
-            dxy_txt = f"DXY en {mdxy:.1f} en niveles normales."
+            dxy_txt = f"USD Broad Index en {mdxy:.1f} en niveles normales."
     else:
-        dxy_txt = "DXY no disponible."
+        dxy_txt = "USD Broad Index no disponible."
 
     return {
         "rsi_sig": rsi_sig,
@@ -748,7 +748,7 @@ def gen_gold_narrative(gold_price, gold_chg, gold_rsi, gold_hist, m10y_val, mvix
         macd_sig = "MACD no disponible."
 
     yield_txt = f"Yields a 10Y en {m10y_val:.3f}% siguen siendo el principal viento en contra para el oro." if m10y_val else "Yields no disponibles."
-    dxy_txt = f"DXY en {mdxy:.1f}: dolar fuerte presiona al oro." if mdxy else "DXY no disponible."
+    dxy_txt = f"USD Broad Index en {mdxy:.1f}: dolar fuerte presiona al oro." if mdxy else "USD Broad Index no disponible."
 
     return {
         "rsi_sig": rsi_sig,
@@ -778,7 +778,7 @@ def gen_macro_narrative(macro):
     if m10y[1]:
         parts.append(f"10Y en {m10y[1]:.3f}%.")
     if mdxy[1]:
-        parts.append(f"DXY en {mdxy[1]:.2f}.")
+        parts.append(f"USD Broad Index en {mdxy[1]:.2f}.")
     if mvix[1]:
         parts.append(f"VIX en {mvix[1]:.1f}.")
 
@@ -1046,7 +1046,7 @@ def main():
     svix = sem_v(mvix, 25, 35, reverse=True)
     A(ms("Yield 10Y", f"{m10y:.3f}%" if m10y else None, m10y_date, s10y))
     A(ms("Yield 2Y",  f"{m2y:.3f}%"  if m2y  else None, m2y_date,  s2y))
-    A(ms("DXY",        f"{mdxy:.2f}"    if mdxy else None, mdxy_date, sdxy))
+    A(ms("USD Broad",        f"{mdxy:.2f}"    if mdxy else None, mdxy_date, sdxy))
     A(ms("VIX",        f"{mvix:.2f}"     if mvix else None, mvix_date, svix))
     A(ms("CPI YoY",    f"{mcpi:.2f}%"   if mcpi else None, mcpi_date, "sok"))
     A(ms("Desempleo",  f"{munemp:.1f}%"  if munemp else None, munemp_date, "sok"))
@@ -1061,8 +1061,8 @@ def main():
     A(f'<div class="ticker-item"><div class="tk-pair">S&P 500 IND</div><div class="tk-price">{"%.0f"%spx_price if spx_price else "---"}</div><div class="tk-chg {bcls(spx_chg)}">{pct(spx_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">SPDR S&P 500</div><div class="tk-price">{usd(spy_price)}</div><div class="tk-chg {bcls(spy_chg)}">{pct(spy_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">ORO XAU</div><div class="tk-price">{usd0(gold_price)}</div><div class="tk-chg {bcls(gold_chg)}">{pct(gold_chg)}</div></div>')
-    A(f'<div class="ticker-item"><div class="tk-pair">PLATA XAG</div><div class="tk-price">{usd(silver_price)}</div><div class="tk-chg {bcls(silver_chg)}">{pct(silver_chg)}</div></div>')
-    A(f'<div class="ticker-item"><div class="tk-pair">BRENT</div><div class="tk-price">{usd(oil_price)}</div><div class="tk-chg {bcls(oil_chg)}">{pct(oil_chg)}</div></div>')
+    A(f'<div class="ticker-item"><div class="tk-pair">PLATA FUT. SI=F</div><div class="tk-price">{usd(silver_price)}</div><div class="tk-chg {bcls(silver_chg)}">{pct(silver_chg)}</div></div>')
+    A(f'<div class="ticker-item"><div class="tk-pair">WTI (CL=F)</div><div class="tk-price">{usd(oil_price)}</div><div class="tk-chg {bcls(oil_chg)}">{pct(oil_chg)}</div></div>')
     A('</div>')
 
     # ══════════════════════ BITCOIN ═══════════════════════════════════════════
@@ -1176,7 +1176,7 @@ def main():
       f'actual {spx_price:,.0f} pts). '
       'SPDR S&P 500 ETF (SPY) cotiza en USD/participacion ({usd(spy_price)}). '
       'Los indicadores tecnicos se calculan sobre SPY (USD/share). '
-      'El indice SPX y SPY se mueven de forma casi identica, pero SPY incluye dividends.</span>')
+      'El indice SPX y SPY se mueven de forma casi identica, pero SPY distribuye dividendos.</span>')
 
     A('<div class="price-row">')
     A(f'<span class="big-price">{usd(spy_price)}</span>')
@@ -1188,7 +1188,7 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Williams %R</div><div class="sval">{"%.0f"%spy_willr if spy_willr else "---"}</div><div class="ssub">{"Extendida" if spy_willr and spy_willr>-20 else "Normal"}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">ATR(14)</div><div class="sval">{"$%.2f"%spy_atr if spy_atr else "---"}</div><div class="ssub">Rango promedio</div></div>')
     A(f'<div class="stat-item"><div class="slbl">10Y Yield</div><div class="sval dn">{"%.3f%%"%m10y if m10y else "---"}</div><div class="ssub">{m10y_date or ""}</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">DXY</div><div class="sval neu">{"%.2f"%mdxy if mdxy else "---"}</div><div class="ssub">USD Broad Index</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">USD Broad</div><div class="sval neu">{"%.2f"%mdxy if mdxy else "---"}</div><div class="ssub">USD Broad Index</div></div>')
     A(f'<div class="stat-item"><div class="slbl">VIX</div><div class="sval {"up" if mvix and mvix>25 else ""}">{"%.1f"%mvix if mvix else "---"}</div><div class="ssub">{mvix_date or ""}</div></div>')
     A('</div>')
 
@@ -1236,7 +1236,7 @@ def main():
     # ══════════════════════ METALES ═══════════════════════════════════════════
     A('<section>')
     A('<div class="kicker">Commodities</div>')
-    A('<div class="section-title">Oro (XAU/USD) — Analisis de Precio</div>')
+    A('<div class="section-title">Oro Futuro (GC=F) — Analisis de Precio</div>')
 
     A('<div class="price-row">')
     A(f'<span class="big-price" style="color:var(--gold)">{usd0(gold_price)}</span>')
@@ -1249,10 +1249,10 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Estocastico</div><div class="sval">{"%.0f"%gold_stoch_k if gold_stoch_k else "---"}</div><div class="ssub">{gold_stoch_sig}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Williams %R</div><div class="sval">{"%.0f"%gold_willr if gold_willr else "---"}</div><div class="ssub">{gold_willr_sig}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">ATR(14)</div><div class="sval">{"$%.0f"%gold_atr if gold_atr else "---"}</div><div class="ssub">volatilidad</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">Plata XAG</div><div class="sval" style="color:var(--gold)">{"$%.2f"%silver_price if silver_price else "---"}</div><div class="ssub">{pct(silver_chg)}</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">Brent Crude</div><div class="sval" style="color:var(--gold)">{"$%.2f"%oil_price if oil_price else "---"}</div><div class="ssub">{pct(oil_chg)}</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">Plata futuro (SI=F)</div><div class="sval" style="color:var(--gold)">{"$%.2f"%silver_price if silver_price else "---"}</div><div class="ssub">{pct(silver_chg)}</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">WTI Crude (CL=F)</div><div class="sval" style="color:var(--gold)">{"$%.2f"%oil_price if oil_price else "---"}</div><div class="ssub">{pct(oil_chg)}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">10Y Yield</div><div class="sval dn">{"%.3f%%"%m10y if m10y else "---"}</div><div class="ssub">headwind oro</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">DXY</div><div class="sval neu">{"%.2f"%mdxy if mdxy else "---"}</div><div class="ssub">inverso oro</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">USD Broad</div><div class="sval neu">{"%.2f"%mdxy if mdxy else "---"}</div><div class="ssub">inverso oro</div></div>')
     A(f'<div class="stat-item"><div class="slbl">VIX</div><div class="sval">{"%.1f"%mvix if mvix else "---"}</div><div class="ssub">fear index</div></div>')
     A('</div>')
 
@@ -1270,10 +1270,10 @@ def main():
       f'Soporte critico en zona $4,100-$4,000. '
       f'Nota: no tenemos datos de inventario, demanda fisica ni orden flow para oro — el analisis es puramente tecnico y macro.</div>')
     A(f'<p><strong>Plata:</strong> {usd(silver_price)} ({pct(silver_chg)}) — sigue al oro con mayor volatilidad. '
-      f'<strong>Brent:</strong> {usd(oil_price)} ({pct(oil_chg)}) — reflejamos tension geopolitica en mercados energeticos.</p>')
+      f'<strong>WTI:</strong> {usd(oil_price)} ({pct(oil_chg)}) — reflejamos tension geopolitica en mercados energeticos.</p>')
     A('</div>')
 
-    A('<div class="chart-box"><h3>Oro (XAU/USD) — 90 dias</h3>'+gold_chart+'</div>')
+    A('<div class="chart-box"><h3>Oro Futuro (GC=F) — 90 dias</h3>'+gold_chart+'</div>')
 
     A('<div class="card"><h3>Resumen Tecnico</h3><table class="signal-table">')
     A('<thead><tr><th>Indicador</th><th>Valor</th><th>Senal</th></tr></thead><tbody>')
@@ -1301,7 +1301,7 @@ def main():
         gold_rsi, gold_atr, gold_hist, "GOLD",
         macro_data={"next_event": "CPI 14-oct", "vix": mvix, "dxy": mdxy}
     )
-    A(bias_section("Oro (XAU/USD)", gold_chg, gold_bull, gold_base, gold_bear))
+    A(bias_section("Oro Futuro (GC=F)", gold_chg, gold_bull, gold_base, gold_bear))
 
     A('<h3 style="font-family:var(--serif);font-size:15px;font-weight:400;margin:20px 0 14px">Noticias y Analisis en Espanol</h3>')
     A('<div class="news-wrap">'+''.join(news_span(n) for n in nm)+'</div>')
@@ -1332,7 +1332,7 @@ def main():
     print(f"SPY: {usd(spy_price)} {pct(spy_chg)} | RSI: {spy_rsi:.0f}" if spy_rsi else "SPY: ---")
     print(f"Gold: {usd0(gold_price)} {pct(gold_chg)} | RSI: {gold_rsi:.0f}" if gold_rsi else "Gold: ---")
     print(f"On-chain BTC: MVRV={oc['mvrv']} | aSOPR={oc['asopr']} | NUPL={oc['nupl']} | HR={eh(oc['hr'])}")
-    print(f"Macro: 10Y={m10y:.3f}% | DXY={mdxy:.2f} | VIX={mvix:.1f} | CPI={mcpi:.2f}%" if mcpi else "Macro: ---")
+    print(f"Macro: 10Y={m10y:.3f}% | USD Broad={mdxy:.2f} | VIX={mvix:.1f} | CPI={mcpi:.2f}%" if mcpi else "Macro: ---")
     print(f"News: BTC {len(nb)} | Stocks {len(ns)} | Metals {len(nm)}")
 
 if __name__ == "__main__":
