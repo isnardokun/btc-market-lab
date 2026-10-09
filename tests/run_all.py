@@ -21,6 +21,7 @@ TESTS = [
     ("Unit: Ingest/News Quality", "python3 -m unittest -v tests.unit.test_ingest_and_news_quality"),
     ("Unit: Completed Daily Candles", "python3 -m unittest -v tests.unit.test_daily_close_cutoff"),
     ("Unit: 52-week/Price Archive", "python3 -m unittest -v tests.unit.test_52week_and_partial_archive"),
+    ("Unit: Archive/UTC Reconciliation", "python3 -m unittest -v tests.unit.test_archive_reconciliation"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
