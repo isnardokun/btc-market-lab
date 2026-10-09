@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion import config
 from ingestion.daily_cutoff import previous_completed_utc_day
 from ingestion.ingest import fetch_series
-from storage.archive_schema import archive_schema_installed, save_window
+from storage.archive_schema import archive_schema_installed, save_window, register_dataset
 
 EPOCH = dt.date(2009, 1, 1)
 LEDGER = """
@@ -153,6 +153,8 @@ def run(db_path, *, apply=False, all_daily=False, slug=None, first=None,
                             "ok" if values else "empty",len(values),
                             dt.datetime.now(dt.timezone.utc).isoformat()))
                 if archive_schema_installed(db):
+                    register_dataset(db, "bitview", name, frequency="d1",
+                                     scale="native", earliest=start)
                     save_window(db, "bitview", name, start, end+dt.timedelta(days=1),
                                 "ok" if values else "empty", len(values))
             item["values"]=len(values)
