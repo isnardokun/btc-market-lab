@@ -1,7 +1,7 @@
 """Config for BTC Research System — bitview.space API"""
 import os
 
-BASE_DIR = "/home/ignotus/btc-research"
+BASE_DIR = os.environ.get("BTC_RESEARCH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH  = f"{BASE_DIR}/db/btc_research.db"
 SCRATCH  = "/home/ignotus/.hermes/cache/scratch"
 REPORTS  = f"{BASE_DIR}/reports"
@@ -13,7 +13,7 @@ CHARTS_DIR  = CHARTS
 REPORTS_DIR = REPORTS
 
 # ─── FRED API ────────────────────────────────────────────────────────────────
-FRED_API_KEY  = "d41bb4d61c7d02ffbd55dfe528c51d8c"
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")  # Set in Hermes environment; rotate leaked keys
 FRED_ENDPOINT = "https://api.stlouisfed.org/fred/series/observations"
 FRED_SERIES  = [
     ("DGS10",           "Yield 10Y Treasury",  "daily",   "Treasury yields — driver macro #1. BTC correlation negativa."),
