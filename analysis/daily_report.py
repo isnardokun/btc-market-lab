@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from rendering.onchain_complement import render_complement, read_complement
+from rendering.market_context import render_market_context
 from analysis.research_studio import render_executive_brief, rbn_diagnostic, rsi_zone
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
@@ -1237,6 +1238,8 @@ def main():
     # Empty until Hermes explicitly initializes/syncs the supplemental source.
     A(render_complement(DB_PATH, last_utc))
     A(rbn_diagnostic(rbn_rows, btc_price=btc_price, cutoff=last_utc))
+    # Strictly sourced SQLite context; missing/stale providers are omitted, not zero-filled.
+    A(render_market_context(DB_PATH))
 
     # Expert Analysis — REAL DATA NARRATIVE
     A('<div class="expert-box">')
