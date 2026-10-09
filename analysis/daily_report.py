@@ -1085,7 +1085,7 @@ def main():
     A('<!DOCTYPE html><html lang="es">')
     A('<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">')
     A('<title>Mercados Daily Pro - '+TODAY_STR+'</title>')
-    A('<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400&family=IBM+Plex+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">')
+    # Offline typography: local system stacks from Mercados Research Studio.
     # Mercados Research Studio overrides only visual tokens/layout, no data.
     A('<meta name="market-design-system" content="'+STYLE_VERSION+'">')
     A('<style>'+CSS+RESEARCH_CSS+'</style></head><body>')
