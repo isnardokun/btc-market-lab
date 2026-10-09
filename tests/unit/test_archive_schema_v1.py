@@ -13,6 +13,7 @@ from scripts.archive_db_migrate import run as migrate_run
 from ingestion.researchbitcoin_v2 import store_rows
 from ingestion.researchbitcoin_archive import run as rbn_archive
 from ingestion.yahoo_history import archive as archive_yahoo
+from scripts.history_query import query_history
 
 
 NOW=dt.datetime(2026,10,9,17,tzinfo=dt.timezone.utc)
@@ -179,6 +180,33 @@ class ArchiveSchemaTests(unittest.TestCase):
             ).fetchone())
             with self.assertRaises(ValueError):
                 register_dataset(db,"researchbitcoin","badshape",shape="vector_unsafe")
+
+    def test_history_query_supports_vintages_and_researchbitcoin_bins(self):
+        with sqlite3.connect(self.path) as db:
+            ensure_archive_schema(db)
+            db.execute(
+                "INSERT INTO archive_fred_vintages "
+                "(series_id,observed_date,realtime_start,realtime_end,"
+                "value,captured_at_utc) VALUES (?,?,?,?,?,?)",
+                ("PAYEMS","2026-09-01","2026-10-08",None,159050.0,
+                 "2026-10-09T00:00:00+00:00"),
+            )
+            db.execute(
+                "INSERT INTO archive_multidimensional_observations "
+                "(source_id,metric,observed_at_utc,dimensions_key,value,unit,"
+                "source_endpoint,fetched_at_utc) VALUES (?,?,?,?,?,?,?,?)",
+                ("researchbitcoin","utxo_price_bins",
+                 "2026-10-08T00:00:00+00:00","cohort=STH|bucket=60000-61000",
+                 2.5,"BTC","/v2/provider-specific",
+                 "2026-10-09T00:00:00+00:00"),
+            )
+        fred=query_history(self.path,"fred-vintage","PAYEMS",
+                           "2026-09-01","2026-09-30")
+        self.assertEqual(fred["rows"][0]["realtime_start"],"2026-10-08")
+        values=query_history(self.path,"rbn-distribution","utxo_price_bins",
+                             "2026-10-08","2026-10-08")
+        self.assertEqual(values["rows"][0]["value"],2.5)
+        self.assertIn("cohort=STH",values["rows"][0]["dimensions_key"])
 
     def test_strict_window_and_metric_registration(self):
         with sqlite3.connect(self.path) as db:
