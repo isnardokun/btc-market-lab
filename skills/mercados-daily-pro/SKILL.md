@@ -317,6 +317,37 @@ Guía de operación y límites: `docs/SPECIALIZED_NEWS_AND_RAG.md`.
   versionado del corpus y evaluación formal de alucinaciones.
 
 
+## Migración inicial obligatoria tras la retirada de artefactos rastreados
+
+**IMPORTANTE:** en un checkout anterior a la limpieza, el script
+`scripts/update_local_and_test.sh` es la versión VIEJA y no sabe
+preservar los recibos rastreados. La primera actualización debe
+usar el helper nuevo leído desde la rama remota, ANTES del fast-forward:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git remote -v
+git fetch origin master
+tmp="$(mktemp)"
+git show origin/master:scripts/local_artifact_retention.py > "$tmp"
+BTC_RESEARCH_HOME="$PWD" python3 "$tmp" bootstrap
+rm -f "$tmp"
+bash scripts/update_local_and_test.sh --no-update
+~~~
+
+El helper exige rama master y remoto esperado; aborta ante archivos
+staged o cambios de código locales; respalda las salidas operativas
+rastreables con SHA256, limpia únicamente esas salidas generadas si
+estaban modificadas, hace fast-forward y las restaura. No reinicia
+datos, no envía Telegram ni hace push. **Nunca ejecutar un
+`git pull` manual como sustituto.** Si cualquier validación falla,
+detenerse y conservar el backup en `reports/local-retained/`.
+
+En actualizaciones POSTERIORES se usa solo
+`bash scripts/update_local_and_test.sh`, ya con respaldo incorporado.
+
 ## Procedimiento 10 — Higiene Git público y preservación local de artefactos
 
 El repositorio de GitHub es PÚBLICO; las copias de reportes HTML,
