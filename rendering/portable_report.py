@@ -55,8 +55,16 @@ def make_portable(html: str) -> str:
         raise ValueError("No hay CSS integrado; el informe perdería el diseño")
 
     # Daily Report uses Google Fonts; use its existing CSS font fallbacks offline.
-    cleaned = REMOTE_FONT_LINK.sub("", html)
-    if re.search(r"@import\b", cleaned, re.I) or URL_IN_CSS.search(cleaned):
+    cleaned = REMOTE_FONT_LINK.sub(
+        lambda match: "" if "fonts.googleapis.com" in match.group(0).lower()
+        else match.group(0),
+        html,
+    )
+    css_urls = re.findall(r"url\\s*\\(\\s*([^)]+)\\)", cleaned, re.I)
+    if re.search(r"@import\\b", cleaned, re.I) or any(
+        not ref.strip(" \\t\\n\\r\\\"'").lower().startswith("data:")
+        for ref in css_urls
+    ):
         raise ValueError("Hay imports/URLs CSS no integrados")
     validator = OfflineDependencyChecker()
     validator.feed(cleaned)
