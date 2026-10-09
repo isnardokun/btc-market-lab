@@ -16,7 +16,7 @@ el archivo histórico debe mantener cobertura anterior e incremental.
 | ResearchBitcoin V2 | 13 métricas d1 curadas, UTC | **Tier 0: último año, 55.000 DP/semana**; Tier 1/2 sin límite temporal según tabla, pero con cuotas y acceso del usuario; 422 por petición demasiado grande | `onchain_external_observations` |
 | Yahoo Finance | BTC + símbolos del catálogo `ingest_instruments` | `1d&range=max`: toda la historia que responda Yahoo para ese símbolo, no garantiza desde creación del activo; intradía es otro límite | `price_btc` + `market_ohlc_history` |
 | FRED | Todas las series fuente de `FRED_SERIES` | API `series/observations` soporta `observation_start`, `limit=100000`, `offset`. Revisiones/vintages son objeto de ALFRED adicional | `macro_fred` |
-| Noticias RSS/Exa | Noticias/acontecimientos relevantes | Descubrimiento reciente no equivale a un archivo de noticias desde 2009; licencia, disponibilidad y retención por proveedor | `news_pipeline`/RAG local según sus políticas |
+| Noticias RSS/Exa | Noticias/acontecimientos relevantes | Descubrimiento reciente no equivale a un archivo de noticias desde 2009; licencia, disponibilidad y retención por proveedor | `research_news_archive`: fuente, título, URL, fecha de captura; sin cuerpo |
 
 **Límites explícitos:** no asegurar disponibilidad de historial pre-2014
 en Yahoo BTC ni pre-1 año en RBN Tier 0, ni afirmar
@@ -134,6 +134,16 @@ existentes se preservan mediante `INSERT OR IGNORE`, con
 reconciliación habitual de revisiones. Los **vintages** ALFRED
 históricos no están reconstruidos por este script; registrar ese
 requisito como línea de investigación adicional.
+
+### Noticias RSS/Exa — conservar fuentes desde ahora, sin atribuirles un pasado falso
+
+Cada ejecución del reporte guarda en `research_news_archive` solamente
+metadatos de descubrimiento: titular, URL HTTPS, proveedor, tipo de fuente,
+fecha reportada, fecha UTC de captura y activo. No se archiva el cuerpo
+completo ni material protegido por derechos de autor. La fuente RSS/Exa
+puede no ofrecer históricos anteriores; solo declarar cobertura
+desde el momento real de ingestión, sin reconstruir “noticias vistas”
+en sesiones pasadas mediante un feed de hoy.
 
 ### 6. Mantenimiento incremental y reauditoría
 
