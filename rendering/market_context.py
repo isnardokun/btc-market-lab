@@ -22,11 +22,11 @@ def render_market_context(db_path, now=None):
         for source in ("binance","bybit"):
             for metric in ("open_interest","funding_settled"):
                 row=db.execute(
-                    "SELECT raw_value,raw_unit,observed_utc,quote_usd FROM market_derivatives "
+                    "SELECT raw_value,raw_unit,observed_utc,quote_usd,raw_sha256 FROM market_derivatives "
                     "WHERE provider=? AND metric=? AND symbol='BTCUSDT' "
                     "ORDER BY observed_utc DESC LIMIT 1",(source,metric)).fetchone()
                 if not row:continue
-                value,unit,stamp,usd=row
+                value,unit,stamp,usd,source_sha=row
                 try:age=(now-_utc(stamp)).total_seconds()/3600
                 except ValueError:continue
                 if not 0<=age<=36:continue
@@ -38,7 +38,9 @@ def render_market_context(db_path, now=None):
                       else "fracción ×100; liquidación pasada, no estimación futura")
                 blocks.append(
                     '<div class="stat-item" data-provider="'+escape(source)+'" data-metric="'+metric+
-                    '" data-asof-utc="'+escape(stamp)+'"><div class="slbl">'+escape(title)+
+                    '" data-asof-utc="'+escape(stamp)+'" data-raw-value="'+format(value,'.12g')+
+                    '" data-raw-unit="'+escape(unit)+'" data-source-sha256="'+source_sha+
+                    '"><div class="slbl">'+escape(title)+
                     '</div><div class="sval">'+escape(number)+
                     '</div><div class="ssub">'+escape(note)+" · "+escape(stamp)+" UTC</div></div>")
         row=db.execute("SELECT MAX(trade_date) FROM market_etf_flows WHERE provider='farside'").fetchone()
@@ -47,16 +49,19 @@ def render_market_context(db_path, now=None):
             age=(now.date()-day).days
             if 0<=age<=7:
                 records=db.execute(
-                    "SELECT ticker,net_flow_usd_m FROM market_etf_flows "
+                    "SELECT ticker,net_flow_usd_m,raw_sha256 FROM market_etf_flows "
                     "WHERE provider='farside' AND trade_date=? ORDER BY ticker",(day.isoformat(),)).fetchall()
-                reported_total=next((value for ticker,value in records if ticker=="TOTAL"),None)
-                component_values=[value for ticker,value in records if ticker!="TOTAL"]
+                reported_total=next((value for ticker,value,sha in records if ticker=="TOTAL"),None)
+                component_values=[value for ticker,value,sha in records if ticker!="TOTAL"]
                 total=reported_total if reported_total is not None else sum(component_values)
+                source_sha=next((sha for ticker,value,sha in records if ticker=="TOTAL"),records[0][2])
                 total_label=("Total publicado por Farside" if reported_total is not None
                              else "Suma parcial, total oficial ausente")
                 blocks.append(
                     '<div class="stat-item" data-provider="farside" data-metric="etf_flows" data-asof-utc="'+
-                    day.isoformat()+'"><div class="slbl">ETF spot BTC · Farside</div>'+
+                    day.isoformat()+'" data-raw-value="'+format(total,'.12g')+
+                    '" data-raw-unit="USD_m" data-source-sha256="'+source_sha+
+                    '"><div class="slbl">ETF spot BTC · Farside</div>'+
                     '<div class="sval">US$ '+f"{total:+,.1f}M"+
                     '</div><div class="ssub">'+escape(total_label)+'; '+str(len(component_values))+
                     ' fondos con cifra reportada · '+day.isoformat()+
