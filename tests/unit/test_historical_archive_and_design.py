@@ -240,7 +240,7 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
                         "SELECT COUNT(*) FROM observations").fetchone()[0],1)
 
     def test_private_research_studio_visual_contract(self):
-        self.assertEqual(STYLE_VERSION,"mercados-research-studio-v1")
+        self.assertEqual(STYLE_VERSION,"mercados-research-studio-v2")
         for part in ["@media print","@media(max-width:760px)","tabular-nums",
                      "focus-visible","--deep:#12243A","#onchain-complement"]:
             self.assertIn(part,RESEARCH_CSS)
