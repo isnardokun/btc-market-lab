@@ -587,10 +587,8 @@ def classify_impact(text):
 
 # ── MACRO EVENTS ─────────────────────────────────────────────────────────────
 
-# No se anuncian eventos sin calendario oficial verificable e ingestado.
-# Anunciar fechas estáticas como "próximas" producía información incorrecta.
-MACRO_EVENTS = []
-
+# El calendario se consulta ahora exclusivamente desde market_calendar_events
+# en btc_research.db (read_upcoming_calendar), nunca desde fechas fijas.
 
 # ── NARRATIVE GENERATOR ───────────────────────────────────────────────────────
 
