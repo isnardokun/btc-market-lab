@@ -146,7 +146,7 @@ def bootstrap():
         raise RuntimeError("Existen cambios staged: detener sin modificar")
     changed = [
         os.fsdecode(x) for x in
-        git("diff", "--name-only", "-z", capture=True).split(b"\\0") if x
+        git("diff", "--name-only", "-z", capture=True).split(b"\0") if x
     ]
     if not all(allowed(path) for path in changed):
         raise RuntimeError("Existen cambios de código/documentos sin guardar: detener")
