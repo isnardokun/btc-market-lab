@@ -66,6 +66,17 @@ def audit_report_html(source, *, report_day=None):
         errors.append("Expresión de plantilla sin interpolar en HTML")
     if re.search(r"\d+(?:\.\d+)?%%|\d+(?:\.\d+)?xx\b", source):
         errors.append("Unidades monetarias/porcentuales duplicadas (%% o xx)")
+    if re.search(r"\$\$\s*\d", plain(source)):
+        errors.append("Precio con símbolo monetario duplicado ($)")
+    stamped = re.search(r"Generado\s+(20\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}\s+UTC", source)
+    if stamped:
+        generation_day = dt.date.fromisoformat(stamped.group(1))
+        for publish_date in re.findall(r'<div class="news-date">\s*(20\d{2}-\d{2}-\d{2})', source):
+            try:
+                if dt.date.fromisoformat(publish_date) > generation_day:
+                    errors.append("Noticia con fecha posterior a la generación UTC del HTML")
+            except ValueError:
+                errors.append("Fecha inválida de noticia")
 
     ticker = re.search(
         r'<div class="tk-pair">BTC/USD</div>\s*<div class="tk-price">([^<]+)</div>', source
