@@ -6,6 +6,7 @@ Precios: Yahoo Finance | On-chain: bitview | News: Exa
 """
 import os, sys, datetime, sqlite3, json, subprocess, re
 from html import escape as html_escape
+from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -16,12 +17,12 @@ try:
     HAS_NEWS_PIPELINE = True
 except ImportError:
     HAS_NEWS_PIPELINE = False
-TODAY    = datetime.date.today()
+TODAY    = datetime.datetime.now(datetime.timezone.utc).date()
 OUT_PATH = BASE_DIR + "/reports/daily_report_" + TODAY.strftime("%Y-%m-%d") + ".html"
 TODAY_STR = TODAY.strftime("%d %b %Y")
 NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-ts_today  = int(datetime.datetime.combine(TODAY, datetime.time(23,59)).replace(tzinfo=datetime.timezone.utc).timestamp())
-ts_52w    = int((datetime.datetime.combine(TODAY, datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
+ts_today  = last_complete_day_end_timestamp()  # price archive excludes today\u0027s still-open UTC bar
+ts_52w    = int((datetime.datetime.combine(previous_completed_utc_day(), datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
 
 # ── DATA ──────────────────────────────────────────────────────────────────────
 
@@ -39,7 +40,7 @@ def yahoo_ohlc(symbol, days=90):
         for i, ts in enumerate(timestamps):
             rows.append({
                 "ts": int(ts),
-                "date": datetime.date.fromtimestamp(ts),
+                "date": datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).date(),
                 "open":   ohlc["open"][i],
                 "high":   ohlc["high"][i],
                 "low":    ohlc["low"][i],
@@ -824,12 +825,12 @@ def gen_macro_narrative(macro):
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
-    btc_ohlc    = yahoo_ohlc("BTC-USD", 252)  # única serie de precio diario BTC
-    spy_ohlc    = yahoo_ohlc("SPY", 252)
-    spx_ohlc    = yahoo_ohlc("^GSPC", 90)
-    gold_ohlc   = yahoo_ohlc("GC=F", 252)
-    silver_ohlc = yahoo_ohlc("SI=F", 90)
-    oil_ohlc    = yahoo_ohlc("CL=F", 90)
+    btc_ohlc    = closed_daily_bars(yahoo_ohlc("BTC-USD", 252))  # only completed UTC bars
+    spy_ohlc    = closed_daily_bars(yahoo_ohlc("SPY", 252))
+    spx_ohlc    = closed_daily_bars(yahoo_ohlc("^GSPC", 90))
+    gold_ohlc   = closed_daily_bars(yahoo_ohlc("GC=F", 252))
+    silver_ohlc = closed_daily_bars(yahoo_ohlc("SI=F", 90))
+    oil_ohlc    = closed_daily_bars(yahoo_ohlc("CL=F", 90))
     oc = get_btc_onchain()
     macro = get_macro_fred()
 
@@ -840,7 +841,7 @@ def main():
         ohlc_f[-1]["ts"], datetime.timezone.utc
     ).date()
     age = (datetime.datetime.now(datetime.timezone.utc).date() - last_utc).days
-    if age < -1 or age > 2:
+    if age < 1 or age > 2:
         raise RuntimeError(f"Precio BTC-USD desactualizado: fecha {last_utc}, diferencia {age} días")
     btc_price, prev_btc = ohlc_f[-1]["close"], ohlc_f[-2]["close"]
     if btc_price is None or btc_price <= 0 or prev_btc is None or prev_btc <= 0:
