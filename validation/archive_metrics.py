@@ -6,6 +6,7 @@ Guarda: BTC (precio + on-chain + tecnicos), SPY, GOLD, OIL, SILVER, MACRO.
 """
 import os, sys, datetime, sqlite3
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ingestion.daily_cutoff import closed_daily_bars
 from analysis.daily_report import (
     yahoo_ohlc, compute_rsi, compute_ma, ema_python,
     compute_macd, stoch, williams_r, cci, atr,
@@ -14,7 +15,7 @@ from analysis.daily_report import (
 )
 
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
-TODAY   = datetime.date.today()
+TODAY   = datetime.datetime.now(datetime.timezone.utc).date()
 TODAY_STR = TODAY.strftime("%Y-%m-%d")
 
 def _save(db, cur, date, asset, metric, value, unit, source):
@@ -23,12 +24,20 @@ def _save(db, cur, date, asset, metric, value, unit, source):
         VALUES (?, ?, ?, ?, ?, ?)
     """, (date, asset, metric, value, unit, source))
 
+def _completed_yahoo(symbol, days):
+    """Archive only completed UTC days, identical to the HTML report."""
+    rows = closed_daily_bars(yahoo_ohlc(symbol, days))
+    if len(rows) < 2:
+        raise RuntimeError(f"{symbol}: fewer than two completed UTC candles")
+    return rows
+
+
 def archive_all():
     db = sqlite3.connect(DB_PATH)
     cur = db.cursor()
 
     # ── BTC ────────────────────────────────────────────────────────────────
-    btc_ohlc = yahoo_ohlc("BTC-USD", 252)   # 252 needed for SMA200
+    btc_ohlc = _completed_yahoo("BTC-USD", 252)   # 252 needed for SMA200
     ohlc_f = [r for r in btc_ohlc
                if r["close"] is not None and r["high"] is not None and r["low"] is not None]
     btc_c = [r["close"] for r in ohlc_f]
@@ -58,6 +67,7 @@ def archive_all():
 
     # Price + change
     _save(db, cur, TODAY_STR, "BTC", "price",        btc_cur,            "USD",    "yahoo")
+    _save(db, cur, TODAY_STR, "BTC", "close_ts", btc_ohlc[-1]["ts"], "unix_s", "yahoo")
     if chg is not None:
         _save(db, cur, TODAY_STR, "BTC", "chg_24h",     chg,                "%",      "yahoo")
     _save(db, cur, TODAY_STR, "BTC", "rsi_14",        btc_rsi,            "ratio",  "yahoo")
@@ -103,7 +113,7 @@ def archive_all():
     _save(db, cur, TODAY_STR, "BTC", "from_ath",       btc_p["from_ath"],   "%",      "sql")
 
     # ── SPY ──────────────────────────────────────────────────────────────
-    spy_ohlc  = yahoo_ohlc("SPY",  252)   # 252 needed for SMA200
+    spy_ohlc  = _completed_yahoo("SPY",  252)   # 252 needed for SMA200
     spy_f = [r for r in spy_ohlc if r["close"] is not None]
     spy_c = [r["close"] for r in spy_f]
     spy_h = [r["high"]  for r in spy_f]
@@ -123,6 +133,7 @@ def archive_all():
     spy_chg    = (spy_cur - spy_prev) / spy_prev * 100 if spy_cur and spy_prev else None
 
     _save(db, cur, TODAY_STR, "SPY", "price",        spy_cur,             "USD",    "yahoo")
+    _save(db, cur, TODAY_STR, "SPY", "close_ts", spy_ohlc[-1]["ts"], "unix_s", "yahoo")
     if spy_chg is not None:
         _save(db, cur, TODAY_STR, "SPY", "chg_24h",    spy_chg,             "%",      "yahoo")
     _save(db, cur, TODAY_STR, "SPY", "rsi_14",        spy_rsi,             "ratio",  "yahoo")
@@ -140,7 +151,7 @@ def archive_all():
         _save(db, cur, TODAY_STR, "SPY", "res_1",      spy_res[-1],         "USD",    "computed")
 
     # ── GOLD ─────────────────────────────────────────────────────────────
-    gold_ohlc = yahoo_ohlc("GC=F", 252)   # 252 needed for SMA200
+    gold_ohlc = _completed_yahoo("GC=F", 252)   # 252 needed for SMA200
     gold_f = [r for r in gold_ohlc if r["close"] is not None]
     gold_c = [r["close"] for r in gold_f]
     gold_h = [r["high"]  for r in gold_f]
@@ -161,6 +172,7 @@ def archive_all():
     gold_chg    = (gold_cur - gold_prev) / gold_prev * 100 if gold_cur and gold_prev else None
 
     _save(db, cur, TODAY_STR, "GOLD", "price",        gold_cur,             "USD",    "yahoo")
+    _save(db, cur, TODAY_STR, "GOLD", "close_ts", gold_ohlc[-1]["ts"], "unix_s", "yahoo")
     if gold_chg is not None:
         _save(db, cur, TODAY_STR, "GOLD", "chg_24h",   gold_chg,             "%",      "yahoo")
     _save(db, cur, TODAY_STR, "GOLD", "rsi_14",        gold_rsi,             "ratio",  "yahoo")
@@ -179,20 +191,22 @@ def archive_all():
         _save(db, cur, TODAY_STR, "GOLD", "res_1",    gold_res[-1],         "USD",    "computed")
 
     # ── SILVER ────────────────────────────────────────────────────────────
-    slvr_ohlc = yahoo_ohlc("SI=F", 30)
+    slvr_ohlc = _completed_yahoo("SI=F", 30)
     slvr_cur = slvr_ohlc[-1]["close"] if slvr_ohlc else None
     slvr_prev = slvr_ohlc[-2]["close"] if len(slvr_ohlc) >= 2 else None
     slvr_chg = (slvr_cur - slvr_prev) / slvr_prev * 100 if slvr_cur and slvr_prev else None
     _save(db, cur, TODAY_STR, "SILVER", "price",    slvr_cur,             "USD",    "yahoo")
+    _save(db, cur, TODAY_STR, "SILVER", "close_ts", slvr_ohlc[-1]["ts"], "unix_s", "yahoo")
     if slvr_chg is not None:
         _save(db, cur, TODAY_STR, "SILVER", "chg_24h", slvr_chg,             "%",      "yahoo")
 
     # ── OIL ────────────────────────────────────────────────────────────────
-    oil_ohlc = yahoo_ohlc("CL=F", 30)
+    oil_ohlc = _completed_yahoo("CL=F", 30)
     oil_cur = oil_ohlc[-1]["close"] if oil_ohlc else None
     oil_prev = oil_ohlc[-2]["close"] if len(oil_ohlc) >= 2 else None
     oil_chg = (oil_cur - oil_prev) / oil_prev * 100 if oil_cur and oil_prev else None
     _save(db, cur, TODAY_STR, "OIL", "price",         oil_cur,             "USD",    "yahoo")
+    _save(db, cur, TODAY_STR, "OIL", "close_ts", oil_ohlc[-1]["ts"], "unix_s", "yahoo")
     if oil_chg is not None:
         _save(db, cur, TODAY_STR, "OIL", "chg_24h",    oil_chg,             "%",      "yahoo")
 
