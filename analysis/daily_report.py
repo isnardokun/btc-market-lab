@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from rendering.onchain_complement import render_complement, read_complement
-from rendering.market_context import render_market_context
+from rendering.market_context import render_market_context, read_upcoming_calendar
 from analysis.research_studio import render_executive_brief, rbn_diagnostic, rsi_zone
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
@@ -1124,18 +1124,19 @@ def main():
         yield10=m10y, yield10_date=m10y_date,
         rbn_available=bool(rbn_rows)))
 
-    # MACRO CALENDAR
+    # MACRO CALENDAR: persisted official release schedules; no hardcoded dates.
+    macro_events=read_upcoming_calendar(DB_PATH)
     A('<div class="kicker" style="margin-bottom:8px">Calendario Macroeconomico</div>')
     A('<div class="macro-bar">')
-    if not MACRO_EVENTS:
+    if not macro_events:
         A('<div class="macro-event"><div class="me-name">Calendario pendiente de verificación</div>'
           '<div class="me-imp">Sin eventos programados verificables en la fuente local. '
           'No se presentan fechas estimadas.</div></div>')
-    for date, name, imp, desc in MACRO_EVENTS:
+    for date, name, imp, desc in macro_events:
         A(f'<div class="macro-event">'
-          f'<div class="me-date">{date} &middot; {imp}</div>'
-          f'<div class="me-name">{name}</div>'
-          f'<div class="me-imp">{desc}</div></div>')
+          f'<div class="me-date">{html_escape(date)} &middot; {html_escape(imp)}</div>'
+          f'<div class="me-name">{html_escape(name)}</div>'
+          f'<div class="me-imp">{html_escape(desc)}</div></div>')
     A('</div>')
 
     # MACRO STRIP (FRED real data)
