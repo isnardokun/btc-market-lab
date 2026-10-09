@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Ingest BTC price from Yahoo Finance into price_btc table."""
 import urllib.request, json, sqlite3, datetime, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from ingestion.daily_cutoff import previous_completed_utc_day
 
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?interval=1d&range=2y"
 
@@ -16,7 +19,13 @@ def ingest():
     db = sqlite3.connect("/home/ignotus/btc-research/db/btc_research.db")
 
     inserted = 0
+    skipped_open = 0
+    cutoff = previous_completed_utc_day()
     for ts, price in zip(timestamps, closes):
+        date_utc = datetime.datetime.fromtimestamp(ts, datetime.timezone.utc).date()
+        if date_utc > cutoff:
+            skipped_open += 1
+            continue
         if price is None:
             continue
         n = db.execute("INSERT OR REPLACE INTO price_btc (ts, price) VALUES (?, ?)",
@@ -25,7 +34,7 @@ def ingest():
 
     db.commit()
     db.close()
-    print(f"price_btc: {inserted} updated")
+    print(f"price_btc: {inserted} updated through {cutoff} UTC; {skipped_open} open-day bars skipped")
 
 if __name__ == "__main__":
     ingest()

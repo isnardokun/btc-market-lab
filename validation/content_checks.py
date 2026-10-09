@@ -98,6 +98,8 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
                     errors.append(label + ": timestamp UTC inválido")
                     continue
                 delay = (emitted - observed).total_seconds() / 3600
+                if label == "BTC diario" and observed.date() >= emitted.date():
+                    errors.append("BTC diario: vela del día UTC aún abierto (no es cierre confirmado)")
                 if delay < -0.1:
                     errors.append(label + ": observación futura respecto a generación")
                 elif delay > threshold_hours:
