@@ -119,6 +119,44 @@ privados al repo público. El PR diagnóstico es público incluso si está en
 borrador. Las claves previamente expuestas en el historial de este proyecto
 deben rotarse separadamente.
 
+## Auditoría de escala de Supply in Profit (09-oct-2026)
+
+Hermes inspeccionó la SQLite local y el `--sample` autenticado. Dos slugs
+independientes devuelven un campo escalar cuyo nombre coincide con su slug:
+
+| Slug | Valor original RBN (08-oct-2026) | Display fraccional **provisional** |
+| --- | ---: | ---: |
+| `supply_in_profit_percent` | `0.683561` | `≈68.4%*` |
+| `supply_in_profit_sth_percent` | `0.709276` | `≈70.9%*` |
+
+Las fichas públicas de ResearchBitcoin denominan ambas series `percent`, pero
+**no especifican de forma inequívoca** si el JSON usa fracciones 0..1 o
+valores 0..100. Los datos observados en la API (0.63..0.93) sustentan la
+**hipótesis operativa** de fracciones. La validación antigua `0 <= x <= 100`
+aceptaba ambas escalas; no demostraba que fuese porcentual 0..100. El reporte
+ya contenía ambas métricas y las mostraba como `0.7%`, potencialmente
+subestimadas por un factor 100.
+
+Para no reescribir ni destruir observaciones, la base SQLite conserva
+`value` original y `unit=percent`. El catálogo marca solamente estos dos
+slugs con `raw_scale=fraction_0_1`. El parser rechaza valores fuera de 0..1;
+el renderizador transforma **solo la visualización** mediante `value * 100`
+y muestra `≈` y una nota explícita `*` de **normalización provisional**
+junto con el dato original `data-api-raw`. No activar señales, alertas ni
+narrativas direccionales basadas en estos porcentajes.
+
+**Limitaciones:** no se ha obtenido una confirmación expresa del proveedor
+sobre el formato JSON ni sobre el denominador exacto de la serie STH.
+`supply_in_profit_sth_percent > supply_in_profit_percent` no prueba por sí
+solo que ambas usen el mismo denominador; las fichas sobre variantes de
+cohortes son demasiado generales para afirmar equivalencia. Si la API cambia
+formato, la validación debe abortar y un humano debe revisar la fuente y
+los ejemplos auténticos antes de migrar/escalar datos.
+
+Fichas originales:
+- https://researchbitcoin.net/metrics/supply_in_profit_percent/
+- https://researchbitcoin.net/metrics/supply_in_profit_sth_percent/
+
 ## Siguientes extensiones (no incluidas)
 
 - Añadir ingesta incremental diaria al pipeline **solo después** de validar
