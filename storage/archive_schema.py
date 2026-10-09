@@ -4,6 +4,8 @@ No DROP, no destructive migration, no unit conversion. SQL migrations are
 idempotent and all changes happen on the local SQLite machine only.
 """
 import sqlite3
+import datetime as dt
+import hashlib
 from pathlib import Path
 
 DDL = """
@@ -90,3 +92,46 @@ def register_series(connection, provider, metric, unit, raw_scale, endpoint):
         " VALUES(?,?,?,?,?) ON CONFLICT(provider,metric) DO UPDATE SET "
         "unit=excluded.unit,raw_scale=excluded.raw_scale,endpoint=excluded.endpoint",
         (provider,metric,unit,raw_scale,endpoint))
+
+
+def record_batch(db_path, provider, slug, metric, first, end, observed, tier):
+    """One ACID transaction for fetch log, raw versions, and coverage."""
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    with sqlite3.connect(db_path, timeout=30) as conn:
+        conn.execute("PRAGMA foreign_keys=ON")
+        register_source(conn, provider, tier, now)
+        register_series(conn, provider, slug, metric.unit, metric.raw_scale,
+                        metric.endpoint + "/" + slug)
+        for _, (observed_at, value) in observed.items():
+            digest = hashlib.sha256(
+                f"{slug}|{observed_at}|{value!r}".encode("utf-8")
+            ).hexdigest()
+            conn.execute(
+                "INSERT OR IGNORE INTO archive_observation_revisions "
+                "(provider,metric,observed_utc,observed_value,value_unit,"
+                "fetched_at_utc,raw_hash_sha256) VALUES (?,?,?,?,?,?,?)",
+                (provider, slug, observed_at, value, metric.unit, now, digest)
+            )
+        conn.execute(
+            "INSERT INTO archive_fetch_runs "
+            "(provider,metric,requested_from_utc,requested_to_utc,status,"
+            "rows_received,rows_saved,fetched_at_utc) VALUES (?,?,?,?,?,?,?,?)",
+            (provider, slug, first, end, "completed" if observed else "empty",
+             len(observed), len(observed), now)
+        )
+        summary = conn.execute(
+            "SELECT MIN(observed_utc),MAX(observed_utc),COUNT(DISTINCT observed_utc) "
+            "FROM archive_observation_revisions WHERE provider=? AND metric=?",
+            (provider, slug)
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO archive_coverage "
+            "(provider,metric,first_observed_utc,last_observed_utc,"
+            "observation_count,verified_at_utc,completeness) "
+            "VALUES (?,?,?,?,?,?,'partial') ON CONFLICT(provider,metric)"
+            " DO UPDATE SET first_observed_utc=excluded.first_observed_utc,"
+            " last_observed_utc=excluded.last_observed_utc,"
+            " observation_count=excluded.observation_count,"
+            " verified_at_utc=excluded.verified_at_utc",
+            (provider, slug, summary[0], summary[1], summary[2], now)
+        )
