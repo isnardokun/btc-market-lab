@@ -11,7 +11,7 @@ import os, sys, sqlite3, re, datetime, hashlib
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from validation.content_checks import audit_report_html
+from validation.content_checks import audit_report_html, extract_cpi_yoy_from_macro_strip
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
 
 TODAY = datetime.date.today()
@@ -61,9 +61,8 @@ def check_exactitud():
 
     # 1.2 Extraer métricas del HTML para verificar consistencia con BD
     # CPI YoY
-    cpi_match = re.search(r'CPI YoY.*?(\d+\.?\d*)%', html)
-    if cpi_match:
-        html_cpi = float(cpi_match.group(1))
+    html_cpi = extract_cpi_yoy_from_macro_strip(html)
+    if html_cpi is not None:
         cur.execute("""
             SELECT value FROM daily_metrics
             WHERE asset='MACRO' AND metric='cpi_yoy'
@@ -124,10 +123,24 @@ def check_exactitud():
                 issue("exactitud", "warning",
                       f"BTC precio en reporte vs BD: ${btc_price:,.0f} vs ${db_btc:,.0f} (diff >2%)")
 
-    # 1.6 CPI vigente — verificar que no sea dato histórico de abr-2025 (2.33%)
-    # Solo si aparece en contexto de CPI, no cualquier "2.33" (ej. MACD = -532.33)
-    if re.search(r'CPI[^<]{0,60}2\.33\s*%', html, re.I):
-        issue("exactitud", "critical", "Reporte contiene CPI 2.33% — dato histórico de abr-2025 usado como vigente")
+    # 1.6 No rechazar un valor numérico por ser idéntico a una lectura histórica.
+    # El valor se comprueba contra la observación archivada del mismo indicador.
+    if html_cpi is not None:
+        cur.execute(
+            "SELECT date FROM macro_fred WHERE series_id='CPI_YOY' "
+            "ORDER BY date DESC LIMIT 1"
+        )
+        cpi_source_date = cur.fetchone()
+        if cpi_source_date:
+            try:
+                dated = datetime.date.fromisoformat(cpi_source_date[0])
+                age_days = (TODAY - dated).days
+                if age_days > 120 or age_days < -31:
+                    issue("exactitud", "warning",
+                          f"CPI_YOY de FRED con fecha base {dated}, "
+                          f"antigüedad {age_days} días: verificar calendario")
+            except ValueError:
+                issue("exactitud", "warning", "Fecha de CPI_YOY no parseable")
 
     # 1.7 Verificar ATH correcto
     cur.execute("SELECT MAX(price), ts FROM price_btc")
