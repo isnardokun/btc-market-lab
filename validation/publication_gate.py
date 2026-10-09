@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from validation.content_checks import audit_report_html, extract_cpi_yoy_from_macro_strip
 from validation.archive_reconciliation import audit_archive_against_html
 from validation.rbn_reconciliation import audit_rbn_against_html
+from validation.market_context_reconciliation import audit_market_context_against_html
 from ingestion.daily_cutoff import previous_completed_utc_day, last_complete_day_end_timestamp
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
 
@@ -446,6 +447,15 @@ def run():
     if REPORT_PATH.is_file():
         for message in audit_rbn_against_html(
             REPORT_PATH.read_text(encoding="utf-8"), DB_PATH, TODAY
+        ):
+            issue("consistencia", "critical", message)
+
+    # Every new derivatives/ETF value rendered from SQLite must be reconciled
+    # against the retained normalized observation AND the original payload SHA.
+    # No optional market-context panel => legacy pipeline remains valid.
+    if REPORT_PATH.is_file():
+        for message in audit_market_context_against_html(
+            REPORT_PATH.read_text(encoding="utf-8"), DB_PATH
         ):
             issue("consistencia", "critical", message)
 

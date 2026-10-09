@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from rendering.onchain_complement import render_complement, read_complement
+from rendering.market_context import render_market_context, read_upcoming_calendar
 from analysis.research_studio import render_executive_brief, rbn_diagnostic, rsi_zone
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
@@ -586,10 +587,8 @@ def classify_impact(text):
 
 # ── MACRO EVENTS ─────────────────────────────────────────────────────────────
 
-# No se anuncian eventos sin calendario oficial verificable e ingestado.
-# Anunciar fechas estáticas como "próximas" producía información incorrecta.
-MACRO_EVENTS = []
-
+# El calendario se consulta ahora exclusivamente desde market_calendar_events
+# en btc_research.db (read_upcoming_calendar), nunca desde fechas fijas.
 
 # ── NARRATIVE GENERATOR ───────────────────────────────────────────────────────
 
@@ -1123,18 +1122,19 @@ def main():
         yield10=m10y, yield10_date=m10y_date,
         rbn_available=bool(rbn_rows)))
 
-    # MACRO CALENDAR
+    # MACRO CALENDAR: persisted official release schedules; no hardcoded dates.
+    macro_events=read_upcoming_calendar(DB_PATH)
     A('<div class="kicker" style="margin-bottom:8px">Calendario Macroeconomico</div>')
     A('<div class="macro-bar">')
-    if not MACRO_EVENTS:
+    if not macro_events:
         A('<div class="macro-event"><div class="me-name">Calendario pendiente de verificación</div>'
           '<div class="me-imp">Sin eventos programados verificables en la fuente local. '
           'No se presentan fechas estimadas.</div></div>')
-    for date, name, imp, desc in MACRO_EVENTS:
+    for date, name, imp, desc in macro_events:
         A(f'<div class="macro-event">'
-          f'<div class="me-date">{date} &middot; {imp}</div>'
-          f'<div class="me-name">{name}</div>'
-          f'<div class="me-imp">{desc}</div></div>')
+          f'<div class="me-date">{html_escape(date)} &middot; {html_escape(imp)}</div>'
+          f'<div class="me-name">{html_escape(name)}</div>'
+          f'<div class="me-imp">{html_escape(desc)}</div></div>')
     A('</div>')
 
     # MACRO STRIP (FRED real data)
@@ -1237,6 +1237,8 @@ def main():
     # Empty until Hermes explicitly initializes/syncs the supplemental source.
     A(render_complement(DB_PATH, last_utc))
     A(rbn_diagnostic(rbn_rows, btc_price=btc_price, cutoff=last_utc))
+    # Strictly sourced SQLite context; missing/stale providers are omitted, not zero-filled.
+    A(render_market_context(DB_PATH))
 
     # Expert Analysis — REAL DATA NARRATIVE
     A('<div class="expert-box">')
@@ -1451,8 +1453,8 @@ def main():
       f'({pct(btc_chg)} frente al cierre anterior); '
       f'RSI(14) {btc_rsi:.1f} y MVRV {oc["mvrv"]:.2f}x. '
       'Los escenarios son condicionales, no probabilidades calibradas. '
-      'No se dispone aquí de flujos ETF verificados ni de un modelo '
-      'calibrado que permita cuantificar retornos futuros.</p>')
+      'Los flujos ETF se presentan por separado solo cuando la fuente está '
+      'archivada en SQLite; no existe aquí un modelo calibrado de retorno futuro.</p>')
     A(f'<p><strong>Datos macro disponibles:</strong> {macro_narr}</p>')
     A('</div>')
 
