@@ -65,7 +65,7 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
         # Required observability for financial publication. A 100-point gate
         # cannot imply live prices if the underlying observation is stale.
         generated = re.search(
-            r"Generado\\s+(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})\\s+UTC", source
+            r"Generado\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+UTC", source
         )
         if not generated:
             errors.append("Sin timestamp UTC completo de generación")
