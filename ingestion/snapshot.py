@@ -4,7 +4,7 @@ ingestion/snapshot.py
 ====================
 Genera un snapshot inmutable por cada ejecución del pipeline.
 Contiene:
-  - Hash SHA256 del estado de la BD (precios, macro, on-chain)
+  - Huellas SHA256 de muestras ordenadas de tablas (NO hash completo de la BD)
   - Timestamps de frescura de cada fuente
   - Versión del código (git commit o timestamp de archivo)
   - Parámetros usados (series, umbrales)
@@ -23,7 +23,7 @@ NOW = datetime.datetime.now().strftime("%H%M%S")
 
 
 def get_data_hash():
-    """Hash SHA256 del estado actual de las tablas principales."""
+    """Huellas de muestras SQLite; no representan un hash completo de la BD."""
     db = sqlite3.connect(DB_PATH)
     cur = db.cursor()
     hashes = {}
@@ -55,11 +55,11 @@ def get_freshness():
 
     cur.execute("SELECT MAX(ts) FROM price_btc")
     r = cur.fetchone()
-    freshness["price_btc"] = datetime.datetime.fromtimestamp(r[0]).isoformat() if r and r[0] else None
+    freshness["price_btc"] = datetime.datetime.fromtimestamp(r[0], datetime.timezone.utc).isoformat() if r and r[0] else None
 
     cur.execute("SELECT MAX(ts) FROM daily")
     r = cur.fetchone()
-    freshness["daily_onchain"] = datetime.datetime.fromtimestamp(r[0]).isoformat() if r and r[0] else None
+    freshness["daily_onchain"] = datetime.datetime.fromtimestamp(r[0], datetime.timezone.utc).isoformat() if r and r[0] else None
 
     cur.execute("SELECT MAX(date) FROM macro_fred")
     r = cur.fetchone()
@@ -106,7 +106,8 @@ def get_pipeline_params():
     return {
         "fred_series_count": len(fred_series),
         "fred_series": fred_series,
-        " SMA200_window": 252,
+        "SMA200_window": 200,
+        "historical_price_lookback": 252,
         "rsi_period": 14,
         "atr_period": 14,
         "lookback_supp_res": 20,
@@ -121,7 +122,7 @@ def create_snapshot():
     snapshot_id = f"snapshot_{TODAY_STR}_{NOW}"
     snapshot = {
         "snapshot_id": snapshot_id,
-        "created_at": datetime.datetime.now().isoformat(),
+        "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "report_date": TODAY_STR,
         "data_hash": get_data_hash(),
         "freshness": get_freshness(),
