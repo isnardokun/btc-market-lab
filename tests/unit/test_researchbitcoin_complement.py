@@ -55,6 +55,63 @@ class ResearchBitcoinComplementTests(unittest.TestCase):
                 "supply_in_profit_sth_percent", NOW,
             )
 
+    def test_fraction_scale_is_specific_to_supply_profit_fields(self):
+        self.assertEqual(CATALOG["supply_in_profit_percent"].raw_scale, "fraction_0_1")
+        self.assertEqual(CATALOG["supply_in_profit_sth_percent"].raw_scale, "fraction_0_1")
+        self.assertEqual(CATALOG["sopr_lth"].raw_scale, "native")
+        self.assertEqual(CATALOG["supply_in_profit_percent"].unit, "percent")
+
+    def test_raw_fraction_stored_unchanged_and_displayed_with_caveat(self):
+        fixtures = [
+            ("supply_in_profit_percent", 0.683561, "≈68.4%*"),
+            ("supply_in_profit_sth_percent", 0.709276, "≈70.9%*"),
+        ]
+        for slug, observed_value, _ in fixtures:
+            result = parse_scalar_rows({"data": [{
+                "time": "2026-10-08T00:00:00Z", slug: observed_value
+            }]}, slug, NOW)
+            self.assertEqual(result["2026-10-08"][1], observed_value)
+            store_rows(self.dbpath, slug, result)
+        with sqlite3.connect(self.dbpath) as db:
+            actual = dict(db.execute(
+                "SELECT metric, value FROM onchain_external_observations"
+            ).fetchall())
+        self.assertEqual(actual, {slug: value for slug, value, _ in fixtures})
+        html = render_complement(self.dbpath, "2026-10-08")
+        for slug, value, output in fixtures:
+            self.assertIn(f'data-metric="{slug}"', html)
+            self.assertIn(f'data-api-raw="{value}"', html)
+            self.assertIn(output, html)
+        self.assertIn("Normalización provisional", html)
+        self.assertIn("dato bruto × 100", html)
+        self.assertNotIn(">0.7%</div>", html)
+
+    def test_raw_fraction_rejects_68_instead_of_silently_accepting(self):
+        slug = "supply_in_profit_percent"
+        for observed_value in (68.3561, -0.1, 1.001):
+            with self.subTest(value=observed_value):
+                with self.assertRaisesRegex(ValueError, "fraccional 0..1"):
+                    parse_scalar_rows({"data": [{
+                        "time": "2026-10-08T00:00:00Z",
+                        slug: observed_value
+                    }]}, slug, NOW)
+
+    def test_old_fraction_storage_outside_0_1_is_omitted(self):
+        initialize_database(self.dbpath)
+        with sqlite3.connect(self.dbpath) as db:
+            db.execute(
+                """INSERT INTO onchain_external_observations
+                (provider, metric, observed_date, observed_at_utc, value,
+                 unit, source_endpoint, fetched_at_utc)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("researchbitcoin", "supply_in_profit_percent", "2026-10-08",
+                 "2026-10-08T00:00:00+00:00", 68.3561, "percent",
+                 "/v2/supply_in_profitloss/supply_in_profit_percent",
+                 "2026-10-09T00:00:00+00:00")
+            )
+        self.assertNotIn("Oferta total en ganancias",
+                         render_complement(self.dbpath, "2026-10-08"))
+
     def test_provider_slug_key_is_supported_without_guessing_field(self):
         rows = parse_scalar_rows({"data": [
             {"time": "2026-10-08T00:00:00Z", "sopr_lth": 1.054}
