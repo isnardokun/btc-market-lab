@@ -172,3 +172,42 @@ hermes skills install isnardokun/btc-market-lab/skills/mercados-daily-pro
 
 Este comando consulta el repositorio GitHub; para el trabajo en la máquina es
 preferible el instalador local y su copia sincronizada con el checkout.
+
+
+## 8. Diálogo de diagnósticos Hermes ⇄ ChatGPT
+
+Para ayudar a revisar los problemas del HTML desde una sesión distinta de
+la máquina, usar scripts/hermes_review_cycle.sh y scripts/hermes_bridge.py.
+
+- **Local (predeterminado)**: actualización, pruebas, gate y paquete con log
+  depurado, datos no sensibles del equipo, estado de SQLite y HTML disponible.
+- **GitHub (opt-in)**: abrir un Pull Request BORRADOR con el paquete, en una
+  rama hermes/feedback-..., sin modificar master ni enviar Telegram.
+- **Comentarios PR**: sirven para la revisión y las respuestas entre este
+  asistente y Hermes cuando el usuario solicita leer el PR. No existe
+  conexión directa ni vigilancia automática entre agentes.
+
+~~~bash
+# Primera revisión sin publicación de datos
+bash scripts/hermes_review_cycle.sh --no-update --pipeline --include-html
+
+# Solo con autorización explícita de publicar en repo GitHub PÚBLICO
+bash scripts/hermes_review_cycle.sh --no-update --pipeline --include-html --public
+
+# Hermes consulta las observaciones del revisor de un PR
+python3 scripts/hermes_bridge.py inbox --pr NUMERO
+~~~
+
+El HTML dentro del PR es una **copia de diagnóstico**, que puede corresponder
+a un reporte rechazado o anterior a la ejecución. No implica gate PASS.
+Siempre inspeccionar run.json: report.kind, report.source_mtime_utc y gate.
+
+La implementación es deliberadamente de participación humana:
+la depuración automática de logs nunca garantiza privacidad absoluta. La
+revisión de secretos es esencial, sobre todo porque este repositorio es público.
+
+**Seguridad:** FRED, bot Telegram y Exa/ScrapeGraph tuvieron secretos
+expuestos en documentos Git; los valores actuales se retiraron, pero las
+credenciales antiguas requieren rotación y el historial persiste.
+
+Manual completo: [docs/HERMES_GITHUB_BRIDGE.md](HERMES_GITHUB_BRIDGE.md).

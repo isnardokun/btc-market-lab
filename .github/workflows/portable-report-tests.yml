@@ -15,4 +15,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Offline HTML and Telegram transport regression tests
-        run: python3 -m unittest -v tests.unit.test_portable_report tests.unit.test_hermes_skill
+        run: python3 -m unittest -v tests.unit.test_portable_report tests.unit.test_hermes_skill tests.unit.test_hermes_bridge

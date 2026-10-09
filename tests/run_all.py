@@ -15,6 +15,7 @@ TESTS = [
     ("Unit: Metric Registry", "python3 tests/unit/test_metric_registry.py"),
     ("Unit: Portable HTML / Telegram", "python3 tests/unit/test_portable_report.py"),
     ("Unit: Hermes Skill", "python3 tests/unit/test_hermes_skill.py"),
+    ("Unit: Hermes Bridge", "python3 tests/unit/test_hermes_bridge.py"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
