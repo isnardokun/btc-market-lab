@@ -177,3 +177,27 @@ Para cada actualización de fichas: PR de código, diferencia de SHA256,
 tests `test_knowledge_corpus_v2`, `test_specialized_news_rag`,
 `test_research_studio_v2` y revisión humana del contenido, fuentes y
 licencias.
+
+
+## Panel financiero contextual — solo SQLite
+
+El panel de ETF, open interest, funding liquidado y calendario se produce
+leyendo `market_etf_flows`, `market_derivatives` y
+`market_calendar_events`, jamás HTML extraído directamente de una web
+en el momento de renderizar. El almacenamiento bruto y la integridad
+están descritos en `docs/MARKET_CONTEXT_SQLITE.md`.
+
+Mostrar ETF por emisor y total publicado separado de cualquier
+suma parcial; dar fuente, fecha comercial, revisión y estados preliminares.
+Para OI rotular el exchange, BTC/USDT, unidad nativa, antigüedad y,
+si existe, USD comparable verificado. No componer un "OI agregado"
+sin contrato de normalización comprobado. Funding son pagos
+efectivamente liquidados, con fecha del settlement; no futuros estimados.
+En calendario, jamás inventar consenso, "actual", sorpresa, ni hora UTC
+no confirmada. Registrar fecha/horario verificable como rango y fuente.
+
+No mostrar cifras antiguas como "actuales"; si no hay observaciones
+útiles, ocultar bloque y declarar cobertura insuficiente. Registrar
+evidencias de diseño 320/390/768/1440 y A4. El gate habitual sigue
+siendo vinculante, pero el 100/100 de CI no valida automáticamente
+la exactitud de fuentes web o permisos de redistribución.
