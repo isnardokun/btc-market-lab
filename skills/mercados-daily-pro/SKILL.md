@@ -550,3 +550,23 @@ Secuencia de aceptación:
 Hermes aporta diagnósticos y evidencia y el revisor crea el PR; Hermes
 no debe modificar `master` por cuenta propia ni ejecutar cambios
 destructivos o backfills masivos sin autorización.
+
+
+## Procedimiento 11 — Corpus metodológico Research Studio v2
+
+Para que el analista utilice conocimiento documentado, no memoria libre del
+modelo, consultar `docs/KNOWLEDGE_CORPUS_V2.md`,
+`python3 scripts/corpus_query.py --manifest` y
+`python3 scripts/corpus_query.py --query 'MVRV'` antes de atribuir una
+definición. La base contiene 36 fichas de métodos y limitaciones y su
+SHA256. El HTML RAG v2 incluye hash/verisión verificables en el Gate.
+
+El corpus no son históricos ni predicciones. Solo se redacta sobre
+observaciones efectivas de SQLite/API, con método, fecha y escala. No sumar
+fuentes metodológicas homónimas, no confiar en noticias como cifras y no
+inventar ETF flows, funding o OI.
+
+Ejecutar `python3 -m unittest -v tests.unit.test_knowledge_corpus_v2` y
+`python3 tests/run_all.py` en cada actualización. Dar al usuario versión,
+SHA del corpus, pruebas, manifest, referencias revisadas y faltantes. No
+alterar archivos de ejecución locales ni publicar resultados privados.
