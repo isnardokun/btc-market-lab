@@ -26,6 +26,7 @@ TESTS = [
     ("Unit: Specialist News and Knowledge RAG", "python3 -m unittest -v tests.unit.test_specialized_news_rag"),
     ("Unit: Versioned Knowledge Corpus v2", "python3 -m unittest -v tests.unit.test_knowledge_corpus_v2"),
     ("Unit: Research Studio v2", "python3 -m unittest -v tests.unit.test_research_studio_v2"),
+    ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
     ("Unit: Historical API Archive + Research Design", "python3 -m unittest -v tests.unit.test_historical_archive_and_design"),
     ("Unit: Archive Schema, Lineage & Tier 2 Migration", "python3 -m unittest -v tests.unit.test_archive_schema_v1"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
