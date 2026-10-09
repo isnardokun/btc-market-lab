@@ -270,11 +270,26 @@ def _canonical_key(entry):
     return clean_url, title
 
 
-def merge_validated_news(exa_entries, rss_entries, limit=7):
+def fresh_article(entry, *, today):
+    """Require an explicit recent publish date; reject stale or generic pages."""
+    date_text = str(entry.get("date") or "")
+    try:
+        published = datetime.date.fromisoformat(date_text)
+    except (ValueError, TypeError):
+        return False
+    source_kind = entry.get("source_type", "discovery")
+    max_age = 21 if source_kind == "research" else 14 if source_kind == "primary" else 7
+    return 0 <= (today - published).days <= max_age
+
+
+def merge_validated_news(exa_entries, rss_entries, limit=7, today=None):
     """Keep original-source items first, then Exa; never duplicate URL/headline."""
+    today = today or datetime.datetime.now(datetime.timezone.utc).date()
     items = []
     seen_urls, seen_titles = set(), set()
     for item in list(rss_entries) + list(exa_entries):
+        if not fresh_article(item, today=today):
+            continue
         key_url, key_title = _canonical_key(item)
         if key_url in seen_urls or key_title in seen_titles:
             continue
@@ -293,36 +308,35 @@ SPECIALIST_DOMAINS = {
     "insights.glassnode.com": "Glassnode Insights",
     "bitcoinops.org": "Bitcoin Optech",
     "coinmetrics.io": "Coin Metrics",
+    "coinmetrics.substack.com": "Coin Metrics State of the Network",
 }
 
 
 def targeted_research_news(asset, *, today=None):
-    """Opt-in, domain-verified Exa research discovery. Never claims source fact-check."""
+    """Two bounded, domain-constrained queries for recent Bitcoin research."""
     if asset != "BTC" or os.getenv("NEWS_TARGETED_EXA", "0") != "1":
         return []
     today = today or datetime.datetime.now(datetime.timezone.utc).date()
     period = today.strftime("%B %Y")
-    query = ("Bitcoin onchain network realized value investor cohorts "
-             "site:insights.glassnode.com OR site:bitcoinops.org OR "
-             f"site:coinmetrics.io {period}")
-    entries = parse_mcporter_raw(exa_search(query, n=4))
+    # Avoid a single ambiguous OR-site query which can exclude every source.
+    queries = (
+        f"Bitcoin onchain research STH MVRV realized loss site:insights.glassnode.com {period}",
+        f"Bitcoin State of the Network onchain analysis site:coinmetrics.substack.com {period}",
+    )
     selected = []
-    for entry in entries:
-        host = (urlsplit(entry.get("url", "")).hostname or "").lower()
-        matched = next(((d, name) for d, name in SPECIALIST_DOMAINS.items()
-                        if host == d or host.endswith("." + d)), None)
-        if not matched:
-            continue
-        date_string = entry.get("date", "")
-        try:
-            age = (today - datetime.date.fromisoformat(date_string)).days
-        except (ValueError, TypeError):
-            continue
-        if not 0 <= age <= 21 or not validate_entry(entry, len(selected))[0]:
-            continue
-        entry["source"] = matched[1]
-        entry["source_type"] = "research"
-        selected.append(entry)
+    for query in queries:
+        entries = parse_mcporter_raw(exa_search(query, n=3))
+        for entry in entries:
+            host = (urlsplit(entry.get("url", "")).hostname or "").lower()
+            matched = next(((domain, name) for domain, name in SPECIALIST_DOMAINS.items()
+                            if host == domain or host.endswith("." + domain)), None)
+            if not matched:
+                continue
+            entry["source"] = matched[1]
+            entry["source_type"] = "research"
+            if not fresh_article(entry, today=today) or not validate_entry(entry, len(selected))[0]:
+                continue
+            selected.append(entry)
     return selected
 
 

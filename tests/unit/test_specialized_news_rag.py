@@ -4,7 +4,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from ingestion.specialized_news import SOURCES, parse_feed, collect_specialized_news
+from ingestion.specialized_news import SOURCES, parse_feed, collect_specialized_news, MAX_XML_BYTES
 from ingestion import news_pipeline
 from analysis.knowledge_rag import retrieve, explain_snapshot, render_research_note
 
@@ -38,7 +38,7 @@ class SpecializedNewsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_feed(b'<!DOCTYPE rss><rss></rss>', SOURCES[0], now=NOW)
         with self.assertRaises(ValueError):
-            parse_feed(b'X' * 600_000, SOURCES[0], now=NOW)
+            parse_feed(b'X' * (MAX_XML_BYTES + 1), SOURCES[0], now=NOW)
 
     def test_opt_out_does_not_call_fetcher(self):
         with patch.dict(os.environ, {"NEWS_RSS_ENABLED": "0"}):
@@ -65,6 +65,49 @@ class SpecializedNewsTests(unittest.TestCase):
         self.assertTrue(news_pipeline.validate_entry(ok, 0)[0])
         bad = dict(ok, title="Error: API request failed on source fetch")
         self.assertFalse(news_pipeline.validate_entry(bad, 0)[0])
+
+    def test_blS_index_is_not_a_dated_press_release(self):
+        xml = b"""<rss version="2.0"><channel><item>
+        <title>Major Economic Indicators Latest Numbers</title>
+        <link>https://www.bls.gov/</link>
+        <pubDate>Fri, 09 Oct 2026 13:00:00 GMT</pubDate>
+        <description>Consumer Price Index inflation and unemployment latest numbers are presented on this frequently refreshed landing page.</description>
+        </item></channel></rss>"""
+        self.assertEqual(parse_feed(xml, SOURCES[1], now=NOW), [])
+
+    def test_bitcoin_optech_source_registered(self):
+        self.assertTrue(any(src.name == "Bitcoin Optech"
+                            and src.asset == "BTC"
+                            and src.feed.endswith("/feed.xml") for src in SOURCES))
+
+    def test_undated_and_stale_exa_entries_not_reported(self):
+        today = dt.date(2026, 10, 9)
+        recent = {
+            "title": "Bitcoin liquidity changes following the latest policy announcement",
+            "url": "https://example.com/october-news",
+            "highlight": "The financial market report covers Bitcoin positioning and the latest recent economic and liquidity trends.",
+            "date": "2026-10-08",
+            "source_type": "discovery",
+        }
+        undated = dict(recent, url="https://example.com/undated", date="")
+        stale = dict(recent, url="https://example.com/old", date="2026-03-03")
+        future = dict(recent, url="https://example.com/future", date="2026-10-10")
+        merged = news_pipeline.merge_validated_news(
+            [undated, stale, future, recent], [], today=today)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["url"], recent["url"])
+
+    def test_targeted_research_accepts_coinmetrics_substack_recent(self):
+        raw = """Title: Bitcoin's changing monetary policy sensitivity discussed in new research
+URL: https://coinmetrics.substack.com/p/bitcoin-market-macro-sensitivity
+Published: 2026-10-08
+Highlights: The State of the Network team discusses the changing sensitivity of Bitcoin markets to macroeconomic news and interest rates."""
+        with patch.dict(os.environ, {"NEWS_TARGETED_EXA": "1"}):
+            with patch.object(news_pipeline, "exa_search", return_value=raw):
+                result = news_pipeline.targeted_research_news("BTC", today=dt.date(2026, 10, 9))
+        self.assertGreaterEqual(len(result), 1)
+        self.assertEqual(result[0]["source"], "Coin Metrics State of the Network")
+        self.assertEqual(result[0]["source_type"], "research")
 
     def test_fail_open_on_publisher_failure(self):
         with patch.dict(os.environ, {"NEWS_RSS_ENABLED": "1"}):
