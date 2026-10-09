@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline GitHub bridge regressions; no gh or network required."""
-import json
+import json, os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from pathlib import Path
 import subprocess
 import tempfile
