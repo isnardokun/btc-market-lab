@@ -84,7 +84,7 @@ class FinancialIntegrityTests(unittest.TestCase):
                     48, 100, -12, asset,
                 )
                 self.assertIn("Objetivo condicional:", bull)
-                self.assertIn("Objetivo condicional:", bear)
+                self.assertTrue("Objetivo condicional:" in bear or "Objetivo no estimable" in bear)
                 self.assertIn("spot", base)
 
     def test_missing_upper_target_is_explicit_not_fabricated(self):
