@@ -12,6 +12,8 @@ Responsabilidades:
 NO inventa datos. Si Exa falla, retorna lista vacía con logging.
 """
 import os, sys, re, subprocess, datetime, json
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from ingestion.specialized_news import collect_specialized_news
 from pathlib import Path
 
 # ─── Configuración ─────────────────────────────────────────────────────────
@@ -214,9 +216,10 @@ def validate_entry(entry, index):
         return False, f"[{index}] Highlight insuficiente ({len(highlight)} chars)"
 
     # Title shouldn't be an error message
-    error_indicators = ["error", "rate limit", "429", "401", "403", "failed", "timeout"]
-    if any(e in title.lower() for e in error_indicators):
-        return False, f"[{index}] Título parece mensaje de error: '{title[:50]}'"
+    # Match actual API failure messages, not substrings within legitimate headlines.
+    if re.search(r"^(?:api\s+)?(?:error\s*[:\-]|http\s+[45]\d\d\b|rate\s+limit\b|request\s+failed\b|timeout\s*[:\-])",
+                 title.strip(), flags=re.I):
+        return False, f"[{index}] Título parece mensaje de API: '{title[:50]}'"
 
     return True, ""
 
@@ -254,37 +257,66 @@ def classify_impact_text(text, bias):
     return templates.get(category, templates["General"])
 
 # ─── Pipeline completo ────────────────────────────────────────────────────
+def _canonical_key(entry):
+    """Dedupe tracking variants before comparing normalized headlines."""
+    url = str(entry.get("url", "")).strip()
+    parts = urlsplit(url)
+    excluded = {"fbclid", "gclid", "mc_cid", "mc_eid"}
+    query = urlencode(sorted((key, value) for key, value in parse_qsl(parts.query)
+                             if not key.lower().startswith("utm_") and key.lower() not in excluded))
+    clean_url = urlunsplit((parts.scheme.lower(), parts.netloc.lower(),
+                           parts.path.rstrip("/"), query, ""))
+    title = re.sub(r"[^a-z0-9]+", " ", str(entry.get("title", "")).lower()).strip()
+    return clean_url, title
+
+
+def merge_validated_news(exa_entries, rss_entries, limit=7):
+    """Keep original-source items first, then Exa; never duplicate URL/headline."""
+    items = []
+    seen_urls, seen_titles = set(), set()
+    for item in list(rss_entries) + list(exa_entries):
+        key_url, key_title = _canonical_key(item)
+        if key_url in seen_urls or key_title in seen_titles:
+            continue
+        valid, _ = validate_entry(item, len(items))
+        if not valid:
+            continue
+        seen_urls.add(key_url)
+        seen_titles.add(key_title)
+        items.append(item)
+        if len(items) >= limit:
+            break
+    return items
+
+
 def run_news_pipeline(queries):
-    """
-    queries: dict of {asset: search_query_string}
-    Returns: dict of {asset: [validated_news_items]}
-    """
+    """Exa discovery plus optional primary research RSS; fail-open per provider."""
     results = {}
     error_log = []
+    specialized = collect_specialized_news(queries.keys())
 
     for asset, query in queries.items():
         raw = exa_search(query, n=MAX_RESULTS)
         entries = parse_mcporter_raw(raw)
-
         validated = []
         for i, entry in enumerate(entries):
             valid, reason = validate_entry(entry, i)
             if not valid:
                 error_log.append(f"{asset}: {reason}")
                 continue
+            entry["source"] = urlsplit(entry["url"]).hostname or "Exa search"
+            entry["source_type"] = "discovery"
             validated.append(entry)
-
-        # No fabricate — si no hay noticias, lista vacía
-        results[asset] = validated
-        if not validated:
+        results[asset] = merge_validated_news(validated, specialized.get(asset, []))
+        if not results[asset]:
             print(f"[news_pipeline] {asset}: 0 noticias válidas", file=sys.stderr)
 
     if error_log:
         print(f"[news_pipeline] {len(error_log)} entradas filtradas:", file=sys.stderr)
-        for e in error_log[:5]:
-            print(f"  {e}", file=sys.stderr)
-
+        for issue in error_log[:5]:
+            print(f"  {issue}", file=sys.stderr)
     return results
+
 
 # ─── Normalizar para el reporte ─────────────────────────────────────────
 def clean_source_excerpt(title, highlight, max_chars=280):
@@ -333,6 +365,8 @@ def normalize_for_report(news_items):
             "summary": summary or "Extracto de fuente no disponible",
             "bias": "Sin evaluar",
             "impact": topic,
+            "source": n.get("source") or urlsplit(n.get("url", "")).hostname or "fuente no identificada",
+            "source_type": n.get("source_type") or "discovery",
         })
     return report_items
 
