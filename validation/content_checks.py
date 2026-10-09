@@ -109,17 +109,19 @@ def audit_report_html(source, *, report_day=None):
 
         # The local-extreme labels must always be relative to the latest close.
         for label, direction in [("Soportes", -1), ("Resistencias", 1)]:
-            col = re.search(
-                r"<h4>" + label + r"</h4>([\s\S]*?)(?:</div>|<h4>)", section, re.I
-            )
-            # Use the levels inside the nearest column's markup, not arbitrary numbers.
-            if not col:
+            tag = "<h4>" + label + "</h4>"
+            start_pos = section.find(tag)
+            if start_pos < 0:
                 continue
-            position = section.find("<h4>" + label + "</h4>")
-            following = section[position:position + 1300]
-            if "<h4>" in following[len("<h4>" + label + "</h4>"):]:
-                following = following.split("<h4>", 1)[0] if not following.startswith("<h4>") else following
-            values = re.findall(r'<span class="lev-price">\$([\d,.]+)</span>', following)
+            end_pos = section.find("<h4>", start_pos + len(tag))
+            # The next </div></div></div> ends the levels grid; avoid mixing
+            # resistance prices into support prices if there is only one support.
+            if end_pos < 0:
+                end_pos = section.find('<div class="bias-box">', start_pos)
+            if end_pos < 0:
+                end_pos = len(section)
+            level_markup = section[start_pos:end_pos]
+            values = re.findall(r'<span class="lev-price">\$([\d,.]+)</span>', level_markup)
             for raw in values[:3]:
                 n = number(raw)
                 if n is not None and (n - spot) * direction <= 0:
