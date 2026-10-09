@@ -409,7 +409,7 @@ def run():
 
     # Hard gates: these cannot be compensated by a weighted score.
     if REPORT_PATH.is_file():
-        for message in audit_report_html(REPORT_PATH.read_text(encoding="utf-8"), report_day=TODAY):
+        for message in audit_report_html(REPORT_PATH.read_text(encoding="utf-8"), report_day=TODAY, strict_asof=True):
             issue("consistencia", "critical", message)
     else:
         issue("exactitud", "critical", "Reporte ausente, no se puede publicar")
