@@ -144,7 +144,7 @@ def fetch_feed(source, opener=urlopen, now=None):
 
 def collect_specialized_news(assets, *, now=None, fetcher=fetch_feed):
     """Independent sources never suppress Exa results on failure."""
-    if os.getenv("NEWS_RSS_ENABLED", "1") != "1":
+    if os.getenv("NEWS_RSS_ENABLED", "0") != "1":
         return {asset: [] for asset in assets}
     output = {asset: [] for asset in assets}
     for source in SOURCES:
