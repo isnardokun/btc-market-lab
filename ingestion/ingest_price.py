@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Ingest BTC price from Yahoo Finance into price_btc table."""
 import urllib.request, json, sqlite3, datetime, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.daily_cutoff import previous_completed_utc_day
 
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?interval=1d&range=2y"
