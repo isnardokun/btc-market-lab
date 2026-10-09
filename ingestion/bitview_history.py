@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion import config
 from ingestion.daily_cutoff import previous_completed_utc_day
 from ingestion.ingest import fetch_series
+from storage.archive_schema import ensure_archive_schema, save_window
 
 EPOCH = dt.date(2009, 1, 1)
 LEDGER = """
@@ -133,6 +134,7 @@ def run(db_path, *, apply=False, all_daily=False, slug=None, first=None,
             with sqlite3.connect(db_path) as db:
                 db.execute("PRAGMA foreign_keys=ON")
                 db.executescript(LEDGER)
+                ensure_archive_schema(db)
                 row = db.execute("SELECT id FROM series WHERE name=?", (name,)).fetchone()
                 if row:
                     sid = row[0]
@@ -151,6 +153,8 @@ def run(db_path, *, apply=False, all_daily=False, slug=None, first=None,
                            (name,start.isoformat(),end.isoformat(),
                             "ok" if values else "empty",len(values),
                             dt.datetime.now(dt.timezone.utc).isoformat()))
+                save_window(db, "bitview", name, start, end+dt.timedelta(days=1),
+                            "ok" if values else "empty", len(values))
             item["values"]=len(values)
             report["rows_saved"]+=len(values)
         except (ValueError, RuntimeError, OSError, sqlite3.Error) as exc:
