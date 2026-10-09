@@ -67,6 +67,43 @@ def coverage(db_path):
                 for status,count in db.execute(
                     "SELECT status,COUNT(*) FROM historical_fetch_windows "
                     "WHERE provider='bitview' GROUP BY status")]
+        if "archive_sources" in tables:
+            result["archive_source_registry"]=[
+                {"provider":p,"display_name":name,"tier_reported":tier,
+                 "entitlement_verified":bool(verified)}
+                for p,name,tier,verified in db.execute(
+                    "SELECT source_id,display_name,plan_tier,entitlement_verified "
+                    "FROM archive_sources ORDER BY source_id")]
+        if "archive_datasets" in tables:
+            result["archive_dataset_count"]=[
+                {"provider":provider,"series_registered":count}
+                for provider,count in db.execute(
+                    "SELECT source_id,COUNT(*) FROM archive_datasets GROUP BY source_id")]
+        if "archive_ingest_windows" in tables:
+            result["archive_fetch_windows"]=[
+                {"provider":provider,"status":status,"windows":cnt,
+                 "observed_points":points}
+                for provider,status,cnt,points in db.execute(
+                    "SELECT source_id,status,COUNT(*),SUM(data_points) "
+                    "FROM archive_ingest_windows GROUP BY source_id,status "
+                    "ORDER BY source_id,status")]
+        if "archive_observation_revisions" in tables:
+            result["archive_revisions"]=[
+                {"provider":provider,"changes_retained":count}
+                for provider,count in db.execute(
+                    "SELECT source_id,COUNT(*) FROM archive_observation_revisions "
+                    "GROUP BY source_id")]
+        if "archive_fred_vintages" in tables:
+            result["fred_realtime_vintages_count"]=db.execute(
+                "SELECT COUNT(*) FROM archive_fred_vintages").fetchone()[0]
+        if "archive_ingest_runs" in tables:
+            result["archive_recent_runs"]=[
+                {"provider":provider,"operation":operation,"status":status,
+                 "requests":req,"points":points,"started_at_utc":started}
+                for provider,operation,status,req,points,started in db.execute(
+                    "SELECT source_id,operation,status,requests,data_points,"
+                    "started_at_utc FROM archive_ingest_runs "
+                    "ORDER BY started_at_utc DESC LIMIT 20")]
     result["completeness_rule"]="NO afirmar historia completa sin verificar el límite, cobertura y brechas de cada API"
     return result
 
