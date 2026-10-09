@@ -36,9 +36,11 @@ SOURCES = (
            "SPY", "macro_release", "www.bls.gov", 14, 0),
     Source("Coin Metrics State of the Network", "https://coinmetrics.substack.com/feed",
            "BTC", "onchain_research", "coinmetrics.substack.com", 21, 1),
+    Source("Bitcoin Optech", "https://bitcoinops.org/feed.xml",
+           "BTC", "bitcoin_protocol", "bitcoinops.org", 21, 1),
 )
 
-MAX_XML_BYTES = 500_000
+MAX_XML_BYTES = 2_000_000
 ATOM = "{http://www.w3.org/2005/Atom}"
 
 
@@ -112,6 +114,10 @@ def parse_feed(payload, source, *, now=None, limit=5):
         days_old = (now.date() - stamp.date()).days
         if days_old > source.max_age_days:
             continue
+        # BLS Latest Numbers is a periodically refreshed landing page,
+        # not a dated release. It must not be presented as breaking news.
+        if source.name == "BLS" and "major economic indicators latest numbers" in title.lower():
+            continue
         if len(title) < 20 or len(desc) < 50:
             continue
         result.append({
@@ -154,6 +160,13 @@ def collect_specialized_news(assets, *, now=None, fetcher=fetch_feed):
             output[source.asset].extend(fetcher(source, now=now))
         except Exception as exc:
             # Exclude source bodies/URL/headers from logs.
-            print(f"[news/rss] {source.name}: no disponible ({type(exc).__name__})",
+            # The parser's own ValueErrors are controlled diagnostics; emit
+            # the category without including XML bodies, secrets or URLs.
+            safe_reason = str(exc) if isinstance(exc, ValueError) and str(exc) in (
+                "Feed demasiado grande o DTD no permitido",
+                "Feed redirigido a un dominio no autorizado",
+                "UTC-aware now required",
+            ) else type(exc).__name__
+            print(f"[news/rss] {source.name}: no disponible ({safe_reason})",
                   file=sys.stderr)
     return output
