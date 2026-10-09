@@ -15,6 +15,7 @@ metodología**, sin sustituir las series originales de Bitview/FRED/Yahoo.
 | Federal Reserve | RSS primario | Decisiones monetarias | https://www.federalreserve.gov/feeds/feeds.htm |
 | U.S. Bureau of Labor Statistics | RSS primario | Inflación, empleo, publicaciones oficiales | https://www.bls.gov/feed/ |
 | Coin Metrics State of the Network | RSS de investigación | Network data, liquidez y tendencias | https://coinmetrics.substack.com/ |
+| Bitcoin Optech | RSS de investigación | Protocolo, vulnerabilidades y Lightning | https://bitcoinops.org/en/newsletters/ |
 | Glassnode Insights | Descubrimiento Exa por dominio verificado | On-chain y cohortes | https://insights.glassnode.com/ |
 | Bitcoin Optech | Descubrimiento Exa por dominio verificado | Protocolo Bitcoin, seguridad, Lightning | https://bitcoinops.org/en/newsletters/ |
 | Exa general | Descubrimiento existente | Noticias BTC, renta variable, oro | mediante mcporter local |
@@ -38,14 +39,14 @@ Una nota de prensa no prueba que causó una variación de precio.
 ```
 
 **Principios:**
-- RSS: XML RSS/Atom máximo 500 KB, sin DTD, enlace HTTPS limitado al
+- RSS: XML RSS/Atom máximo 2 MB, sin DTD, enlace HTTPS limitado al
   dominio del emisor y fecha comprobada contra UTC; respuestas viejas excluidas.
 - Se conserva la búsqueda Exa anterior. Si un RSS responde 403, formato
   incorrecto o no está disponible, el informe sigue con otros proveedores.
 - La búsqueda dirigida solo acepta resultados en dominios explícitos y con
   fecha ISO comprobable hasta 21 días; se ejecuta **una búsqueda adicional**
   para BTC cuando está habilitada.
-- Se prioriza origen primario o investigación y se eliminan repeticiones por
+- Solo se publican artículos con fecha ISO verificable (prensa general hasta 7 días de antigüedad; investigación hasta 21 días). No se aceptan páginas genéricas sin fecha ni la página de «Latest Numbers» del BLS como si fuera un comunicado oficial.\n- Se prioriza origen primario o investigación y se eliminan repeticiones por
   URL normalizada y título. No se extrae contenido protegido tras paywall,
   no se almacena copia completa de noticias.
 - Para cada noticia el HTML muestra origen y rol editorial y enlaza
@@ -101,6 +102,27 @@ Referencias metodológicas del corpus inicial:
 - https://researchbitcoin.net/metrics/realized_price_sth/
 - https://docs.glassnode.com/basic-api/endpoints/indicators
 - https://gitbook-docs.coinmetrics.io/network-data/network-data-overview/addresses/active-addresses
+
+## Hallazgos de la revisión local Hermes #23 (09-10-2026)
+
+El diagnóstico #23 confirmó 14/14 suites PASS, gate 100/100, RAG MVRV/aSOPR/NUPL y
+fuentes oficiales Fed/BLS en SPY. También observó:
+- El feed Coin Metrics devolvió `ValueError` sin detalle. Se elevó el límite
+  XML de 500 KB a 2 MB; la causa real solo se confirmará en nueva ejecución
+  local, y se conserva manejo fail-open. No declarar solucionado sin comprobar.
+- No aparecieron noticias de Glassnode/Coin Metrics/Optech en BTC. Se
+  sustituyó la consulta OR-site por dos búsquedas concretas Glassnode y
+  Coin Metrics, y se añadió Optech RSS directo; todavía falta verificar
+  disponibilidad real de ambos.
+- Una página MarketWatch de marzo de 2026 apareció con «Fecha no confirmada».
+  Ahora los resultados generales sin fecha o de más de 7 días no se muestran.
+- BLS mostró un índice «Major Economic Indicators Latest Numbers», no
+  un comunicado específico. Se filtra ese índice y se conservan emisiones
+  fechadas con contenido sustancial.
+
+Estos filtros son mejoras editoriales; **no constituyen verificación
+independiente de datos de noticias**. Cuando una fuente falle, documentar
+conteo de noticias válidas, tipos de fallos y enlaces válidos.
 
 ## Pruebas e integración
 
