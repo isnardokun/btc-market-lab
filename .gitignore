@@ -53,3 +53,9 @@ logs/
 
 # Local Hermes diagnostics: raw logs and bundles never tracked automatically
 reports/bridge/
+
+# Sensitive/generated runtime artifacts are NOT source files.
+# WARNING: ignore rules do not untrack artifacts already committed to Git.
+reports/portable/
+reports/deliveries/
+dashboards/dashboard_standalone.html
