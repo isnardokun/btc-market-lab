@@ -929,6 +929,24 @@ def main():
     spy_support_levels, spy_resistance_levels = price_relative_levels(spy_price, spy_sup, spy_res)
     gold_support_levels, gold_resistance_levels = price_relative_levels(gold_price, gold_sup, gold_res)
 
+    # Explicit effective observation timestamps; report generation != data freshness.
+    price_asof_utc = datetime.datetime.fromtimestamp(
+        ohlc_f[-1]["ts"], datetime.timezone.utc
+    ).strftime("%Y-%m-%d %H:%M")
+    onchain_asof = {}
+    for metric in ("mvrv", "asopr", "nupl", "hr"):
+        val = oc.get("ts", {}).get(metric)
+        if val is not None:
+            onchain_asof[metric] = datetime.datetime.fromtimestamp(
+                val, datetime.timezone.utc
+            ).strftime("%Y-%m-%d %H:%M")
+    onchain_core = [oc.get("ts", {}).get(k) for k in ("mvrv", "asopr", "nupl", "hr")]
+    onchain_core = [t for t in onchain_core if t is not None]
+    core_oldest_ts = min(onchain_core) if onchain_core else None
+    onchain_oldest_utc = (datetime.datetime.fromtimestamp(
+        core_oldest_ts, datetime.timezone.utc
+    ).strftime("%Y-%m-%d %H:%M") if core_oldest_ts is not None else None)
+
     # Generate narratives
     btc_narr = gen_btc_narrative(oc, btc_pdata, btc_rsi, btc_hist, btc_chg,
                                   oc.get("sma200"), btc_sma50)
@@ -1007,7 +1025,12 @@ def main():
         osc_card("CCI(20)", f"{spy_cci:.0f}" if spy_cci else "---", "Neutral", "neu") +
         osc_card("ATR(14)", f"${spy_atr:,.2f}" if spy_atr else "---", "Volatilidad", "neu") +
         osc_card("Estocastico", f"{spy_stoch_k:.0f}" if spy_stoch_k else "---", "Neutral", "neu") +
-        osc_card("MACD", "---", "N/A", "neu")
+        osc_card("MACD", f"{spy_hist:.2f}" if spy_hist is not None else "---",
+                 "Compra" if spy_hist is not None and spy_hist > 0 else
+                 ("Venta" if spy_hist is not None and spy_hist < 0 else
+                  ("Neutral" if spy_hist is not None else "N/A")),
+                 "buy" if spy_hist is not None and spy_hist > 0 else
+                 ("sell" if spy_hist is not None and spy_hist < 0 else "neu"))
     )
     spy_ma_items = (
         ma_row("SMA 20", spy_sma20, spy_c[-1]) +
@@ -1062,7 +1085,7 @@ def main():
     A('<div class="hdr">')
     A('<div class="hdr-kicker">'+TODAY_STR+' — Mercados Daily Pro</div>')
     A('<h1>Reporte Integral: BTC + Renta Variable + Commodities</h1>')
-    A('<p class="sub">Datos verificados: Yahoo Finance (precio) | bitview local DB (on-chain BTC) | FRED (macro)</p>')
+    A('<p class="sub">Fuentes de datos: Yahoo Finance (precio) | bitview local DB (on-chain BTC) | FRED (macro)</p>')
     A('<div class="hdr-meta">')
     A('<span>Fuentes: Yahoo Finance · bitview DB · FRED · Exa Search</span>')
     A('<span>Generado '+NOW_STR+'</span>')
@@ -1112,7 +1135,7 @@ def main():
     A(f'<div class="ticker-item"><div class="tk-pair">BTC/USD</div><div class="tk-price">{usd0(btc_price)}</div><div class="tk-chg {bcls(btc_chg)}">{pct(btc_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">S&P 500 IND</div><div class="tk-price">{"%.0f"%spx_price if spx_price else "---"}</div><div class="tk-chg {bcls(spx_chg)}">{pct(spx_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">SPDR S&P 500</div><div class="tk-price">{usd(spy_price)}</div><div class="tk-chg {bcls(spy_chg)}">{pct(spy_chg)}</div></div>')
-    A(f'<div class="ticker-item"><div class="tk-pair">ORO XAU</div><div class="tk-price">{usd0(gold_price)}</div><div class="tk-chg {bcls(gold_chg)}">{pct(gold_chg)}</div></div>')
+    A(f'<div class="ticker-item"><div class="tk-pair">ORO FUT. GC=F</div><div class="tk-price">{usd0(gold_price)}</div><div class="tk-chg {bcls(gold_chg)}">{pct(gold_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">PLATA FUT. SI=F</div><div class="tk-price">{usd(silver_price)}</div><div class="tk-chg {bcls(silver_chg)}">{pct(silver_chg)}</div></div>')
     A(f'<div class="ticker-item"><div class="tk-pair">WTI (CL=F)</div><div class="tk-price">{usd(oil_price)}</div><div class="tk-chg {bcls(oil_chg)}">{pct(oil_chg)}</div></div>')
     A('</div>')
@@ -1122,6 +1145,19 @@ def main():
     A('<div class="kicker">Cripto</div>')
     A('<div class="section-title">Bitcoin (BTC) — Analisis de Precio</div>')
 
+    A('<div class="source-freshness" style="padding:10px 14px;margin:8px 0 12px;'
+      'border-radius:9px;background:#e9f2ec;font-size:12px;line-height:1.6" '
+      f'data-btc-asof-utc="{price_asof_utc}" '
+      f'data-onchain-oldest-utc="{onchain_oldest_utc or ""}">')
+    A(f'<strong>Corte real BTC Yahoo:</strong> {price_asof_utc} UTC '
+      '(última observación diaria disponible; no es cotización en tiempo real). ')
+    if onchain_oldest_utc:
+        A(f'<strong>On-chain:</strong> observaciones clave entre '
+          f'{onchain_oldest_utc} UTC y fechas posteriores. '
+          'Pueden tener un desfase de publicación de varios días.')
+    else:
+        A('<strong>On-chain:</strong> sin fechas de observación verificables.')
+    A('</div>')
     A('<div class="price-row">')
     A(f'<span class="big-price">{usd0(btc_price)}</span>')
     A(f'<span class="big-chg {bcls(btc_chg)}">{arr(btc_chg)} {pct(btc_chg)} (cierre previo)</span>')
@@ -1146,6 +1182,11 @@ def main():
 
     # On-chain grid
     A('<div class="card"><h3>Datos On-Chain — bitview.space (datos reales de la red BTC)</h3>')
+    A('<p style="font-size:11px;margin:0 0 14px;color:#52645a">'
+      'Fecha UTC de última observación por indicador: ')
+    A(' · '.join(f'{key.upper()}: {onchain_asof.get(key, "sin fecha")} UTC'
+      for key in ("mvrv", "asopr", "nupl", "hr")))
+    A('</p>')
     A('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">')
     A(f'<div class="stat-item"><div class="slbl">MVRV</div><div class="sval">{"%.2fx"%oc["mvrv"] if oc["mvrv"] else "---"}</div><div class="ssub">Market/Realized Cap</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Realized Cap</div><div class="sval">${oc["rcap"]:.2f}T</div><div class="ssub">costo base network</div></div>')
@@ -1372,7 +1413,7 @@ def main():
     A('</div>')
 
     A('<div class="footer">Mercados Daily Pro — Fuentes: Yahoo Finance (precios) | bitview.space DB (on-chain BTC) | FRED (macro) | Exa Search (noticias)<br>'
-      'Datos verificados: RSI Wilder smoothing. MVRV/SOPR/NUPL desde bitview. Macro desde FRED API. | No es consejo financiero.</div>')
+      'Metodología: RSI Wilder smoothing. MVRV/SOPR/NUPL desde bitview. Macro desde FRED API. | No es consejo financiero.</div>')
 
     A('</div></body></html>')
     html = ''.join(parts)
