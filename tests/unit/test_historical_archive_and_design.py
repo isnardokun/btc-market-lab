@@ -21,6 +21,8 @@ from ingestion.news_archive import archive_news
 from scripts.history_coverage import coverage
 from scripts.history_query import query_history
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
+from storage.archive_schema import migrate, record_batch
+from ingestion.researchbitcoin_catalog import CATALOG
 
 
 NOW = dt.datetime(2026, 10, 9, 14, tzinfo=dt.timezone.utc)
@@ -52,6 +54,37 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
                            ('Yahoo Finance','SPY','spy_price'),
                            ('bitview',NULL,'mvrv');
             """)
+
+    def test_archive_schema_is_additive_and_revisions_are_retained(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO price_btc(ts,price) VALUES (1,65000)")
+            conn.execute("INSERT INTO daily(series_id,ts,value) VALUES (7,1,1.2)")
+        migrate(self.db)
+        migrate(self.db)
+        metric = CATALOG["supply_in_profit_percent"]
+        stamp = "2026-10-08T00:00:00+00:00"
+        record_batch(self.db,"researchbitcoin",metric.slug,metric,
+                     "2026-10-08","2026-10-09",
+                     {"2026-10-08":(stamp,0.6835608896)},"Tier 2")
+        record_batch(self.db,"researchbitcoin",metric.slug,metric,
+                     "2026-10-08","2026-10-09",
+                     {"2026-10-08":(stamp,0.6835608896)},"Tier 2")
+        record_batch(self.db,"researchbitcoin",metric.slug,metric,
+                     "2026-10-08","2026-10-09",
+                     {"2026-10-08":(stamp,0.684)},"Tier 2")
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM price_btc").fetchone()[0],1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM daily").fetchone()[0],1)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM archive_observation_revisions").fetchone()[0],2)
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM archive_fetch_runs").fetchone()[0],3)
+            coverage = conn.execute(
+                "SELECT observation_count,completeness FROM archive_coverage").fetchone()
+            self.assertEqual(coverage,(1,"partial"))
+            self.assertEqual(conn.execute(
+                "SELECT access_tier FROM archive_sources WHERE provider='researchbitcoin'"
+            ).fetchone()[0],"Tier 2")
 
     def test_rbn_explicit_window_bounds_and_tier_history_limit(self):
         self.assertEqual(query_params_window("2026-10-01", "2026-10-09", now=NOW),
