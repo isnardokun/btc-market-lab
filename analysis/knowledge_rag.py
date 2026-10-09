@@ -244,8 +244,11 @@ def render_research_note(snapshot, observation_dates=None):
     evidence = explain_snapshot(snapshot, observation_dates)
     if not evidence:
         return ""
+    manifest = corpus_manifest()
     pieces = [
-        '<div class="card" id="research-methodology">'
+        '<div class="card" id="research-methodology" '
+        f'data-corpus-version="{html.escape(manifest["version"], quote=True)}" '
+        f'data-corpus-sha256="{manifest["sha256"]}">'
         '<h3>Análisis contrastado — contexto metodológico (RAG local)</h3>'
         '<p style="font-size:11px;color:#52645a">Interpretaciones condicionales '
         'sobre datos medidos. Recuperación local de fichas metodológicas; '
