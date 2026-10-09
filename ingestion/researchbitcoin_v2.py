@@ -148,13 +148,16 @@ def parse_scalar_rows(payload, slug, now=None):
             raise ValueError("Fila sin campo de fecha/time; revisar --sample")
         # ResearchBitcoin API usa el slug como key de valor (ej. {"realized_price_sth": 45000, "time": ...})
         # También acepta formato genérico {"value": ..., "time": ...}
-        value_key = next((k for k in (slug,) + tuple(CATALOG.keys()) if k in row and k != time_key), None)
-        if value_key is None:
-            # Formato genérico: {"time": ..., "value": ...}
-            if "value" in row:
-                value_key = "value"
-            else:
-                raise ValueError(f"Fila sin valor para {slug}; revisar --sample")
+        # Only the requested metric key, or explicitly generic "value",
+        # is acceptable. Another catalog slug is not a value for this metric.
+        if slug in row:
+            value_key = slug
+        elif "value" in row:
+            value_key = "value"
+        else:
+            raise ValueError(f"Fila sin valor para {slug}; revisar --sample")
+        if value_key == "value" and any(other in row for other in CATALOG if other != slug):
+            raise ValueError(f"Respuesta contiene otra métrica distinta de {slug}")
         stamp = parse_timestamp(row[time_key])
         day = stamp.date()
         if day > cutoff:
