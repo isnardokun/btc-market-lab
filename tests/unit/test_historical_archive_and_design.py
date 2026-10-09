@@ -20,6 +20,7 @@ from ingestion.yahoo_history import extract_daily, symbols_in_catalog, archive
 from ingestion.news_archive import archive_news
 from scripts.history_coverage import coverage
 from scripts.history_query import query_history
+from scripts.backup_db import create_backup
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 
 
@@ -205,6 +206,35 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
                 self.assertEqual(response["provider"],provider)
         with self.assertRaises(ValueError):
             query_history(self.db,"bogus","x","2026-10-08","2026-10-08")
+
+    def test_native_sqlite_backup_includes_uncheckpointed_wal_and_is_unique(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            origin = Path(scratch) / "db.sqlite"
+            folder = Path(scratch) / "backups"
+            with sqlite3.connect(origin) as active:
+                active.execute("PRAGMA journal_mode=WAL")
+                active.execute("PRAGMA wal_autocheckpoint=0")
+                active.execute("CREATE TABLE observations(v INTEGER)")
+                active.execute("INSERT INTO observations VALUES (123)")
+                active.commit()
+                self.assertTrue((Path(str(origin)+"-wal")).exists())
+                first = create_backup(origin, folder)
+                self.assertEqual(first.stat().st_mode & 0o777, 0o600)
+                with sqlite3.connect(first) as saved:
+                    self.assertEqual(saved.execute(
+                        "SELECT v FROM observations").fetchone()[0],123)
+                    self.assertEqual(saved.execute(
+                        "PRAGMA integrity_check").fetchone()[0],"ok")
+                active.execute("INSERT INTO observations VALUES (456)")
+                active.commit()
+                second = create_backup(origin, folder)
+                self.assertNotEqual(first,second)
+                with sqlite3.connect(second) as saved:
+                    self.assertEqual(saved.execute(
+                        "SELECT COUNT(*) FROM observations").fetchone()[0],2)
+                with sqlite3.connect(first) as saved:
+                    self.assertEqual(saved.execute(
+                        "SELECT COUNT(*) FROM observations").fetchone()[0],1)
 
     def test_private_research_studio_visual_contract(self):
         self.assertEqual(STYLE_VERSION,"mercados-research-studio-v1")
