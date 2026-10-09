@@ -253,3 +253,36 @@ y el log para que ChatGPT corrija el código.
 
 Las instrucciones previas que sugieran a Hermes implementar él mismo
 las correcciones quedan subordinadas a este reparto de responsabilidades.
+
+
+## Procedimiento 8 — Complemento ResearchBitcoin V2 (opt-in)
+
+Consultar `docs/ONCHAIN_BITVIEW_RESEARCHBITCOIN.md` antes de activar el nuevo
+proveedor. El catálogo ResearchBitcoin es **adicional**, no sustituye
+bitview, no altera `daily` ni `daily_metrics` y no se consulta
+automáticamente al ejecutar `scripts/daily.sh`.
+
+1. Inspeccionar cobertura existente `python3 ingestion/researchbitcoin_v2.py --inventory`
+   y `--catalog`. No interpretar coincidencias textuales entre fuentes
+   como equivalencia metodológica.
+2. Comprobar presencia de `RESEARCHBITCOIN_API_TOKEN` en el entorno de
+   Hermes **sin imprimir el token**. La ruta web /v2/token es para acceder
+   a credenciales; para datos usar los endpoints /v2/<grupo>/<campo>.
+3. Probar respuesta únicamente con
+   `python3 ingestion/researchbitcoin_v2.py --sample realized_price_sth --days 2`.
+   Muestra estructura, no observaciones. No publicar payloads con datos
+   ni cabeceras de autenticación.
+4. Si el esquema coincide, y solo con aprobación para la sincronización,
+   usar `--sync realized_price_sth --days 3`. El cliente limita cuota,
+   descarta jornadas abiertas, valida unidad, y escribe únicamente en
+   `onchain_external_observations`.
+5. Si aparece un esquema desconocido: **detener** y adaptar con fixture
+   sanitizado más unittest; no rellenar los valores a mano ni suponer
+   conversiones. Correr el nuevo test unitario y el pipeline de Hermes.
+6. El informe HTML incorpora la tarjeta complementaria solo con
+   observaciones suficientes, fechas UTC y fichas metodológicas.
+   Falta de datos del segundo proveedor no debe romper el reporte
+   básico validado. Nunca activar cron adicional sin autorización.
+
+El proveedor ResearchBitcoin exige atribución y su token tiene caducidad.
+No ejecutar un backfill o consultas masivas durante la primera validación.
