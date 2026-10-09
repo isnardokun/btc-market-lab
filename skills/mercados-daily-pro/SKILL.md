@@ -284,6 +284,14 @@ automáticamente al ejecutar `scripts/daily.sh`.
    Falta de datos del segundo proveedor no debe romper el reporte
    básico validado. Nunca activar cron adicional sin autorización.
 
+7. El `publication_gate` debe reconciliar todas las tarjetas RBN
+   visibles contra `onchain_external_observations`: slug, valor,
+   fecha UTC, ficha, dato bruto, escala provisional y duplicados.
+   La comprobación de `validation/rbn_reconciliation.py` es crítica
+   cuando la tarjeta existe o debería existir con datos locales
+   válidos; si RBN no está configurado no bloquea el informe básico.
+   No desactivar ni suavizar este control para alcanzar score 100.
+
 El proveedor ResearchBitcoin exige atribución y su token tiene caducidad.
 No ejecutar un backfill o consultas masivas durante la primera validación.
 
