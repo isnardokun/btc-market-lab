@@ -229,7 +229,7 @@ svg.sparkline{overflow:visible}
 
 <script>
 const URL = "dashboard_latest.json";
-const INLINE_DATA = {"generated_at": "2026-10-08T13:02:49.791546", "macro": {"10y_yield": {"label": "Yield 10Y", "value": 5.27, "date": "2026-10-06", "status": "ok"}, "2y_yield": {"label": "Yield 2Y", "value": 4.79, "date": "2026-10-06", "status": "ok"}, "dxy": {"label": "DXY", "value": 121.3848, "date": "2026-10-02", "status": "warning"}, "vix": {"label": "VIX", "value": 15.08, "date": "2026-10-07", "status": "ok"}, "nfci": {"label": "NFCI", "value": -0.494, "date": "2026-10-02", "status": "ok"}, "unemployment": {"label": "Desempleo", "value": 4.2, "date": "2026-09-01", "status": "ok"}, "payrolls": {"label": "NFP", "value": 159044.0, "date": "2026-09-01", "status": "ok"}, "retail_sales": {"label": "Retail Sales", "value": 646347.0, "date": "2026-08-01", "status": "warning"}, "btc_fred": {"label": "BTC (FRED)", "value": 83239.49, "date": "2026-10-07", "status": "ok"}, "cpi_yoy": {"label": "CPI YoY", "value": 2.33, "date": "2025-04-01", "status": "ok"}}, "predictions": {"active": [], "resolved": []}, "hit_rates": {}, "levels": [], "reports": [{"id": 1, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 1, "filename": "/home/ignotus/btc-research/reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 18:01:39"}]};
+const INLINE_DATA = null; // Generated content injected by rendering/export_dashboard.py
 
 function getInlineData(){
   try {
@@ -317,7 +317,7 @@ function render(d){
 function renderTicker(macro){
   const items = [
     {pair:"BTC/USD", price: macro.btc_fred?.value, chg: null, color:"#16A34A"},
-    {pair:"DXY",    price: macro.dxy?.value,        chg: null, color:"#0e7669"},
+    {pair:"USD Broad Index",    price: macro.usd_broad?.value,        chg: null, color:"#0e7669"},
     {pair:"10Y YIELD", price: macro["10y_yield"]?.value, suffix:"%", chg:null, color:"#d5a844"},
     {pair:"VIX",    price: macro.vix?.value,         chg:null, color:"#ef765f"},
     {pair:"NFCI",   price: macro.nfci?.value,        chg:null, color:"#0e7669"},
@@ -338,12 +338,12 @@ function renderMacro(macro){
   const cards = [
     {key:"10y_yield",  label:"Yield 10Y",   fmt:v=>v?.toFixed(3)+"%",   neutral:5.27, warn:5.5, crit:6.0},
     {key:"2y_yield",   label:"Yield 2Y",    fmt:v=>v?.toFixed(3)+"%",   neutral:4.79, warn:5.0, crit:5.5},
-    {key:"dxy",        label:"DXY Index",   fmt:v=>v?.toFixed(2),       neutral:121,  warn:125, crit:130},
+    {key:"usd_broad",        label:"USD Broad Index Index",   fmt:v=>v?.toFixed(2),       neutral:121,  warn:125, crit:130},
     {key:"vix",        label:"VIX",          fmt:v=>v?.toFixed(2),       neutral:16,   warn:25,  crit:35},
     {key:"nfci",       label:"NFCI",         fmt:v=>v?.toFixed(4),       neutral:0,    warn:0.5, crit:1},
     {key:"cpi_yoy",    label:"CPI YoY",      fmt:v=>v?.toFixed(2)+"%",   neutral:2.5,  warn:4,   crit:6},
     {key:"unemployment",label:"Desempleo",   fmt:v=>v?.toFixed(2)+"%",   neutral:3.8,  warn:5.5, crit:7},
-    {key:"payrolls",   label:"NFP",          fmt:v=>(v/1000)?.toFixed(0)+"K", neutral:200, warn:400, crit:600},
+    {key:"nfp_change",   label:"NFP Δ mensual",          fmt:v=>v?.toFixed(0)+"K", neutral:200, warn:400, crit:600},
     {key:"retail_sales",label:"Retail Sales",fmt:v=>"$"+(v/1000)?.toFixed(0)+"B", neutral:640, warn:700, crit:800},
     {key:"btc_fred",   label:"BTC (FRED)",   fmt:v=>"$"+v?.toFixed(0),  neutral:83000, warn:null, crit:null},
   ];
@@ -405,15 +405,15 @@ function renderHitRates(rates){
 }
 
 function renderEvolution(macro){
-  // Simple: mostrar DXY y 10Y como proxy de evolucion
-  const dxy = macro.dxy;
+  // Simple: mostrar USD Broad Index y 10Y como proxy de evolucion
+  const dxy = macro.usd_broad;
   const ten = macro["10y_yield"];
   if(!dxy&&!ten){
     $("evo-row").innerHTML='<div class="empty">Sin datos de evolucion</div>';
     return;
   }
   const items=[];
-  if(dxy) items.push({label:"DXY",val:dxy.value,unit:""});
+  if(dxy) items.push({label:"USD Broad Index",val:dxy.value,unit:""});
   if(ten)  items.push({label:"10Y Yield",val:ten.value,unit:"%"});
   const html=items.map(it=>`
     <div class="evo-card">
