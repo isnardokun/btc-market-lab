@@ -103,6 +103,7 @@ class HistoryAndResearchDesignTests(unittest.TestCase):
             self.assertEqual(conn.execute(
                 "SELECT value FROM onchain_external_observations").fetchone()[0],1.05)
         self.assertEqual(run_rbn(self.db,mode="history",slugs=[slug],
+                                 tier=2,history_start="2026-09-01",
                                  max_requests=2,today=NOW)["selected_windows"],2)
 
     def test_bitview_day1_uses_real_utc_index_and_noninvented_values(self):
