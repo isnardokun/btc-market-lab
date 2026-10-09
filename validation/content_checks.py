@@ -57,10 +57,38 @@ def extract_report_date(source):
                 pass
     return dt.date.today()
 
-def audit_report_html(source, *, report_day=None):
+def audit_report_html(source, *, report_day=None, strict_asof=False):
     """Return specific hard-block issues; NEVER automatically repair bad claims."""
     errors = []
     day = report_day or extract_report_date(source)
+    if strict_asof:
+        # Required observability for financial publication. A 100-point gate
+        # cannot imply live prices if the underlying observation is stale.
+        generated = re.search(
+            r"Generado\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+UTC", source
+        )
+        if not generated:
+            errors.append("Sin timestamp UTC completo de generación")
+        else:
+            emitted = dt.datetime.fromisoformat(generated.group(1) + "T" + generated.group(2))
+            for label, attr, threshold_hours in (
+                ("BTC diario", "data-btc-asof-utc", 72),
+                ("On-chain clave", "data-onchain-oldest-utc", 240),
+            ):
+                entry = re.search(re.escape(attr) + r'="([^"]*)"', source)
+                if not entry or not entry.group(1):
+                    errors.append(label + ": fecha de observación no disponible")
+                    continue
+                try:
+                    observed = dt.datetime.strptime(entry.group(1), "%Y-%m-%d %H:%M")
+                except ValueError:
+                    errors.append(label + ": timestamp UTC inválido")
+                    continue
+                delay = (emitted - observed).total_seconds() / 3600
+                if delay < -0.1:
+                    errors.append(label + ": observación futura respecto a generación")
+                elif delay > threshold_hours:
+                    errors.append(label + f": observación desactualizada ({delay:.1f} h)")
 
     if re.search(r"\{(?:usd|usd0|pct|[a-zA-Z_]+)\s*\([^{}]*\)\}", source):
         errors.append("Expresión de plantilla sin interpolar en HTML")

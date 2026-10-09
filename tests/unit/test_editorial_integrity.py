@@ -63,6 +63,38 @@ class EditorialIntegrityTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("futura", message)
 
+    def test_asof_gate_accepts_observation_fresh_with_utc_timestamps(self):
+        html = (
+            '<p>Generado 2026-10-09 12:07 UTC</p>'
+            '<div class="source-freshness" '
+            'data-btc-asof-utc="2026-10-08 19:00" '
+            'data-onchain-oldest-utc="2026-10-07 19:00"></div>'
+        )
+        errors = audit_report_html(
+            html, report_day=datetime.date(2026, 10, 9), strict_asof=True
+        )
+        self.assertFalse(any("observaci" in x or "timestamp" in x for x in errors), errors)
+
+    def test_asof_gate_rejects_old_or_missing_observation_metadata(self):
+        html = (
+            '<p>Generado 2026-10-09 12:07 UTC</p>'
+            '<div class="source-freshness" '
+            'data-btc-asof-utc="2026-09-29 19:00" '
+            'data-onchain-oldest-utc=""></div>'
+        )
+        errors = audit_report_html(html, strict_asof=True)
+        self.assertTrue(any("desactualizada" in x for x in errors), errors)
+        self.assertTrue(any("On-chain" in x and "no disponible" in x for x in errors), errors)
+
+    def test_asof_gate_rejects_future_observation(self):
+        html = (
+            '<p>Generado 2026-10-09 12:07 UTC</p>'
+            '<div data-btc-asof-utc="2026-10-09 21:00" '
+            'data-onchain-oldest-utc="2026-10-07 19:00"></div>'
+        )
+        errors = audit_report_html(html, strict_asof=True)
+        self.assertTrue(any("futura" in x for x in errors), errors)
+
     def test_no_static_directional_forecast_in_report_generator(self):
         source = (Path(__file__).resolve().parents[2] / "analysis/daily_report.py").read_text()
         self.assertNotIn("rally hacia $87-92K", source)

@@ -30,6 +30,11 @@ def latest_daily_date():
 # Fecha del último pipeline real (no la fecha de hoy)
 LATEST_DATE = latest_daily_date()
 LATEST_STR = LATEST_DATE.strftime("%Y-%m-%d") if isinstance(LATEST_DATE, datetime.date) else LATEST_DATE
+# Do not silently pass by validating the last archived run weeks ago.
+RUN_DAY = datetime.datetime.now(datetime.timezone.utc).date()
+LAST_DAY = datetime.date.fromisoformat(LATEST_STR)
+RUN_AGE_DAYS = (RUN_DAY - LAST_DAY).days
+
 TODAY = datetime.date.today()
 TODAY_STR = TODAY.strftime("%Y-%m-%d")
 
@@ -63,7 +68,10 @@ def test_macro_fred_has_recent_data():
 
 
 def test_daily_metrics_has_data():
-    """daily_metrics tiene datos para la fecha del último pipeline."""
+    """A recent pipeline is required; old successful reports are not enough."""
+    assert 0 <= RUN_AGE_DAYS <= 2, (
+        f"Última fecha daily_metrics={LATEST_STR} está a {RUN_AGE_DAYS} días "
+        "del reloj UTC: no aceptar una ejecución histórica como actual")
     db = get_db()
     cur = db.cursor()
     cur.execute(
