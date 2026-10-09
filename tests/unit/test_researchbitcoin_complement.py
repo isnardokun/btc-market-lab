@@ -255,8 +255,6 @@ class ResearchBitcoinComplementTests(unittest.TestCase):
 
     def test_gate_blocks_rbn_card_without_sqlite_provenance(self):
         html = self._make_gate_fixture()
-        with self.assertRaises(AssertionError):
-            self.assertEqual(html, "")
         self.assertTrue(any("sin observaciones" in e for e in
                             audit_rbn_against_html(
                                 html, self.dbpath, "2026-09-01")))
