@@ -107,3 +107,68 @@ La prueba del exportador/envío no requiere Internet ni SQLite; las pruebas de i
 El dashboard ahora calcula CPI interanual desde CPIAUCSL, variación mensual de NFP desde PAYEMS (miles de empleos) y denomina DTWEXBGS como USD Broad Index, no DXY.
 
 Continúa siendo necesario auditar frescura, revisiones FRED, metodología on-chain e indicadores cuantitativos del resto del proyecto. Este cambio no certifica como reales todos los valores históricos del dashboard.
+
+
+## 7. Skill nativo para Hermes y actualización segura en la máquina
+
+La guía anterior explica el uso manual. Además, el repositorio contiene
+skills/mercados-daily-pro/SKILL.md con formato nativo para Hermes (frontmatter
+YAML y procedimientos para actualización, validación, HTML, Telegram, fallos).
+
+El skill no queda instalado en la máquina simplemente por existir en GitHub.
+Primero se debe integrar el PR #1 a master; después, en el equipo:
+
+~~~bash
+cd /home/ignotus/btc-research
+git status --short
+git branch --show-current
+git remote -v
+git fetch origin master
+git merge --ff-only origin/master
+bash scripts/install_hermes_skill.sh
+hermes skills list
+~~~
+
+Si la rama actual no es master o hay cambios locales, NO continuar hasta
+revisarlos. El instalador deja un backup de un skill anterior personalizado.
+
+En la siguiente actualización, el script puede realizar el fast-forward de
+master de forma segura, instalar el skill y ejecutar pruebas:
+
+~~~bash
+bash scripts/update_local_and_test.sh
+~~~
+
+Para ensayar una rama que aún no fue integrada, usar su checkout existente y:
+
+~~~bash
+bash scripts/update_local_and_test.sh --no-update
+~~~
+
+Para regenerar realmente el pipeline a partir de la BD local, tras verificar
+FRED_API_KEY y disponibilidad de APIs:
+
+~~~bash
+bash scripts/update_local_and_test.sh --pipeline
+~~~
+
+El script fuerza SEND_TELEGRAM_AUTO=0 al probar el pipeline. En modo normal no
+realiza ingesta ni envíos. Los tests de integración con SQLite se omiten
+explícitamente cuando no existe la BD; nunca se reportan como aprobados.
+
+En Hermes se puede invocar explícitamente:
+
+~~~text
+/mercados-daily-pro Actualiza el repositorio en local y prueba el informe. No envíes Telegram hasta que te lo autorice.
+~~~
+
+Hermes descubre skills instalados en ~/.hermes/skills y los utiliza en nuevas
+sesiones (o por activación explícita según versión). Alternativamente, en
+versiones compatibles se puede usar:
+
+~~~bash
+hermes skills install isnardokun/btc-market-lab/skills/mercados-daily-pro
+~~~
+
+Este comando consulta el repositorio GitHub; para el trabajo en la máquina es
+preferible el instalador local y su copia sincronizada con el checkout.
