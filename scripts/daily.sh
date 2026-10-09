@@ -61,6 +61,9 @@ if [ $? -ne 0 ]; then
 fi
 echo "  [OK] charts" >> "$LOG"
 
+# Add publisher RSS research when running daily pipeline; CLI/tests remain offline by default.
+# Set NEWS_RSS_ENABLED=0 to disable if source policies/network block the feeds.
+export NEWS_RSS_ENABLED="${NEWS_RSS_ENABLED:-1}"
 python3 analysis/daily_report.py >> "$LOG" 2>&1
 if [ $? -ne 0 ]; then
     echo "  [FAIL] daily_report — aborting" >> "$LOG"
