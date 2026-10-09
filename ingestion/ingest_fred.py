@@ -19,8 +19,8 @@ ADVERTENCIA: FRED tiene dos fechas por observación:
   - date: el período de la observación (ej: "2026-08-01" para dato de agosto)
 """
 import sys, os, datetime, sqlite3, json, time, argparse
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from ingestion.config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
 from storage.archive_schema import archive_schema_installed, register_dataset
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
