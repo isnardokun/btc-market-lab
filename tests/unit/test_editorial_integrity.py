@@ -36,7 +36,7 @@ class EditorialIntegrityTests(unittest.TestCase):
         }])
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["title"], title)
-        self.assertEqual(items[0]["summary"], original[:280])
+        self.assertEqual(items[0]["summary"], original.strip())
         self.assertEqual(items[0]["bias"], "Sin evaluar")
         self.assertNotIn("rendimiento", items[0]["summary"])
 
