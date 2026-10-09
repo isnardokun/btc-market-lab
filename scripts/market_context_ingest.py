@@ -29,7 +29,7 @@ def run(db,source,*,history=False,max_pages=2,fred_api_key=None):
     db.commit()
     calls={
       "binance":lambda:fetch_binance(db,history=history,max_pages=max_pages),
-      "bybit":lambda:fetch_bybit(db,max_pages=max_pages),
+      "bybit":lambda:fetch_bybit(db,max_pages=max_pages,history=history),
       "farside":lambda:fetch_farside(db),
       "bls":lambda:fetch_bls(db),
       "fred":lambda:fetch_fred(db,api_key=fred_api_key),
