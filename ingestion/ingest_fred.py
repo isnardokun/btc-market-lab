@@ -213,11 +213,11 @@ def ingest_series(conn, series_id, freq, *, full_history=False):
     return inserted
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="FRED incremental (default) or explicit historical archive")
     parser.add_argument("--history", action="store_true", help="Recover all available old FRED observations")
     parser.add_argument("--apply", action="store_true", help="Required for historical API/DB mutations")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.history and not args.apply:
         print("PLAN: --history requerirá --apply. Recuperará historia FRED disponible para 12 series.")
         return 0
