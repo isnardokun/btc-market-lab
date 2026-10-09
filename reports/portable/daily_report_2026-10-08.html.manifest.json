@@ -1,10 +1,10 @@
 {
   "report_date": "2026-10-08",
   "source_file": "/home/ignotus/btc-research/reports/daily_report_2026-10-08.html",
-  "source_sha256": "336d92d9250b3241918f771828dff29b41fcfb0d3349e7e3578268c6018c9755",
+  "source_sha256": "d4dc526fffcedb181bd259099e6138cf16deb0ce8472a08ee431a39b78f7faf9",
   "gate_file": "/home/ignotus/btc-research/reports/gate_2026-10-08.json",
-  "gate_sha256": "79c6530f2784be6b32aae7da3e33afa5cf09cd9d23317ff7855f63ae57b95394",
-  "portable_sha256": "16172dd47ec347ed755f1463c34116b57d4cebb6da09ccdb5401c96b9be49714",
+  "gate_sha256": "d33999ce46111af84f4a74b764c4cf1b035fb6dbee5cebd90431fd20f8121102",
+  "portable_sha256": "3aa15f20febde8572262bfca0562ce23fd5925b0a5744a51ee753b787f15b570",
   "offline": true,
-  "approved_score": 99.0
+  "approved_score": 100.0
 }
