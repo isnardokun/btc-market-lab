@@ -116,6 +116,61 @@ class HermesSkillTests(unittest.TestCase):
             )
             self.assertNotEqual(bad.returncode, 0)
 
+    def test_bootstrap_updates_old_checkout_and_preserves_modified_receipt(self):
+        """An old tracked and locally modified delivery receipt must survive."""
+        with tempfile.TemporaryDirectory() as scratch:
+            base = Path(scratch)
+            remote = base / "isnardokun" / "btc-market-lab.git"
+            remote.parent.mkdir()
+            subprocess.run(
+                ["git", "init", "--bare", "-q", "--initial-branch=master", str(remote)],
+                capture_output=True, text=True, check=True,
+            )
+            local = base / "local"
+            local.mkdir()
+            def command(directory, *arguments):
+                return subprocess.run(
+                    ["git", *arguments], cwd=directory,
+                    capture_output=True, text=True, check=True,
+                )
+            command(local, "init", "-q", "-b", "master")
+            command(local, "config", "user.email", "test@example.invalid")
+            command(local, "config", "user.name", "CI")
+            receipt = local / "reports" / "deliveries" / "sent.json"
+            receipt.parent.mkdir(parents=True)
+            receipt.write_bytes(b"published version")
+            command(local, "add", "reports/deliveries/sent.json")
+            command(local, "commit", "-qm", "tracked operational receipt")
+            command(local, "remote", "add", "origin", str(remote))
+            command(local, "push", "-q", "-u", "origin", "master")
+            # Simulate GitHub's new source commit deleting tracked runtime data.
+            next_checkout = base / "newcode"
+            command(base, "clone", "-q", str(remote), str(next_checkout))
+            command(next_checkout, "config", "user.email", "test@example.invalid")
+            command(next_checkout, "config", "user.name", "CI")
+            command(next_checkout, "rm", "-q", "reports/deliveries/sent.json")
+            (next_checkout / "scripts").mkdir()
+            shutil.copy2(ROOT / "scripts" / "local_artifact_retention.py",
+                         next_checkout / "scripts" / "local_artifact_retention.py")
+            command(next_checkout, "add", "-A")
+            command(next_checkout, "commit", "-qm", "stop tracking receipt; ship safe updater")
+            command(next_checkout, "push", "-q", "origin", "master")
+            # The old checkout has a newer private receipt than GitHub.
+            receipt.write_bytes(b"private local delivery confirmation")
+            env = os.environ.copy()
+            env["BTC_RESEARCH_HOME"] = str(local)
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts" / "local_artifact_retention.py"),
+                 "bootstrap"],
+                cwd=local, env=env, capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(receipt.read_bytes(), b"private local delivery confirmation")
+            self.assertEqual(command(local, "rev-parse", "HEAD").stdout.strip(),
+                             command(next_checkout, "rev-parse", "HEAD").stdout.strip())
+            self.assertEqual(command(local, "ls-files", "reports/deliveries/sent.json").stdout, "")
+            self.assertTrue(list((local / "reports" / "local-retained").glob("*/manifest.json")))
+
     def test_install_preserves_local_customizations(self):
         with tempfile.TemporaryDirectory() as scratch:
             env = os.environ.copy()
