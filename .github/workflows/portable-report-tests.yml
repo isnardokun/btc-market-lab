@@ -21,7 +21,7 @@ jobs:
           forbidden="$(git ls-files -- 'reports/portable/**' 'reports/deliveries/**' 'dashboards/dashboard_standalone.html')"
           if [[ -n "$forbidden" ]]; then
             echo "::error::Private/runtime artifacts are tracked in Git. Remove them from HEAD."
-            printf '%s\\n' "$forbidden"
+            echo "$forbidden"
             exit 1
           fi
           echo "No generated portable HTML, manifest, Telegram receipts, or dashboard snapshot tracked."
