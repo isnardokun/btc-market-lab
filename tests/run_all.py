@@ -23,7 +23,6 @@ TESTS = [
     ("Unit: 52-week/Price Archive", "python3 -m unittest -v tests.unit.test_52week_and_partial_archive"),
     ("Unit: Archive/UTC Reconciliation", "python3 -m unittest -v tests.unit.test_archive_reconciliation"),
     ("Unit: ResearchBitcoin On-chain Complement", "python3 -m unittest -v tests.unit.test_researchbitcoin_complement"),
-    ("Unit: Specialist News and Knowledge RAG", "python3 -m unittest -v tests.unit.test_specialized_news_rag"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 

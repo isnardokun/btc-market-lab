@@ -2,12 +2,9 @@
 import datetime as dt
 import json
 import sqlite3
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ingestion.researchbitcoin_catalog import CATALOG
 from ingestion.researchbitcoin_v2 import (

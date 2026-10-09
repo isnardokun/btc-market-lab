@@ -11,7 +11,6 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars, last_complete_day_end_timestamp, previous_completed_utc_day
 from rendering.onchain_complement import render_complement
-from analysis.knowledge_rag import render_research_note
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
 try:
@@ -522,14 +521,12 @@ def news_span(n):
     title = html_escape(str(n.get("title") or "Sin título"))
     summary = html_escape(str(n.get("summary") or "Extracto no disponible"))
     category = html_escape(str(n.get("impact") or "Sin categoría"))
-    source = html_escape(str(n.get("source") or "Fuente no identificada"))
-    source_role = "Fuente primaria" if n.get("source_type") == "primary" else ("Investigación" if n.get("source_type") == "research" else "Prensa / búsqueda")
     bias = html_escape(str(n.get("bias") or "Neutral"))
     link = (f'<a href="{html_escape(url, quote=True)}" rel="noopener noreferrer" '
             f'class="readmore" target="_blank">Leer fuente original &#8594;</a>'
             if url else '<span class="readmore">Enlace no verificado</span>')
     return (f'<div class="news-item">'
-            f'<div class="news-date">{date} · {source} ({source_role}) &nbsp; <span class="news-bias b-{bc}">{bias}</span></div>'
+            f'<div class="news-date">{date} &nbsp; <span class="news-bias b-{bc}">{bias}</span></div>'
             f'<h3>{title}</h3>'
             f'<p class="news-summary">{summary}</p>'
             f'<div class="news-impact"><strong>Tema identificado automáticamente: </strong>{category}</div>'
@@ -1221,21 +1218,14 @@ def main():
       f'{"%.2fx" % oc["mvrv"] if oc["mvrv"] else "---"} ({btc_narr["mvrv_int"]})</p>')
     A(f'<div class="highlight"><strong>Estructura del ciclo:</strong> {btc_narr["cycle_txt"]}</div>')
     A(f'<p><strong>Realized Cap vs Market Cap:</strong> el capital realizado de ${oc["rcap"]:.2f}T representa una valoración agregada de monedas según su último movimiento en cadena; no es el costo promedio por BTC. '
-      f'El ratio actual de {"%.2fx" % (oc["mcap"]/oc["rcap"]) if oc["mcap"] and oc["rcap"] else "---"} es una relación de valoración, no una clasificación concluyente de fase de ciclo. '
-      
+      f'El ratio actual de {"%.2fx" % (oc["mcap"]/oc["rcap"]) if oc["mcap"] and oc["rcap"] else "---"} indica que el mercado esta en '
+      f'{"fase de acumulacion" if oc["mvrv"] and oc["mvrv"] < 1.5 else "fase intermedia del ciclo" if oc["mvrv"] and oc["mvrv"] < 2.5 else "fase de distribucion"}. '
       f'{btc_narr["asopr_int"]}</p>')
     A(f'<p><strong>NUPL:</strong> {btc_narr["nupl_int"]} '
       f'{btc_narr["hr_int"]} '
       f'Active addresses en {"%d" % oc["addrs"] if oc["addrs"] else "---"} (promedio 24h).</p>')
     A(f'<p><strong>Media Moviles:</strong> {btc_narr["ma_txt"]}</p>')
     A('</div>')
-
-    # Local methodology retrieval: numbers only from the validated on-chain snapshot.
-    if os.environ.get("RESEARCH_RAG_ENABLED", "1") == "1":
-        A(render_research_note(
-            {"mvrv": oc.get("mvrv"), "asopr": oc.get("asopr"), "nupl": oc.get("nupl")},
-            {name: onchain_asof.get(name) for name in ("mvrv", "asopr", "nupl")}
-        ))
 
     # Tech Summary Table
     A('<div class="card"><h3>Resumen Tecnico — Senales de Indicadores</h3>')
