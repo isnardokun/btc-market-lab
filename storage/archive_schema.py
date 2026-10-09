@@ -171,11 +171,44 @@ def ensure_archive_schema(conn):
     existing = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     )}
-    for table,sql in TRIGGERS.items():
-        if table in existing and (table != "daily" or "series" in existing):
-            conn.execute(sql)
+    attach_available_triggers(conn, existing)
     # The outer caller owns commit to allow app integration to be atomic.
     return SCHEMA_VERSION
+
+
+def attach_available_triggers(conn, existing=None):
+    """Attach audit hooks to optional tables created after migration."""
+    if not archive_schema_installed(conn):
+        return
+    if existing is None:
+        existing = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    for table, sql in TRIGGERS.items():
+        if table in existing and (table != "daily" or "series" in existing):
+            conn.execute(sql)
+
+
+def register_dataset(conn, source_id, metric, *, frequency="d1",
+                     unit=None, scale="native", earliest=None, note=None):
+    require_archive_schema(conn)
+    if source_id not in {p for p,_,_ in PROVIDERS} or not metric:
+        raise ValueError("Dataset inválido")
+    conn.execute(
+        "INSERT INTO archive_datasets "
+        "(source_id,metric,frequency,raw_unit,raw_scale,first_requested_utc,"
+        "availability_note,registered_at_utc) VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(source_id,metric) DO UPDATE SET "
+        "raw_unit=COALESCE(excluded.raw_unit,archive_datasets.raw_unit),"
+        "raw_scale=COALESCE(excluded.raw_scale,archive_datasets.raw_scale),"
+        "first_requested_utc=COALESCE("
+        "archive_datasets.first_requested_utc,excluded.first_requested_utc),"
+        "availability_note=COALESCE(excluded.availability_note,"
+        "archive_datasets.availability_note)",
+        (source_id,metric,frequency,unit,scale,
+         str(earliest) if earliest else None,note,
+         dt.datetime.now(dt.timezone.utc).isoformat()),
+    )
 
 
 def save_window(conn, source_id, metric, start, end, status, points, *, run_id=None):
