@@ -559,7 +559,7 @@ modelo, consultar `docs/KNOWLEDGE_CORPUS_V2.md`,
 `python3 scripts/corpus_query.py --manifest` y
 `python3 scripts/corpus_query.py --query 'MVRV'` antes de atribuir una
 definición. La base contiene 36 fichas de métodos y limitaciones y su
-SHA256. El HTML RAG v2 incluye hash/verisión verificables en el Gate.
+SHA256. El HTML RAG v2 incluye hash y versión verificables en el Gate.
 
 El corpus no son históricos ni predicciones. Solo se redacta sobre
 observaciones efectivas de SQLite/API, con método, fecha y escala. No sumar
