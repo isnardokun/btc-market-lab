@@ -49,3 +49,9 @@ Thumbs.db
 *.key
 .env
 .env.*
+
+# Portable outputs and sensitive message delivery receipts
+reports/portable/
+reports/deliveries/
+# Regenerated from latest validated dashboard JSON
+dashboards/dashboard_standalone.html

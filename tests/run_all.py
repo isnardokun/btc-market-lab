@@ -13,6 +13,8 @@ os.chdir(BASE)
 TESTS = [
     ("Unit: Indicators", "python3 tests/unit/test_indicators.py"),
     ("Unit: Metric Registry", "python3 tests/unit/test_metric_registry.py"),
+    ("Unit: Portable HTML / Telegram", "python3 tests/unit/test_portable_report.py"),
+    ("Unit: Hermes Skill", "python3 tests/unit/test_hermes_skill.py"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 

@@ -60,3 +60,68 @@ ingest_price → ingest → ingest_fred → charts → daily_report
 ## Documentación
 
 → `docs/SYSTEM.md` — arquitectura completa, tablas, fuentes, mantenimiento
+
+
+## Hermes: reporte HTML independiente del dashboard
+
+El dashboard dinámico se ejecuta localmente con SQLite, pero la copia del
+reporte aprobada por publication_gate se exporta a:
+
+    reports/portable/daily_report_YYYY-MM-DD.html
+
+Es un archivo autocontenido que se puede adjuntar y abrir en otro dispositivo
+sin conexión al servidor local. El envío por Telegram es opcional y no está
+habilitado por defecto. Hermes puede enviarlo por solicitud:
+
+~~~bash
+# Primero: configurar FRED_API_KEY, TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID
+python3 scripts/send_report.py --dry-run
+python3 scripts/send_report.py
+~~~
+
+Para envío cron programado: SEND_TELEGRAM_AUTO=1 bash scripts/daily.sh.
+La API de Telegram usa sendDocument: descargar y abrir el .html en un navegador.
+Los adjuntos se bloquean si no corresponden a un gate aprobado con hash válido.
+
+El dashboard local puede abrirse mediante un servidor HTTP restringido a
+127.0.0.1. El pipeline también exporta dashboards/dashboard_standalone.html
+con datos integrados, que se puede abrir offline como snapshot.
+
+**SEGURIDAD:** la clave FRED que estaba versionada debe revocarse/rotarse en
+FRED antes del despliegue; usar una nueva mediante variable de entorno.
+Nunca almacenar tokens de Telegram ni claves en el repositorio.
+
+Guía completa: [docs/HERMES_REPORT_DELIVERY.md](docs/HERMES_REPORT_DELIVERY.md).
+
+
+## Skill nativo para Hermes (actualizar, probar y enviar)
+
+Tras integrar el PR en master y traerlo a la máquina, se instala el skill desde
+el directorio propio del proyecto (con backup si Hermes ya tenía uno modificado):
+
+~~~bash
+cd /home/ignotus/btc-research
+bash scripts/install_hermes_skill.sh
+hermes skills list
+~~~
+
+O para futuras actualizaciones controladas y pruebas:
+
+~~~bash
+bash scripts/update_local_and_test.sh
+~~~
+
+Para actualizar **y ejecutar realmente el pipeline** (sin enviar Telegram):
+
+~~~bash
+bash scripts/update_local_and_test.sh --pipeline
+~~~
+
+En una sesión nueva de Hermes, pedir:
+
+~~~text
+/mercados-daily-pro Actualiza en local, prueba el proyecto y genera el HTML portátil; no lo envíes todavía.
+~~~
+
+El skill vive en [skills/mercados-daily-pro/SKILL.md](skills/mercados-daily-pro/SKILL.md).
+Si el PR aún no está integrado, los archivos no existen en master; revisar el PR y hacer merge primero. No ejecutar comandos de actualización con cambios locales sin guardar.

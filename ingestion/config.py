@@ -1,7 +1,7 @@
 """Config for BTC Research System — bitview.space API"""
 import os
 
-BASE_DIR = "/home/ignotus/btc-research"
+BASE_DIR = os.environ.get("BTC_RESEARCH_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DB_PATH  = f"{BASE_DIR}/db/btc_research.db"
 SCRATCH  = "/home/ignotus/.hermes/cache/scratch"
 REPORTS  = f"{BASE_DIR}/reports"
@@ -13,14 +13,15 @@ CHARTS_DIR  = CHARTS
 REPORTS_DIR = REPORTS
 
 # ─── FRED API ────────────────────────────────────────────────────────────────
-FRED_API_KEY  = "d41bb4d61c7d02ffbd55dfe528c51d8c"
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")  # Set in Hermes environment; rotate leaked keys
 FRED_ENDPOINT = "https://api.stlouisfed.org/fred/series/observations"
 FRED_SERIES  = [
     ("DGS10",           "Yield 10Y Treasury",  "daily",   "Treasury yields — driver macro #1. BTC correlation negativa."),
     ("DGS2",            "Yield 2Y Treasury",  "daily",   "Expectativas Fed corto plazo."),
-    ("DTWEXBGS",        "Indice DXY Broad",   "daily",   "Dolar — impacto directo en BTC, oro, commodities."),
+    ("DTWEXBGS",        "Trade Weighted USD Broad Index",   "daily",   "Dolar — impacto directo en BTC, oro, commodities."),
     ("VIXCLS",          "VIX CBOE",            "daily",   "Fear index — correlacion crypto."),
-    ("CPALTT01USM661S", "CPI YoY EE.UU.",      "monthly", "Inflacion — determinante politica Fed."),
+    ("CPIAUCSL",        "CPI-U All Items (SA), índice", "monthly", "Calcular YoY contra mismo mes del año anterior."),
+    ("CPALTT01USM661S", "OECD CPI índice (serie heredada)", "monthly", "No usar como CPI YoY sin transformar."),
     ("PPIACO",           "PPI Commodities",     "monthly", "Inflacion intermedia."),
     ("UNRATE",           "Tasa Desempleo",       "monthly", "Mercado laboral."),
     ("PAYEMS",           "Nonfarm Payrolls",     "monthly", "Volatilidad en dias de publicacion."),

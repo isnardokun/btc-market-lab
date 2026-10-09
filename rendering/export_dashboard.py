@@ -4,7 +4,8 @@ export_dashboard.py — Genera dashboard_latest.json con el estado
 actual del sistema: precios, macro, predicciones, niveles, hit rates.
 Corre diariamente via cron.
 """
-import sys, os, json, sqlite3, datetime
+import sys, os, json, sqlite3, datetime, tempfile, re
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.config import DB_PATH, BASE_DIR
 
@@ -25,59 +26,61 @@ def last_n_values(conn, series_id, n=30):
     return [{"date": r[0], "value": r[1]} for r in reversed(rows)]
 
 def macro_summary(conn):
-    # CPI YoY calculado en query
-    cpi_row = conn.execute("""
-        SELECT a.date, a.value, b.value,
-               ROUND((a.value - b.value) / b.value * 100, 2)
-        FROM macro_fred a
-        JOIN macro_fred b ON b.series_id = a.series_id
-          AND b.date = date(a.date, '-12 months')
-        WHERE a.series_id = 'CPALTT01USM661S'
-        ORDER BY a.date DESC LIMIT 1
-    """).fetchone()
-    cpi_yoy = cpi_row[3] if cpi_row else None
-    cpi_date = cpi_row[0] if cpi_row else None
-
-    series_map = {
-        "DGS10":           ("10y_yield",   "Yield 10Y",   5.0, 5.5, 6.0),
-        "DGS2":            ("2y_yield",    "Yield 2Y",    4.5, 5.0, 5.5),
-        "DTWEXBGS":       ("dxy",          "DXY",         100,  115, 125),
-        "VIXCLS":         ("vix",          "VIX",          15,   25,  35),
-        "NFCI":           ("nfci",          "NFCI",        -0.5,  0,   0.5),
-        "UNRATE":         ("unemployment", "Desempleo",    3.5,  4.5,  6.0),
-        "PAYEMS":         ("payrolls",      "NFP",         100000, 200000, 400000),
-        "RSXFS":          ("retail_sales", "Retail Sales",  500000, 600000, 700000),
-        "CBBTCUSD":       ("btc_fred",     "BTC (FRED)",   60000,  90000, 120000),
-    }
+    """Consistent indicators from real FRED series (never relabel a level as a change)."""
     result = {}
-    for sid, (key, label, neutral, warn, crit) in series_map.items():
+    series_map = {
+        "DGS10":    ("10y_yield", "Yield 10Y", "percent"),
+        "DGS2":     ("2y_yield", "Yield 2Y", "percent"),
+        "DTWEXBGS": ("usd_broad", "USD Broad Index (not DXY)", "index"),
+        "VIXCLS":   ("vix", "VIX", "index"),
+        "NFCI":     ("nfci", "NFCI", "index"),
+        "UNRATE":   ("unemployment", "Desempleo", "percent"),
+        "RSXFS":    ("retail_sales", "Retail Sales", "millions_usd"),
+        "CBBTCUSD": ("btc_fred", "BTC (FRED)", "usd"),
+    }
+    for sid, (key, label, unit) in series_map.items():
         row = conn.execute(
             "SELECT date, value FROM macro_fred WHERE series_id=? ORDER BY date DESC LIMIT 1",
             (sid,)
         ).fetchone()
         if row and row[1] is not None:
-            val = row[1]
-            if val > crit:    status = "critical"
-            elif val > warn:  status = "warning"
-            elif val < neutral: status = "warning"
-            else:              status = "ok"
             result[key] = {
-                "label":  label,
-                "value":  round(val, 4) if isinstance(val, float) else val,
-                "date":   row[0],
-                "status": status,
+                "label": label, "value": round(row[1], 4),
+                "date": row[0], "unit": unit, "source_series": sid,
+                "status": "ok",
             }
 
-    # CPI YoY manualmente calculado
-    if cpi_yoy is not None:
-        status = "ok" if cpi_yoy <= 3.0 else ("warning" if cpi_yoy <= 5.0 else "critical")
+    # CPIAUCSL is the SA level, not a YoY percent. Compare corresponding months.
+    cpi = conn.execute("""
+        SELECT a.date, 100.0 * (a.value / b.value - 1.0)
+        FROM macro_fred a JOIN macro_fred b
+          ON b.series_id='CPIAUCSL' AND b.date=date(a.date, '-12 months')
+        WHERE a.series_id='CPIAUCSL' AND b.value > 0
+        ORDER BY a.date DESC LIMIT 1
+    """).fetchone()
+    if cpi:
         result["cpi_yoy"] = {
-            "label":  "CPI YoY",
-            "value":  cpi_yoy,
-            "date":   cpi_date,
-            "status": status,
+            "label": "CPI YoY (SA)", "value": round(cpi[1], 3),
+            "date": cpi[0], "unit": "percent", "source_series": "CPIAUCSL",
+            "status": "ok",
+        }
+
+    # PAYEMS is a level in thousands of persons. NFP is its monthly difference.
+    nfp = conn.execute("""
+        SELECT a.date, a.value - b.value
+        FROM macro_fred a JOIN macro_fred b
+          ON b.series_id='PAYEMS' AND b.date=date(a.date, '-1 month')
+        WHERE a.series_id='PAYEMS'
+        ORDER BY a.date DESC LIMIT 1
+    """).fetchone()
+    if nfp:
+        result["nfp_change"] = {
+            "label": "NFP variación mensual", "value": round(nfp[1], 2),
+            "date": nfp[0], "unit": "thousand_persons", "source_series": "PAYEMS",
+            "status": "ok",
         }
     return result
+
 
 def active_predictions(conn, limit=20):
     rows = conn.execute("""
@@ -203,11 +206,25 @@ def recent_reports(conn, limit=10):
             "asset":     r[2],
             "section":   r[3],
             "version":   r[4],
-            "filename":  r[5],
+            "filename":  ("reports/" + os.path.basename(r[5]) if r[5] and re.fullmatch(r"daily_report_\d{4}-\d{2}-\d{2}\.html", os.path.basename(r[5])) else None),
             "created_at": r[6],
         }
         for r in rows
     ]
+
+def atomic_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".dashboard-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
 
 def main():
     conn = sqlite3.connect(DB_PATH)
@@ -227,8 +244,25 @@ def main():
         "reports":    recent_reports(conn),
     }
 
-    with open(OUT_PATH, "w") as f:
-        json.dump(dashboard, f, default=str, ensure_ascii=False, indent=2)
+    payload = json.dumps(dashboard, default=str, ensure_ascii=False, indent=2)
+    atomic_text(Path(OUT_PATH), payload)
+
+    # Offline dashboard is optional; it has the full snapshot embedded and does
+    # not attempt file:// fetch. Unlike reports, it is for local archival use.
+    source = Path(BASE_DIR) / "dashboards" / "dashboard.html"
+    if source.is_file():
+        template = source.read_text(encoding="utf-8")
+        marker = "const INLINE_DATA = null;"
+        if template.count(marker) != 1:
+            raise ValueError("Dashboard template marker missing or ambiguous")
+        inline_json = json.dumps(dashboard, default=str, ensure_ascii=True)
+        inline_json = inline_json.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        standalone = template.replace(marker, "const INLINE_DATA = " + inline_json + ";")
+        standalone = re.sub(
+            r'<link\b(?=[^>]*\brel\s*=\s*["\x27]?stylesheet\b)[^>]*>',
+            "", standalone, flags=re.IGNORECASE
+        )
+        atomic_text(Path(BASE_DIR) / "dashboards" / "dashboard_standalone.html", standalone)
 
     conn.close()
     print(f"Dashboard exportado: {OUT_PATH}")

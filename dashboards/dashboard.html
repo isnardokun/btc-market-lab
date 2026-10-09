@@ -267,7 +267,7 @@ function sparklineSVG(values, w=80, h=28, color="#0e7669"){
 async function load(){
   let d = null;
   // Try inline data first (for file:// viewing with embedded data)
-  const stored = getInlineData();
+  const stored = INLINE_DATA || getInlineData();
   if(stored){ d = stored; render(d); return; }
   // Try fetch
   try{
@@ -317,7 +317,7 @@ function render(d){
 function renderTicker(macro){
   const items = [
     {pair:"BTC/USD", price: macro.btc_fred?.value, chg: null, color:"#16A34A"},
-    {pair:"DXY",    price: macro.dxy?.value,        chg: null, color:"#0e7669"},
+    {pair:"USD Broad Index",    price: macro.usd_broad?.value,        chg: null, color:"#0e7669"},
     {pair:"10Y YIELD", price: macro["10y_yield"]?.value, suffix:"%", chg:null, color:"#d5a844"},
     {pair:"VIX",    price: macro.vix?.value,         chg:null, color:"#ef765f"},
     {pair:"NFCI",   price: macro.nfci?.value,        chg:null, color:"#0e7669"},
@@ -338,12 +338,12 @@ function renderMacro(macro){
   const cards = [
     {key:"10y_yield",  label:"Yield 10Y",   fmt:v=>v?.toFixed(3)+"%",   neutral:5.27, warn:5.5, crit:6.0},
     {key:"2y_yield",   label:"Yield 2Y",    fmt:v=>v?.toFixed(3)+"%",   neutral:4.79, warn:5.0, crit:5.5},
-    {key:"dxy",        label:"DXY Index",   fmt:v=>v?.toFixed(2),       neutral:121,  warn:125, crit:130},
+    {key:"usd_broad",        label:"USD Broad Index Index",   fmt:v=>v?.toFixed(2),       neutral:121,  warn:125, crit:130},
     {key:"vix",        label:"VIX",          fmt:v=>v?.toFixed(2),       neutral:16,   warn:25,  crit:35},
     {key:"nfci",       label:"NFCI",         fmt:v=>v?.toFixed(4),       neutral:0,    warn:0.5, crit:1},
     {key:"cpi_yoy",    label:"CPI YoY",      fmt:v=>v?.toFixed(2)+"%",   neutral:2.5,  warn:4,   crit:6},
     {key:"unemployment",label:"Desempleo",   fmt:v=>v?.toFixed(2)+"%",   neutral:3.8,  warn:5.5, crit:7},
-    {key:"payrolls",   label:"NFP",          fmt:v=>(v/1000)?.toFixed(0)+"K", neutral:200, warn:400, crit:600},
+    {key:"nfp_change",   label:"NFP Δ mensual",          fmt:v=>v?.toFixed(0)+"K", neutral:200, warn:400, crit:600},
     {key:"retail_sales",label:"Retail Sales",fmt:v=>"$"+(v/1000)?.toFixed(0)+"B", neutral:640, warn:700, crit:800},
     {key:"btc_fred",   label:"BTC (FRED)",   fmt:v=>"$"+v?.toFixed(0),  neutral:83000, warn:null, crit:null},
   ];
@@ -405,15 +405,15 @@ function renderHitRates(rates){
 }
 
 function renderEvolution(macro){
-  // Simple: mostrar DXY y 10Y como proxy de evolucion
-  const dxy = macro.dxy;
+  // Simple: mostrar USD Broad Index y 10Y como proxy de evolucion
+  const dxy = macro.usd_broad;
   const ten = macro["10y_yield"];
   if(!dxy&&!ten){
     $("evo-row").innerHTML='<div class="empty">Sin datos de evolucion</div>';
     return;
   }
   const items=[];
-  if(dxy) items.push({label:"DXY",val:dxy.value,unit:""});
+  if(dxy) items.push({label:"USD Broad Index",val:dxy.value,unit:""});
   if(ten)  items.push({label:"10Y Yield",val:ten.value,unit:"%"});
   const html=items.map(it=>`
     <div class="evo-card">
