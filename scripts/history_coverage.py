@@ -37,6 +37,9 @@ def coverage(db_path):
             ("FRED","macro_fred",
              "SELECT series_id,COUNT(*),MIN(date),MAX(date) FROM macro_fred "
              "GROUP BY series_id ORDER BY series_id","date"),
+            ("RSS/Exa","research_news_archive",
+             "SELECT source || ':' || asset,COUNT(*),MIN(report_date),MAX(report_date) "
+             "FROM research_news_archive GROUP BY source,asset ORDER BY source,asset","date"),
             ("ResearchBitcoin","onchain_external_observations",
              "SELECT metric,COUNT(*),MIN(observed_date),MAX(observed_date) "
              "FROM onchain_external_observations "
