@@ -18,7 +18,7 @@ FRED_ENDPOINT = "https://api.stlouisfed.org/fred/series/observations"
 FRED_SERIES  = [
     ("DGS10",           "Yield 10Y Treasury",  "daily",   "Treasury yields — driver macro #1. BTC correlation negativa."),
     ("DGS2",            "Yield 2Y Treasury",  "daily",   "Expectativas Fed corto plazo."),
-    ("DTWEXBGS",        "Indice DXY Broad",   "daily",   "Dolar — impacto directo en BTC, oro, commodities."),
+    ("DTWEXBGS",        "Trade Weighted USD Broad Index",   "daily",   "Dolar — impacto directo en BTC, oro, commodities."),
     ("VIXCLS",          "VIX CBOE",            "daily",   "Fear index — correlacion crypto."),
     ("CPIAUCSL",        "CPI-U All Items (SA), índice", "monthly", "Calcular YoY contra mismo mes del año anterior."),
     ("CPALTT01USM661S", "OECD CPI índice (serie heredada)", "monthly", "No usar como CPI YoY sin transformar."),
