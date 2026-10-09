@@ -205,7 +205,7 @@ def parse_farside(body):
             parsed={name:_flow_num(cell) for name,cell in zip(tickers,row[1:])}
             # TOTAL is independently sourced; do not synthesize missing cells.
             for ticker,value in parsed.items():
-                if value is not None and ticker!="TOTAL":
+                if value is not None:
                     results.append((day.isoformat(),ticker,value))
         if not results:raise ValueError("Empty Farside data table")
         return results
