@@ -1453,8 +1453,8 @@ def main():
       f'({pct(btc_chg)} frente al cierre anterior); '
       f'RSI(14) {btc_rsi:.1f} y MVRV {oc["mvrv"]:.2f}x. '
       'Los escenarios son condicionales, no probabilidades calibradas. '
-      'No se dispone aquí de flujos ETF verificados ni de un modelo '
-      'calibrado que permita cuantificar retornos futuros.</p>')
+      'Los flujos ETF se presentan por separado solo cuando la fuente está '
+      'archivada en SQLite; no existe aquí un modelo calibrado de retorno futuro.</p>')
     A(f'<p><strong>Datos macro disponibles:</strong> {macro_narr}</p>')
     A('</div>')
 
