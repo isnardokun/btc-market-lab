@@ -124,8 +124,8 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
         from analysis.knowledge_rag import corpus_manifest
         manifest = corpus_manifest()
         match = re.search(
-            r'<div class="card" id="research-methodology"\\s+'
-            r'data-corpus-version="([^"]+)"\\s+'
+            r'<div class="card" id="research-methodology"\s+'
+            r'data-corpus-version="([^"]+)"\s+'
             r'data-corpus-sha256="([0-9a-f]{64})">', source
         )
         if not match:
