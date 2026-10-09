@@ -165,7 +165,12 @@ def parse_scalar_rows(payload, slug, now=None):
         value = row[value_key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
             raise ValueError("Valor no escalar finito")
-        if item.unit == "percent" and not (0 <= value <= 100):
+        if item.raw_scale == "fraction_0_1":
+            # Live observed provider values are raw fractions; avoid silently
+            # accepting a 0..100 number as if it were a fraction.
+            if not 0 <= value <= 1:
+                raise ValueError("Escala fraccional 0..1 no confirmada para esta observación")
+        elif item.unit == "percent" and not (0 <= value <= 100):
             raise ValueError("Porcentaje incompatible con escala 0..100; verificar metodología")
         if item.unit == "USD" and value < 0 and slug not in {"net_realized_profit_loss_sth"}:
             raise ValueError("USD negativo en métrica no firmada")
