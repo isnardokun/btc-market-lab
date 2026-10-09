@@ -7,7 +7,7 @@ Score: exactitud 35%, consistencia 25%, trazabilidad 20%,
        análisis 15%, presentación 5%.
 Bloquea si hay errores críticos. Min 95/100 para auto-publicar.
 """
-import os, sys, sqlite3, re, datetime
+import os, sys, sqlite3, re, datetime, hashlib
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -451,6 +451,7 @@ def run():
     log = {
         "date": TODAY_STR,
         "report": str(REPORT_PATH),
+        "report_sha256": hashlib.sha256(REPORT_PATH.read_bytes()).hexdigest() if REPORT_PATH.is_file() else None,
         "score_total": round(total_score, 2),
         "pass": not blocked,
         "blocked_reason": "critical_errors" if critical_count > 0 else ("low_score" if total_score < PASS_SCORE else None),
