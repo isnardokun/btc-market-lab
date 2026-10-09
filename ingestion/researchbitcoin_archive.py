@@ -16,7 +16,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import CATALOG, PROVIDER
-from storage.archive_schema import ensure_archive_schema, save_window
+from storage.archive_schema import require_archive_schema, save_window
 from ingestion.researchbitcoin_v2 import (
     DEFAULT_DB, fetch, last_completed_day, parse_scalar_rows, store_rows,
 )
@@ -159,7 +159,7 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
     run_id = uuid.uuid4().hex if apply else None
     if apply:
         with sqlite3.connect(db_path) as db:
-            ensure_archive_schema(db)
+            require_archive_schema(db)
             db.execute(
                 "INSERT INTO archive_ingest_runs "
                 "(run_id,source_id,operation,started_at_utc,status) "
