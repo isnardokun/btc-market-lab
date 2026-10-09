@@ -64,6 +64,19 @@ if [[ "${RBN_INCREMENTAL_ENABLED:-0}" == "1" ]]; then
     fi
 fi
 
+# Market-context collectors: explicitly enabled AFTER backed-up schema migration.
+# All fetched bytes, individual values, revisions and statuses live in SQLite.
+# A third-party source outage never removes or falsifies previous valid rows.
+# Set MARKET_CONTEXT_DAILY_ENABLED=1 only after Hermes checks local rollout.
+if [[ "${MARKET_CONTEXT_DAILY_ENABLED:-0}" == "1" ]]; then
+    echo "  [Market Context] API/ETF/calendar SQLite incremental" >> "$LOG"
+    if python3 scripts/market_context_ingest.py --apply --max-pages 2 >> "$LOG" 2>&1; then
+        echo "  [OK] market context SQLite refresh" >> "$LOG"
+    else
+        echo "  [WARN] market context partial/unavailable; stale data excluded from report" >> "$LOG"
+    fi
+fi
+
 # ── FASE 2: GENERACIÓN (crítico — si falla, no hay reporte) ───────────
 echo "Fase 2: generación de reporte..." >> "$LOG"
 
