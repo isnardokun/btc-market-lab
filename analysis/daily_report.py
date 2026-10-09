@@ -18,7 +18,7 @@ except ImportError:
 TODAY    = datetime.date.today()
 OUT_PATH = BASE_DIR + "/reports/daily_report_" + TODAY.strftime("%Y-%m-%d") + ".html"
 TODAY_STR = TODAY.strftime("%d %b %Y")
-NOW_STR   = datetime.datetime.now().strftime("%H:%M UTC")
+NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%H:%M UTC")
 ts_today  = int(datetime.datetime.combine(TODAY, datetime.time(23,59)).replace(tzinfo=datetime.timezone.utc).timestamp())
 ts_52w    = int((datetime.datetime.combine(TODAY, datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
 
@@ -53,7 +53,7 @@ def yahoo_ohlc(symbol, days=90):
 from quant_engine.indicators import (
     compute_rsi, compute_ma, ema_python,
     compute_macd, stoch, williams_r, cci, atr,
-    find_supp_res, compute_scenarios
+    find_supp_res, compute_scenarios, price_relative_levels
 )
 
 # ── ON-CHAIN BTC ────────────────────────────────────────────────────────────
@@ -145,24 +145,46 @@ def get_btc_onchain():
         }
     }
 
-def get_btc_price_data():
-    """ATH, 52W high/low from local price_btc SQL table."""
+def get_btc_price_data(current_price=None):
+    """Verified ATH, 52-week extremes AND their dates from the same SQL rows."""
     db = sqlite3.connect(DB_PATH)
-    c = db.cursor()
-    c.execute("SELECT ts, price FROM price_btc ORDER BY price DESC LIMIT 1")
-    ath_row = c.fetchone()
-    ath_price = ath_row[1]; ath_date = datetime.date.fromtimestamp(ath_row[0]).strftime("%d %b %Y")
-    c.execute("SELECT MAX(price) FROM price_btc WHERE ts >= ?", (ts_52w,))
-    high52 = c.fetchone()[0]
-    c.execute("SELECT MIN(price) FROM price_btc WHERE ts >= ?", (ts_52w,))
-    low52 = c.fetchone()[0]
-    c.execute("SELECT ts, price FROM price_btc ORDER BY ts DESC LIMIT 1")
-    last_row = c.fetchone()
-    db.close()
-    from_ath = round((last_row[1] - ath_price) / ath_price * 100, 1)
-    return {"ath": round(ath_price,2), "ath_date": ath_date,
-            "high52": round(high52,2), "low52": round(low52,2),
-            "current": round(last_row[1],2), "from_ath": from_ath}
+    try:
+        cur = db.cursor()
+        ath_row = cur.execute(
+            "SELECT ts, price FROM price_btc WHERE ts <= ? AND price > 0 "
+            "ORDER BY price DESC, ts DESC LIMIT 1", (ts_today,)
+        ).fetchone()
+        hi = cur.execute(
+            "SELECT ts, price FROM price_btc WHERE ts BETWEEN ? AND ? AND price > 0 "
+            "ORDER BY price DESC, ts DESC LIMIT 1", (ts_52w, ts_today)
+        ).fetchone()
+        lo = cur.execute(
+            "SELECT ts, price FROM price_btc WHERE ts BETWEEN ? AND ? AND price > 0 "
+            "ORDER BY price ASC, ts DESC LIMIT 1", (ts_52w, ts_today)
+        ).fetchone()
+        latest = cur.execute(
+            "SELECT ts, price FROM price_btc WHERE ts <= ? AND price > 0 "
+            "ORDER BY ts DESC LIMIT 1", (ts_today,)
+        ).fetchone()
+    finally:
+        db.close()
+    if not (ath_row and hi and lo and latest):
+        raise RuntimeError("Datos SQL incompletos para ATH y máximos/mínimos 52 semanas")
+    cur_price = float(current_price) if current_price is not None else float(latest[1])
+    if cur_price <= 0 or float(ath_row[1]) <= 0:
+        raise RuntimeError("Precio BTC no válido al calcular drawdown")
+    date_label = lambda row: datetime.datetime.fromtimestamp(
+        row[0], datetime.timezone.utc
+    ).strftime("%d %b %Y")
+    return {
+        "ath": round(ath_row[1], 2), "ath_date": date_label(ath_row),
+        "high52": round(hi[1], 2), "high52_date": date_label(hi),
+        "low52": round(lo[1], 2), "low52_date": date_label(lo),
+        "current": round(cur_price, 2),
+        "from_ath": round((cur_price / ath_row[1] - 1) * 100, 1),
+        "drawdown_to_low52": round((lo[1] / ath_row[1] - 1) * 100, 1),
+    }
+
 
 def get_macro_fred():
     """Fetch macro data from local FRED table.
@@ -544,12 +566,9 @@ def classify_impact(text):
 
 # ── MACRO EVENTS ─────────────────────────────────────────────────────────────
 
-MACRO_EVENTS = [
-    ("08 Oct", "ISM Services PMI",    "Alta",   "PMI services determina salud del sector terciario EE.UU."),
-    ("14 Oct", "IPC EE.UU. (CPI)",   "Muy Alta","Dato clave para pricing de tasas Fed — mercado en vilo."),
-    ("27-28 Oct","Reunion FOMC",    "Alta",   "Decision tasas — expectativa: sin cambio. Dato December depende de IPC."),
-    ("31 Oct", "GDP Q3 Avance",      "Alta",   "Crecimiento economico EE.UU. tercer trimestre."),
-]
+# No se anuncian eventos sin calendario oficial verificable e ingestado.
+# Anunciar fechas estáticas como "próximas" producía información incorrecta.
+MACRO_EVENTS = []
 
 
 # ── NARRATIVE GENERATOR ───────────────────────────────────────────────────────
@@ -610,20 +629,22 @@ def gen_btc_narrative(oc, btc_price_data, btc_rsi, btc_hist, btc_chg, btc_sma200
     else:
         mvrv_int = "MVRV no disponible en la base de datos local."
 
-    # Cycle structure
+    # Diferenciar drawdown hasta el spot actual vs caída ATH -> mínimo anual.
+    low_drawdown = btc_price_data["drawdown_to_low52"]
     cycle_txt = (
-        f"BTC cayo {from_ath:.1f}% desde el ATH de ${ath:,.0f} ({ath_date}) "
-        f"hasta el minimo de 52 semanas en ${low52:,.0f}. "
-        f"Aunque la caida fue severa en velocidad ({from_ath:.1f}% en menos de 12 meses), "
-        f"el MVRV nunca supero 3.5x en este ciclo, lo cual sugiere que la euforia necesaria para un top de ciclo no se ha alcanzado todavia."
+        f"BTC cotiza {from_ath:.1f}% por debajo de su ATH de ${ath:,.0f} "
+        f"({ath_date}). El mínimo de las últimas 52 semanas fue ${low52:,.0f} "
+        f"({btc_price_data['low52_date']}), equivalente a {low_drawdown:.1f}% "
+        "respecto al ATH. Son variaciones distintas. El valor actual del MVRV "
+        "no permite determinar por sí solo el máximo histórico del indicador."
     )
 
     # aSOPR
     if asopr:
         if asopr < 1.0:
-            asopr_int = f"aSOPR 1W en {asopr:.4f} indica que los holders de corto plazo estan en perdida promedio — senal de acumulacion."
+            asopr_int = f"aSOPR 1W en {asopr:.4f} indica que los outputs gastados se realizan en perdida agregada — senal de acumulacion."
         elif asopr < 1.1:
-            asopr_int = f"aSOPR 1W en {asopr:.4f} muestra Holders de corto plazo con ganancias moderadas."
+            asopr_int = f"aSOPR 1W en {asopr:.4f} muestra gastos agregados con ganancia moderada."
         elif asopr < 1.3:
             asopr_int = f"aSOPR 1W en {asopr:.4f} sugiere realizacion de ganancias pero sin euforia."
         else:
@@ -791,18 +812,29 @@ def gen_macro_narrative(macro):
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
-    btc_price, btc_chg = get_btc_price()
-    btc_ohlc    = yahoo_ohlc("BTC-USD", 252)  # 252 para SMA200
+    btc_ohlc    = yahoo_ohlc("BTC-USD", 252)  # única serie de precio diario BTC
     spy_ohlc    = yahoo_ohlc("SPY", 252)
     spx_ohlc    = yahoo_ohlc("^GSPC", 90)
     gold_ohlc   = yahoo_ohlc("GC=F", 252)
     silver_ohlc = yahoo_ohlc("SI=F", 90)
     oil_ohlc    = yahoo_ohlc("CL=F", 90)
     oc = get_btc_onchain()
-    btc_pdata = get_btc_price_data()
     macro = get_macro_fred()
 
     ohlc_f = [r for r in btc_ohlc if r["close"] is not None and r["high"] is not None and r["low"] is not None]
+    if len(ohlc_f) < 2:
+        raise RuntimeError("BTC-USD no dispone de dos cierres válidos: se bloquea el reporte")
+    last_utc = datetime.datetime.fromtimestamp(
+        ohlc_f[-1]["ts"], datetime.timezone.utc
+    ).date()
+    age = (datetime.datetime.now(datetime.timezone.utc).date() - last_utc).days
+    if age < -1 or age > 2:
+        raise RuntimeError(f"Precio BTC-USD desactualizado: fecha {last_utc}, diferencia {age} días")
+    btc_price, prev_btc = ohlc_f[-1]["close"], ohlc_f[-2]["close"]
+    if btc_price is None or btc_price <= 0 or prev_btc is None or prev_btc <= 0:
+        raise RuntimeError("Precio BTC-USD inválido para variación diaria")
+    btc_chg = (btc_price / prev_btc - 1) * 100
+    btc_pdata = get_btc_price_data(btc_price)
     btc_c = [r["close"] for r in ohlc_f]
     btc_h = [r["high"]  for r in ohlc_f]
     btc_l = [r["low"]   for r in ohlc_f]
@@ -881,6 +913,10 @@ def main():
     mbtc_fred = macro["btc_fred"][1]; mbtc_fred_date = macro["btc_fred"][0]
     mnfci = macro["nfci"][1]; mnfci_date = macro["nfci"][0]
 
+    btc_support_levels, btc_resistance_levels = price_relative_levels(btc_price, btc_sup, btc_res)
+    spy_support_levels, spy_resistance_levels = price_relative_levels(spy_price, spy_sup, spy_res)
+    gold_support_levels, gold_resistance_levels = price_relative_levels(gold_price, gold_sup, gold_res)
+
     # Generate narratives
     btc_narr = gen_btc_narrative(oc, btc_pdata, btc_rsi, btc_hist, btc_chg,
                                   oc.get("sma200"), btc_sma50)
@@ -910,9 +946,9 @@ def main():
         ns = analyze_news(news_stocks)
         nm = analyze_news(news_metals)
 
-    btc_chart  = svg_price(ohlc_f, "$", 200)
-    spy_chart  = svg_price(spy_ohlc_f, "$", 180)
-    gold_chart = svg_price(gold_ohlc_f, "$", 180)
+    btc_chart  = svg_price(ohlc_f[-90:], "$", 200)
+    spy_chart  = svg_price(spy_ohlc_f[-90:], "$", 180)
+    gold_chart = svg_price(gold_ohlc_f[-90:], "$", 180)
 
     # ── BTC TECHNICAL ────────────────────────────────────────────────────────
     buy_s  = sum(1 for p in [btc_sma20, btc_sma50, btc_sma100, btc_sma200]
@@ -1023,6 +1059,10 @@ def main():
     # MACRO CALENDAR
     A('<div class="kicker" style="margin-bottom:8px">Calendario Macroeconomico</div>')
     A('<div class="macro-bar">')
+    if not MACRO_EVENTS:
+        A('<div class="macro-event"><div class="me-name">Calendario pendiente de verificación</div>'
+          '<div class="me-imp">Sin eventos programados verificables en la fuente local. '
+          'No se presentan fechas estimadas.</div></div>')
     for date, name, imp, desc in MACRO_EVENTS:
         A(f'<div class="macro-event">'
           f'<div class="me-date">{date} &middot; {imp}</div>'
@@ -1077,8 +1117,8 @@ def main():
 
     A('<div class="stats-bar">')
     A(f'<div class="stat-item"><div class="slbl"> ATH</div><div class="sval dn">{"$%.0f"%btc_pdata["ath"]}</div><div class="ssub">{btc_pdata["ath_date"]}</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">Max 52s</div><div class="sval">{"$%.0f"%btc_pdata["high52"]}</div><div class="ssub">5 oct 2025</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">Min 52s</div><div class="sval up">{"$%.0f"%btc_pdata["low52"]}</div><div class="ssub">29 jun 2026</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">Max 52s</div><div class="sval">{"$%.0f"%btc_pdata["high52"]}</div><div class="ssub">{btc_pdata["high52_date"]}</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">Min 52s</div><div class="sval up">{"$%.0f"%btc_pdata["low52"]}</div><div class="ssub">{btc_pdata["low52_date"]}</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Desde ATH</div><div class="sval dn">{btc_pdata["from_ath"]:.1f}%</div><div class="ssub">caida desde max</div></div>')
     A(f'<div class="stat-item"><div class="slbl">RSI(14)</div><div class="sval {"up" if btc_rsi and btc_rsi<40 else ("dn" if btc_rsi and btc_rsi>65 else "")}">{"%.0f"%btc_rsi if btc_rsi else "---"}</div><div class="ssub">Wilder smoothing</div></div>')
     A(f'<div class="stat-item"><div class="slbl">MACD</div><div class="sval {"up" if btc_hist and btc_hist>0 else ("dn" if btc_hist and btc_hist<0 else "")}">{"%.2f"%btc_hist if btc_hist else "---"}</div><div class="ssub">histograma</div></div>')
@@ -1105,7 +1145,7 @@ def main():
     A(f'<div class="stat-item"><div class="slbl">Difficulty</div><div class="sval">{"%.0fT"%oc["diff"] if oc["diff"] else "---"}</div><div class="ssub">dificultad mining</div></div>')
     A(f'<div class="stat-item"><div class="slbl">UTXO Set</div><div class="sval">{"%.2fM"%oc["utxos"] if oc["utxos"] else "---"}</div><div class="ssub">unspent outputs</div></div>')
     A(f'<div class="stat-item"><div class="slbl">Active Addrs</div><div class="sval">{"%d"%oc["addrs"] if oc["addrs"] else "---"}</div><div class="ssub">24h promedio</div></div>')
-    A(f'<div class="stat-item"><div class="slbl">SMA 200d</div><div class="sval">{"$%.0f"%oc["sma200"] if oc["sma200"] else "---"}</div><div class="ssub">precio on-chain</div></div>')
+    A(f'<div class="stat-item"><div class="slbl">SMA 200d</div><div class="sval">{"$%.0f"%oc["sma200"] if oc["sma200"] else "---"}</div><div class="ssub">Yahoo Finance, SMA 200 cierres</div></div>')
     A('</div></div>')
 
     # Expert Analysis — REAL DATA NARRATIVE
@@ -1117,7 +1157,7 @@ def main():
       f'{"%.2fx" % oc["mvrv"] if oc["mvrv"] else "---"} ({btc_narr["mvrv_int"]})</p>')
     A(f'<div class="highlight"><strong>Estructura del ciclo:</strong> {btc_narr["cycle_txt"]}</div>')
     A(f'<p><strong>Realized Cap vs Market Cap:</strong> el capital realizado de ${oc["rcap"]:.2f}T representa el costo promedio de todos los holders en la red. '
-      f'El ratio actual de {"%.2fx" % (oc["mcap"]/oc["rcap"]) if oc["mcap"] and oc["rcap"] else "---"}x indica que el mercado esta en '
+      f'El ratio actual de {"%.2fx" % (oc["mcap"]/oc["rcap"]) if oc["mcap"] and oc["rcap"] else "---"} indica que el mercado esta en '
       f'{"fase de acumulacion" if oc["mvrv"] and oc["mvrv"] < 1.5 else "fase intermedia del ciclo" if oc["mvrv"] and oc["mvrv"] < 2.5 else "fase de distribucion"}. '
       f'{btc_narr["asopr_int"]}</p>')
     A(f'<p><strong>NUPL:</strong> {btc_narr["nupl_int"]} '
@@ -1145,15 +1185,15 @@ def main():
     # Key Levels
     A('<div class="card"><h3>Niveles Clave — Estructura de Mercado</h3><div class="levels-grid">')
     A('<div class="lev-col"><h4>Soportes</h4>')
-    for i, s in enumerate(btc_sup[-3:]):
+    for i, s in enumerate(btc_support_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--up)">Soporte {i+1}</span><span class="lev-price">{"$%.0f"%s}</span></div>')
     A('</div><div class="lev-col"><h4>Resistencias</h4>')
-    for i, r in enumerate(btc_res[-3:]):
+    for i, r in enumerate(btc_resistance_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--dn)">Resistencia {i+1}</span><span class="lev-price">{"$%.0f"%r}</span></div>')
     A('</div></div></div>')
 
     btc_bull, btc_base, btc_bear = compute_scenarios(
-        btc_pdata["current"], btc_c, btc_h, btc_l, btc_sup, btc_res,
+        btc_price, btc_c, btc_h, btc_l, btc_sup, btc_res,
         btc_rsi, btc_atr, btc_hist, "BTC",
         macro_data={"next_event": "CPI 14-oct", "vix": mvix, "dxy": mdxy}
     )
@@ -1174,7 +1214,7 @@ def main():
     A('<span style="font-size:11px;color:var(--muted)">'
       'Nota: S&P 500 Index (^GSPC) cotiza en puntos ('
       f'actual {spx_price:,.0f} pts). '
-      'SPDR S&P 500 ETF (SPY) cotiza en USD/participacion ({usd(spy_price)}). '
+      'SPDR S&P 500 ETF (SPY) cotiza en USD/participacion ('+usd(spy_price)+'). '
       'Los indicadores tecnicos se calculan sobre SPY (USD/share). '
       'El indice SPX y SPY se mueven de forma casi identica, pero SPY distribuye dividendos.</span>')
 
@@ -1204,7 +1244,7 @@ def main():
       f'Nota: no tenemos datos de breadth (componentes sobre MA) en la base local — ese analisis no es posible con los datos actuales.</div>')
     A(f'<p><strong>Nota sobre fundamentales:</strong> no tenemos datos de earnings, orden flow, o flujo ETF en la base local. '
       f'El analisis se limita a precio, volumen y correlaciones macro disponibles. '
-      f'SPY vs SPX: SPY incluye dividendos (~1.5%% annual) y replica SPX en USD/share.</p>')
+      f'SPY vs SPX: SPY es un ETF que puede distribuir dividendos; su precio por participación y el nivel del índice son magnitudes distintas.</p>')
     A('</div>')
 
     A('<div class="chart-box"><h3>SPDR S&P 500 ETF (SPY) — 90 dias</h3>'+spy_chart+'</div>')
@@ -1213,10 +1253,10 @@ def main():
     A('<div class="card"><h3>Osciladores (SPY)</h3><div class="osc-grid">'+spy_osc_items+'</div></div>')
 
     A('<div class="card"><h3>Niveles Clave (SPY)</h3><div class="levels-grid"><div class="lev-col"><h4>Soportes</h4>')
-    for i, s in enumerate(spy_sup[-3:]):
+    for i, s in enumerate(spy_support_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--up)">Soporte {i+1}</span><span class="lev-price">{"$%.2f"%s}</span></div>')
     A('</div><div class="lev-col"><h4>Resistencias</h4>')
-    for i, r in enumerate(spy_res[-3:]):
+    for i, r in enumerate(spy_resistance_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--dn)">Resistencia {i+1}</span><span class="lev-price">{"$%.2f"%r}</span></div>')
     A('</div></div></div>')
 
@@ -1289,10 +1329,10 @@ def main():
     A('<div class="card"><h3>Osciladores</h3><div class="osc-grid">'+gold_osc_items+'</div></div>')
 
     A('<div class="card"><h3>Niveles Clave</h3><div class="levels-grid"><div class="lev-col"><h4>Soportes</h4>')
-    for i, s in enumerate(gold_sup[-3:]):
+    for i, s in enumerate(gold_support_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--up)">Soporte {i+1}</span><span class="lev-price">{"$%.0f"%s}</span></div>')
     A('</div><div class="lev-col"><h4>Resistencias</h4>')
-    for i, r in enumerate(gold_res[-3:]):
+    for i, r in enumerate(gold_resistance_levels[:3]):
         A(f'<div class="lev-item"><span class="lev-type" style="color:var(--dn)">Resistencia {i+1}</span><span class="lev-price">{"$%.0f"%r}</span></div>')
     A('</div></div></div>')
 
