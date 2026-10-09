@@ -50,6 +50,9 @@ class HermesSkillTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             destination = Path(scratch) / "finance" / "mercados-daily-pro" / "SKILL.md"
             self.assertEqual(destination.read_bytes(), SKILL.read_bytes())
+            visual = Path(scratch) / "finance" / "mercados-research-design" / "SKILL.md"
+            self.assertEqual(visual.read_bytes(),
+                             (ROOT / "skills" / "mercados-research-design" / "SKILL.md").read_bytes())
             # Reinstallation is idempotent when nothing changed.
             second = subprocess.run(["bash", str(INSTALLER)], cwd=ROOT, env=env, capture_output=True, text=True)
             self.assertEqual(second.returncode, 0, second.stderr)
