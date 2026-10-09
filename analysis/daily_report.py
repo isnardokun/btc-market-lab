@@ -22,7 +22,7 @@ OUT_PATH = BASE_DIR + "/reports/daily_report_" + TODAY.strftime("%Y-%m-%d") + ".
 TODAY_STR = TODAY.strftime("%d %b %Y")
 NOW_STR   = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 ts_today  = last_complete_day_end_timestamp()  # price archive excludes today\u0027s still-open UTC bar
-ts_52w    = int((datetime.datetime.combine(previous_completed_utc_day(), datetime.time(0,0)).replace(tzinfo=datetime.timezone.utc) - datetime.timedelta(days=365)).timestamp())
+ts_52w    = int(datetime.datetime.combine(previous_completed_utc_day() - datetime.timedelta(days=364), datetime.time.min, tzinfo=datetime.timezone.utc).timestamp())  # 52 * 7 calendar days before last completed close
 
 # ── DATA ──────────────────────────────────────────────────────────────────────
 

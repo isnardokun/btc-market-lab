@@ -20,6 +20,7 @@ TESTS = [
     ("Unit: Editorial Integrity", "python3 -m unittest -v tests.unit.test_editorial_integrity"),
     ("Unit: Ingest/News Quality", "python3 -m unittest -v tests.unit.test_ingest_and_news_quality"),
     ("Unit: Completed Daily Candles", "python3 -m unittest -v tests.unit.test_daily_close_cutoff"),
+    ("Unit: 52-week/Price Archive", "python3 -m unittest -v tests.unit.test_52week_and_partial_archive"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
