@@ -16,7 +16,7 @@ from ingestion.config import DB_PATH
 
 
 def query_history(db_path, provider, metric, first, last, *, limit=1000):
-    if provider not in ("bitview","researchbitcoin","fred","yahoo","news"):
+    if provider not in ("bitview","researchbitcoin","fred","fred-vintage","yahoo","news","rbn-distribution"):
         raise ValueError("Proveedor histórico no soportado")
     if not metric or len(metric)>150:
         raise ValueError("Métrica o símbolo obligatorio (<=150 caracteres)")
@@ -43,6 +43,21 @@ def query_history(db_path, provider, metric, first, last, *, limit=1000):
             "SELECT date,value FROM macro_fred WHERE series_id=? AND date>=? "
             "AND date<=? ORDER BY date LIMIT ?",
             (metric,first.isoformat(),last.isoformat(),limit),"datevalue"),
+        "fred-vintage":(
+            "SELECT observed_date,value,realtime_start,captured_at_utc "
+            "FROM archive_fred_vintages WHERE series_id=? AND observed_date>=? "
+            "AND observed_date<=? ORDER BY observed_date,realtime_start LIMIT ?",
+            (metric,first.isoformat(),last.isoformat(),limit),"vintage"),
+        "rbn-distribution":(
+            "SELECT observed_at_utc,dimensions_key,value,unit "
+            "FROM archive_multidimensional_observations "
+            "WHERE source_id='researchbitcoin' AND metric=? "
+            "AND observed_at_utc>=? AND observed_at_utc<? "
+            "ORDER BY observed_at_utc,dimensions_key LIMIT ?",
+            (metric,dt.datetime.combine(first,dt.time(),dt.timezone.utc).isoformat(),
+             dt.datetime.combine(last+dt.timedelta(days=1),
+                                 dt.time(),dt.timezone.utc).isoformat(),limit),
+            "distribution"),
         "yahoo":(
             "SELECT ts,open,high,low,close,volume FROM market_ohlc_history "
             "WHERE symbol=? AND ts>=? AND ts<? ORDER BY ts LIMIT ?",
@@ -67,6 +82,14 @@ def query_history(db_path, provider, metric, first, last, *, limit=1000):
                            "note":"raw ResearchBitcoin, no escala implícita"})
         elif kind=="datevalue":
             mapped.append({"date_utc":row[0],"value":row[1]})
+        elif kind=="vintage":
+            mapped.append({"date_utc":row[0],"value":row[1],
+                           "realtime_start":row[2],"captured_at_utc":row[3],
+                           "note":"Solo vintages realmente archivados"})
+        elif kind=="distribution":
+            mapped.append({"observed_at_utc":row[0],"dimensions_key":row[1],
+                           "value":row[2],"unit":row[3],
+                           "note":"Distribución cruda; no agregar bins automáticamente"})
         elif kind=="ohlcv":
             mapped.append({"date_utc":dated(row[0]),"open":row[1],"high":row[2],
                            "low":row[3],"close":row[4],"volume":row[5]})
@@ -82,7 +105,7 @@ def query_history(db_path, provider, metric, first, last, *, limit=1000):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--db",type=Path,default=Path(DB_PATH))
-    p.add_argument("--provider",choices=["bitview","researchbitcoin","fred","yahoo","news"],
+    p.add_argument("--provider",choices=["bitview","researchbitcoin","fred","fred-vintage","yahoo","news","rbn-distribution"],
                    required=True)
     p.add_argument("--metric",required=True)
     p.add_argument("--from",dest="first",required=True)

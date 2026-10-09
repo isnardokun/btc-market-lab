@@ -21,6 +21,7 @@ ADVERTENCIA: FRED tiene dos fechas por observación:
 import sys, os, datetime, sqlite3, json, time, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
+from storage.archive_schema import archive_schema_installed, register_dataset
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -124,6 +125,17 @@ def reconcile_series(conn, series_id, days=60):
         date_str = row["date"]
         new_value = row["value"]
         realtime_start = row.get("realtime_start", "")
+        if archive_schema_installed(conn) and realtime_start:
+            # Preserve provider-reported real-time vintage instead of only
+            # overwriting macro_fred; this does not reconstruct all ALFRED eras.
+            datetime.date.fromisoformat(realtime_start)
+            conn.execute(
+                "INSERT OR IGNORE INTO archive_fred_vintages "
+                "(series_id,observed_date,realtime_start,realtime_end,value,"
+                "captured_at_utc) VALUES (?,?,?,?,?,?)",
+                (series_id,date_str,realtime_start,None,new_value,
+                 datetime.datetime.now(datetime.timezone.utc).isoformat())
+            )
 
         # Verificar si el valor en BD difiere del nuevo valor
         existing = conn.execute(
@@ -211,6 +223,9 @@ def main():
     total = 0
     for series_id, name, freq, desc in FRED_SERIES:
         try:
+            if archive_schema_installed(conn):
+                register_dataset(conn, "fred", series_id, frequency=freq,
+                                 scale="native")
             n = ingest_series(conn, series_id, freq, full_history=args.history)
             total += n
             time.sleep(0.3)  # ser civico con la API (120 req/min)

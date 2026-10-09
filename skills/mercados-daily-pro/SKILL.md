@@ -416,7 +416,7 @@ que la historia sea exhaustiva. Mantener dos rutas separadas:
 Comandos base SIN red:
 ~~~bash
 python3 scripts/history_coverage.py --output reports/history_coverage.json
-python3 ingestion/researchbitcoin_archive.py --history --tier 0 --max-requests 13
+python3 ingestion/researchbitcoin_archive.py --history --tier 2 --from 2009-01-01 --max-requests 13
 python3 ingestion/bitview_history.py --all-daily --max-requests 8
 python3 ingestion/yahoo_history.py --limit 4
 python3 ingestion/ingest_fred.py --history
@@ -444,6 +444,54 @@ Después de cada ciclo o backfill comparar cobertura por fuente,
 métrica y periodo, registrar bloqueos/permisos y mantener SQLite
 privada. Sin captura/operador Hermes, ChatGPT no puede afirmar
 que se descargó el histórico local.
+
+## Procedimiento 13 — Arquitectura SQLite y linaje Tier 2
+
+**Propietario confirmó que ResearchBitcoin es Tier 2.** Documentación
+obligatoria: `docs/ARCHIVE_SCHEMA_TIER2.md`. Se mantiene una arquitectura
+histórica con las series originales de Bitview (`daily`), ResearchBitcoin
+(`onchain_external_observations`), FRED (`macro_fred`), Yahoo
+(`price_btc/market_ohlc_history`), indicadores calculados,
+noticias e informes. NUNCA reemplazar las tablas existentes ni
+convertir slugs parecidos en una misma serie.
+
+**Pasos estrictos antes del primer backfill Tier 2:**
+
+~~~bash
+cd /home/ignotus/btc-research
+bash scripts/update_local_and_test.sh
+python3 scripts/archive_db_migrate.py
+# Solo tras inspección de espacio en disco y aprobación del operador:
+python3 scripts/archive_db_migrate.py --apply
+python3 scripts/history_coverage.py --output reports/history_coverage.json
+# PLAN offline, no llamadas API:
+python3 ingestion/researchbitcoin_archive.py --history --tier 2 \
+  --from 2009-01-01 --max-requests 13
+# Aplicar por lotes controlados con --apply, sin integrar al cron diario:
+~~~
+
+La migración crea primero una copia SQLite **WAL-safe** con comprobación
+de integridad y después aplica tablas `archive_sources`,
+`archive_datasets`, `archive_ingest_runs`, `archive_ingest_windows`,
+`archive_observation_revisions` y `archive_fred_vintages`. Los
+triggers preservan cambios futuros de valor, sin reescribir el
+histórico existente. No ejecutar el nuevo esquema automáticamente en
+el cron: el actualizador de código no equivale a migrar la base.
+
+Cuando llegue la autorización para el backfill real, comenzar con
+pocas peticiones y observar datos retornados, cuotas y checkpoints.
+Para ResearchBitcoin Tier 2, histórico del plan sin límite temporal
+y cuota de **40.000.000 data points/semana**; no equivale a que cada
+métrica exista desde 2009. El registro `empty` no significa valor 0.
+El plan vigente cubre 13 métricas escalares validadas; incorporar las
+demás métricas Tier 2 solo al catalogar su forma, unidad, versión y
+metodología. Los datos binarios/distribuciones por cohorte requieren
+estructura multidimensional, no un único valor numérico inventado.
+
+Ejecutar `python3 scripts/history_coverage.py` y comparar la
+cobertura real tras cada ciclo. Validar `tests/run_all.py`, la
+consistencia del informe con publication gate y revisar el trabajo
+sin envíos Telegram no autorizados.
 
 ## Procedimiento 12 — Diseño Research Studio exclusivo
 
