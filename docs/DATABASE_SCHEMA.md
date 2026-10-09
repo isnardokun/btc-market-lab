@@ -152,3 +152,42 @@ from ingestion.metric_registry import convert_metric, METRIC_REGISTRY
 ```
 
 **NO** usar SQL raw directo en `analysis/` — usar `storage/repositories.py`.
+
+
+---
+
+## Anexo: archivo histórico v1 (9 de octubre de 2026)
+
+**Los conteos originales anteriores son una fotografía documental, NO un
+inventario actualizado de la SQLite local.** Los datos reales deben
+comprobarse con `python3 scripts/history_coverage.py`.
+
+Se añadió una migración **aditiva, versionada y con respaldo WAL-safe**
+separada de los procesos de ingesta ordinaria:
+
+```bash
+python3 scripts/archive_db_migrate.py          # Solo PLAN
+python3 scripts/archive_db_migrate.py --apply  # Backup íntegro + DDL
+```
+
+Tablas `archive_*` y su función:
+
+| Tabla | Identidad | Función |
+|---|---|---|
+| `archive_schema_migrations` | version | Evolución controlada del esquema |
+| `archive_sources` | source_id | Bitview, RBN Tier 2, FRED, Yahoo, news |
+| `archive_datasets` | (source_id, metric) | Unidad, escala, forma y frecuencia |
+| `archive_ingest_runs` | run_id | Cada ejecución histórica y consumo observado |
+| `archive_ingest_windows` | (fuente, métrica, inicio, fin exclusivo) | Reanudación, vacíos, fallos y cobertura |
+| `archive_observation_revisions` | revision_id | Auditoría append-only si un valor cambia |
+| `archive_fred_vintages` | (serie, observación, fecha tiempo-real) | Vintages efectivamente capturados |
+| `archive_multidimensional_observations` | (fuente, métrica, instante UTC, dimensiones) | Histogramas y cohortes futuros sin aplanar |
+
+Los triggers de revisiones protegen cambios posteriores a la migración
+en `daily` (Bitview), `macro_fred`, `onchain_external_observations`
+y `market_ohlc_history` (cierres Yahoo). No reescriben registros
+existentes. Los nuevos adaptadores preservan nombres originales,
+fechas UTC y valores **raw**; datos `distribution`/`matrix` no entran
+en las tablas de métricas escalares sin una metodología validada.
+
+**Documentación completa y límites:** `docs/ARCHIVE_SCHEMA_TIER2.md`.
