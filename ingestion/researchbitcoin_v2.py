@@ -61,7 +61,32 @@ def query_params(today=None, days=7):
     }
 
 
-def fetch(slug, *, days=7, token=None, opener=urlopen):
+def query_params_window(start_day, end_day, *, now=None):
+    """One bounded range: inclusive start, exclusive end (UTC d1).
+
+    Historical batches deliberately use short windows to bound quota/payload.
+    Must never request the still-open UTC day.
+    """
+    if isinstance(start_day, str):
+        start_day = dt.date.fromisoformat(start_day)
+    if isinstance(end_day, str):
+        end_day = dt.date.fromisoformat(end_day)
+    if not isinstance(start_day, dt.date) or not isinstance(end_day, dt.date):
+        raise ValueError("Fechas históricas UTC no válidas")
+    cutoff = last_completed_day(now)
+    if not start_day < end_day <= cutoff + dt.timedelta(days=1):
+        raise ValueError("Rango histórico invertido, vacío o contiene UTC abierto")
+    if (end_day - start_day).days > 14:
+        raise ValueError("Histórico RBN: máximo 14 días por petición")
+    return {
+        "from_time": start_day.isoformat(),
+        "to_time": end_day.isoformat(),
+        "resolution": "d1",
+        "output_format": "json",
+    }
+
+
+def fetch(slug, *, days=7, start_day=None, end_day=None, token=None, opener=urlopen):
     """One bounded request; no automated retries/quota spending."""
     if slug not in CATALOG:
         raise ValueError("Métrica fuera del catálogo aprobado")
@@ -69,7 +94,11 @@ def fetch(slug, *, days=7, token=None, opener=urlopen):
     if not secret:
         raise RuntimeError("Falta RESEARCHBITCOIN_API_TOKEN en el entorno local")
     item = CATALOG[slug]
-    url = BASE_URL + item.endpoint + "/" + item.slug + "?" + urlencode(query_params(days=days))
+    if (start_day is None) != (end_day is None):
+        raise ValueError("start_day y end_day deben definirse juntos")
+    params = (query_params_window(start_day, end_day)
+              if start_day is not None else query_params(days=days))
+    url = BASE_URL + item.endpoint + "/" + item.slug + "?" + urlencode(params)
     req = Request(url, headers={
         "X-API-Token": secret,
         "Accept": "application/json",

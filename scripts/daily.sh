@@ -51,6 +51,19 @@ if [ $? -ne 0 ]; then
 fi
 echo "  [OK] ingest_fred" >> "$LOG"
 
+# Optional RBN daily incremental: explicit operator opt-in only.
+# An outage of the supplemental provider must NOT block Bitview/FRED baseline.
+# --apply writes only external SQLite sidecar; request count is bounded.
+if [[ "${RBN_INCREMENTAL_ENABLED:-0}" == "1" ]]; then
+    echo "  [RBN] incremental opt-in, max requests=${RBN_MAX_REQUESTS:-13}" >> "$LOG"
+    if python3 ingestion/researchbitcoin_archive.py --incremental --apply \
+            --max-requests "${RBN_MAX_REQUESTS:-13}" >> "$LOG" 2>&1; then
+        echo "  [OK] RBN incremental" >> "$LOG"
+    else
+        echo "  [WARN] RBN incremental unavailable; existing verified data retained" >> "$LOG"
+    fi
+fi
+
 # ── FASE 2: GENERACIÓN (crítico — si falla, no hay reporte) ───────────
 echo "Fase 2: generación de reporte..." >> "$LOG"
 

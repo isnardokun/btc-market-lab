@@ -2,6 +2,39 @@
 
 > Generación automática de reportes financieros diarios: BTC + S&P 500 + Oro. Datos on-chain, macro y noticias — todo verificable, nada inventado.
 
+## Investigación histórica + diseño editorial propio (2026)
+
+**Dos obligaciones permanentes:**
+
+1. **Guardar el mayor histórico auténtico disponible de todas las APIs**
+   para estudios longitudinales, no solo el cierre reciente.
+   [Política y backfill por fuente](docs/HISTORICAL_DATA_POLICY.md).
+   Las descargas se ejecutan en lotes controlados en Hermes;
+   no afirmar que una API sin acceso histórico completo lo entregó.
+2. **Mercados Research Studio**: diseño profesional, móvil y A4,
+   HTML autónomo, fuentes y escala auditables. Skill de Hermes
+   `/mercados-research-design`, independiente de Sereno.
+   [Manual editorial](docs/REPORT_DESIGN_SYSTEM.md).
+
+Consultas y planes **offline** sobre la SQLite local:
+
+~~~bash
+python3 scripts/history_coverage.py --output reports/history_coverage.json
+python3 scripts/history_query.py --provider bitview --metric mvrv --from 2024-01-01 --to 2024-12-31
+python3 ingestion/researchbitcoin_archive.py --history --tier 0 --max-requests 13
+python3 ingestion/bitview_history.py --all-daily --max-requests 8
+python3 ingestion/yahoo_history.py --limit 4
+python3 ingestion/ingest_fred.py --history
+~~~
+
+Para consultas reales, primero revisar el historial accesible,
+preparar respaldo de la BD y ejecutar las ingestas de forma
+explícita con `--apply` como se documenta en el procedimiento.
+El pipeline diario admite incremento RBN opt-in:
+`RBN_INCREMENTAL_ENABLED=1 RBN_MAX_REQUESTS=13`,
+desactivado por defecto hasta la validación local de Hermes.
+No se activa cron adicional ni Telegram por esa opción.
+
 ## Quick Start
 
 ```bash

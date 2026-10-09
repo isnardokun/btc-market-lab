@@ -18,7 +18,7 @@ ADVERTENCIA: FRED tiene dos fechas por observación:
   - realtime_start: cuando el valor empezó a ser válido
   - date: el período de la observación (ej: "2026-08-01" para dato de agosto)
 """
-import sys, os, datetime, sqlite3, json, time
+import sys, os, datetime, sqlite3, json, time, argparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
 from urllib.request import Request, urlopen
@@ -82,7 +82,8 @@ def fetch_series_incremental(series_id, start):
     url = (f"{FRED_ENDPOINT}?series_id={series_id}"
            f"&api_key={FRED_API_KEY}"
            f"&observation_start={start}"
-           f"&end_date={TODAY}"
+           f"&observation_end={TODAY}"
+           f"&limit=100000"
            f"&file_type=json")
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
@@ -156,9 +157,12 @@ def reconcile_series(conn, series_id, days=60):
     return changes
 
 
-def ingest_series(conn, series_id, freq):
+def ingest_series(conn, series_id, freq, *, full_history=False):
     last = last_date_in_db(conn, series_id)
-    if last:
+    if full_history:
+        # FRED v1 default first available observation (not current 2024 horizon).
+        start = "1776-07-04"
+    elif last:
         start_date = datetime.date.fromisoformat(last) + datetime.timedelta(days=1)
         start = start_date.isoformat()
     else:
@@ -191,6 +195,15 @@ def ingest_series(conn, series_id, freq):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="FRED incremental (default) or explicit historical archive")
+    parser.add_argument("--history", action="store_true", help="Recover all available old FRED observations")
+    parser.add_argument("--apply", action="store_true", help="Required for historical API/DB mutations")
+    args = parser.parse_args()
+    if args.history and not args.apply:
+        print("PLAN: --history requerirá --apply. Recuperará historia FRED disponible para 12 series.")
+        return 0
+    if args.apply and not args.history:
+        parser.error("--apply solo es necesario con --history")
     if not FRED_API_KEY:
         print("ERROR: configura FRED_API_KEY en el entorno de Hermes", file=sys.stderr)
         return 2
@@ -198,7 +211,7 @@ def main():
     total = 0
     for series_id, name, freq, desc in FRED_SERIES:
         try:
-            n = ingest_series(conn, series_id, freq)
+            n = ingest_series(conn, series_id, freq, full_history=args.history)
             total += n
             time.sleep(0.3)  # ser civico con la API (120 req/min)
         except Exception as e:

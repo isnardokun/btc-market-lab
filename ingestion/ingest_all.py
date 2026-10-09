@@ -35,18 +35,16 @@ def get_db():
     return db
 
 def init_db(db):
+    """Never drop populated history: schema initialization must be additive."""
     db.executescript("""
-        DROP TABLE IF EXISTS daily;
-        DROP TABLE IF EXISTS series;
-        DROP TABLE IF EXISTS meta;
-        CREATE TABLE series (
+        CREATE TABLE IF NOT EXISTS series (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL UNIQUE,
             idx TEXT,
             dtype TEXT,
             description TEXT
         );
-        CREATE TABLE daily (
+        CREATE TABLE IF NOT EXISTS daily (
             id INTEGER PRIMARY KEY,
             series_id INTEGER NOT NULL REFERENCES series(id),
             ts INTEGER NOT NULL,
@@ -236,6 +234,14 @@ def main():
     parser.add_argument("--dry-run",  action="store_true")
     parser.add_argument("--limit",    type=int, default=None)
     args = parser.parse_args()
+
+    if args.backfill:
+        parser.error("ingest_all.py --backfill legacy no garantiza cobertura y puede "
+                     "sobrecargar Bitview. Usar ingestion/bitview_history.py "
+                     "--all-daily [--max-requests N] [--apply].")
+    if args.dry_run:
+        parser.error("ingest_all.py --dry-run legacy puede escribir estado local. "
+                     "Usar ingestion/bitview_history.py sin --apply.")
 
     db = get_db()
     init_db(db)
