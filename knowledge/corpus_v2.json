@@ -301,8 +301,8 @@
       "keywords": "funding perpetual futures open interest derivatives tasas apalancamiento",
       "method": "El funding de futuros perpetuos es una transferencia contractual entre posiciones, distinta del interés abierto.",
       "caveat": "Para calcularlo exigen fórmula, intervalo, exchange y unidad del contrato; no inferir dirección spot sin observación.",
-      "url": "https://www.cftc.gov/MarketReports/CommitmentsofTraders/ExplanatoryNotes/index.htm",
-      "source_kind": "editorial_rule"
+      "url": "https://www.binance.com/en/academy/articles/what-are-funding-rates-in-crypto-markets",
+      "source_kind": "provider_methodology"
     },
     {
       "metric": "rbf",
