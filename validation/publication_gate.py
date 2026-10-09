@@ -9,9 +9,9 @@ Bloquea si hay errores críticos. Min 95/100 para auto-publicar.
 """
 import os, sys, sqlite3, re, datetime, hashlib
 from pathlib import Path
-from validation.content_checks import audit_report_html
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from validation.content_checks import audit_report_html
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
 
 TODAY = datetime.date.today()

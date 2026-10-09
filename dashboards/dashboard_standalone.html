@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JHODLers Markets Dashboard</title>
+
+<style>
+:root{--deep:#04201c;--ink:#092b27;--ivory:#f4eddd;--paper:#fffaf0;--sea:#0e7669;--mint:#8bd5bd;--coral:#ef765f;--gold:#d5a844;--muted:#63766f;--line:rgba(9,43,39,.13);--up:#16A34A;--dn:#DC2626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ivory);color:var(--ink);font-family:Manrope,sans-serif;font-size:13px;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto;padding:24px 16px 80px}
+
+/* HEADER */
+.hdr{background:var(--deep);border-radius:16px;padding:24px 30px;margin-bottom:32px;position:relative;overflow:hidden}
+.hdr::before{content:"";position:absolute;right:-40px;top:-40px;width:220px;height:220px;border:1px solid rgba(139,213,189,.1);border-radius:50%}
+.hdr-kicker{font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--mint);margin-bottom:6px}
+.hdr h1{font-family:Fraunces,Georgia,serif;font-size:clamp(20px,3.5vw,32px);font-weight:400;color:var(--ivory);letter-spacing:-.02em;margin-bottom:6px}
+.hdr .sub{font-size:11px;color:#7aa89e}
+.hdr-meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font:600 9px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:#5e8c80}
+.hdr-meta span{display:flex;align-items:center;gap:5px}
+.hdr-meta span::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--mint)}
+
+/* STATUS DOT */
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}
+.sok{background:#22c55e}.swarn{background:#eab308}.scrit{background:#ef4444}.sneu{background:#94a3b8}
+.sok{background:var(--up)}.swarn{background:#eab308}.scrit{background:var(--dn)}.sneu{background:#94a3b8}
+
+/* TICKER STRIP */
+.ticker-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:28px}
+.tk{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.tk-pair{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.tk-price{font-family:Fraunces,Georgia,serif;font-size:20px;color:var(--ink);line-height:1}
+.tk-chg{font:600 10px 'IBM Plex Mono',monospace;margin-top:3px}
+.up{color:var(--up)}.dn{color:var(--dn)}.neu{color:#ca8a04}
+.sparkline{height:28px;margin-top:6px;opacity:.7}
+
+/* MACRO GRID */
+.kicker{font:700 10px 'IBM Plex Mono',monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--sea);margin-bottom:10px}
+.section-title{font-family:Fraunces,Georgia,serif;font-size:clamp(15px,2vw,20px);font-weight:400;color:var(--ink);letter-spacing:-.02em;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+.macro-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:28px}
+.macro-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.macro-card .mc-name{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.macro-card .mc-value{font-family:Fraunces,Georgia,serif;font-size:22px;color:var(--ink)}
+.macro-card .mc-date{font-size:10px;color:var(--muted);margin-top:3px}
+.macro-card .mc-status{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-top:5px;display:flex;align-items:center;gap:4px}
+
+/* PREDICTIONS */
+.pred-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:28px}
+.pred-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:15px 18px;border-left:4px solid var(--sea)}
+.pred-card.bull{border-left-color:var(--up)}.pred-card.bear{border-left-color:var(--dn)}.pred-card.neu{border-left-color:#ca8a04}
+.pred-asset{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.pred-type{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px}
+.pred-target{font-family:Fraunces,Georgia,serif;font-size:16px;color:var(--ink);margin-bottom:4px}
+.pred-exp{font-size:10px;color:var(--muted)}
+.pred-days{font:700 11px 'IBM Plex Mono',monospace;color:var(--sea);margin-top:4px}
+.pred-note{font-size:11px;color:var(--muted);margin-top:7px;font-style:italic;line-height:1.4}
+
+/* HIT RATE */
+.hr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:28px}
+.hr-item{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:center}
+.hr-asset{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.hr-pct{font-family:Fraunces,Georgia,serif;font-size:30px;color:var(--ink)}
+.hr-bar{height:5px;background:rgba(9,43,39,.1);border-radius:3px;margin-top:8px;overflow:hidden}
+.hr-fill{height:100%;border-radius:3px;background:var(--sea)}
+.hr-fill.ok{background:var(--up)}.hr-fill.warn{background:#eab308}.hr-fill.bad{background:var(--dn)}
+.hr-detail{font-size:10px;color:var(--muted);margin-top:5px}
+
+/* LEVELS TABLE */
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:17px 22px;margin-bottom:14px}
+.card h3{font-family:Fraunces,Georgia,serif;font-size:14px;font-weight:400;color:var(--ink);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:7px 10px;text-align:left;border-bottom:2px solid var(--line)}
+.tbl td{padding:8px 10px;border-bottom:1px solid rgba(9,43,39,.06);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl .up{color:var(--up)}.tbl .dn{color:var(--dn)}.tbl .neu{color:#ca8a04}
+.tbl .badge{display:inline-block;padding:2px 8px;border-radius:999px;font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.07em;text-transform:uppercase}
+.tbl .badge.active{background:rgba(22,163,74,.1);color:var(--up)}
+.tbl .badge.broken{background:rgba(220,38,38,.08);color:var(--dn)}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600}
+.tag.sup{background:rgba(22,163,74,.1);color:var(--up)}.tag.res{background:rgba(220,38,38,.06);color:var(--dn)}.tag.piv{background:rgba(14,118,105,.08);color:var(--sea)}
+
+/* PREDICTION HISTORY */
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filter-bar select{font-family:Manrope,sans-serif;font-size:11px;padding:5px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.filter-bar select:focus{outline:none;border-color:var(--sea)}
+
+/* REPORTS GRID */
+.rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:28px}
+.rep-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.rep-date{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--sea);margin-bottom:4px}
+.rep-asset{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:2px}
+.rep-sec{font-size:11px;color:var(--muted)}
+.rep-ver{font:700 9px 'IBM Plex Mono',monospace;color:var(--gold);margin-top:6px}
+
+/* EVOLUTION */
+.evo-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:28px}
+.evo-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-align:center}
+.evo-asset{font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.evo-price{font-family:Fraunces,Georgia,serif;font-size:22px;color:var(--ink)}
+.evo-arrow{font-size:16px;margin:0 6px;color:var(--muted)}
+.evo-chg{font:600 10px 'IBM Plex Mono',monospace}
+.evo-chg.up{color:var(--up)}.evo-chg.dn{color:var(--dn)}
+
+/* SEPARATOR */
+.sep{border:none;border-top:1px solid var(--line);margin:32px 0}
+section{margin-bottom:40px}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:28px;color:var(--muted);font-size:13px}
+.empty::before{content:"— ";color:var(--sea)}.empty::after{content:" —";color:var(--sea)}
+
+/* FOOTER */
+.footer{text-align:center;padding:24px 0 12px;border-top:1px solid var(--line);margin-top:36px;font-size:11px;color:var(--muted)}
+
+/* SPARKLINE SVG */
+svg.sparkline{overflow:visible}
+
+/* SEMAPHORE BADGE */
+.sem{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.sem.ok{background:var(--up)}.sem.warn{background:#eab308}.sem.crit{background:var(--dn)}
+
+/* SCORE BAR */
+.score-bar{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted)}
+.score-fill{height:4px;flex:1;background:rgba(9,43,39,.1);border-radius:2px;overflow:hidden}
+.score-fill-inner{height:100%;border-radius:2px}
+.score-fill.inner.ok{background:var(--up)}.score-fill.inner.warn{background:#eab308}.score-fill.inner.bad{background:var(--dn)}
+
+@media(max-width:640px){
+  .evo-row{grid-template-columns:1fr}
+  .macro-grid{grid-template-columns:1fr 1fr}
+  .pred-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-kicker">JHODLers Markets System</div>
+  <h1>Dashboard Integral</h1>
+  <p class="sub">BTC + Renta Variable + Commodities — FRED macro · On-chain · Predicciones</p>
+  <div class="hdr-meta">
+    <span>Actualizado: <span id="gen-time">---</span></span>
+    <span>Fuente: Yahoo Finance · bitview.space · FRED</span>
+    <span>Status: <span class="status-dot sok"></span>Operativo</span>
+  </div>
+</div>
+
+<!-- TICKER STRIP -->
+<div class="kicker">Mercados en Tiempo Real</div>
+<div class="ticker-strip" id="ticker"><div class="empty">Cargando...</div></div>
+
+<!-- MACRO SNAPSHOT -->
+<div class="kicker">Macroeconomia — FRED</div>
+<div class="macro-grid" id="macro-grid"><div class="empty">Sin datos</div></div>
+
+<hr class="sep">
+
+<!-- PREDICCIONES ACTIVAS -->
+<section>
+<div class="kicker">Predicciones Activas</div>
+<div class="section-title">Siguientes Eventos de Mercado</div>
+<div class="pred-grid" id="pred-active"><div class="empty">Sin predicciones activas</div></div>
+</section>
+
+<!-- HIT RATE -->
+<section>
+<div class="kicker">Rendimiento del Sistema</div>
+<div class="section-title">Tasa de Acierto — Ultimos 30 dias</div>
+<div class="hr-grid" id="hit-rates"><div class="empty">Sin datos aun — genera predicciones primero</div></div>
+</section>
+
+<!-- EVOLUTION STRIP -->
+<section>
+<div class="kicker">Evolucion Reciente</div>
+<div class="section-title">Precio Actual vs Anterior</div>
+<div class="evo-row" id="evo-row"><div class="empty">Sin datos</div></div>
+</section>
+
+<!-- NIVELES ACTIVOS -->
+<section>
+<div class="kicker">Niveles Identificados</div>
+<div class="section-title">Soportes y Resistencias Vigentes</div>
+<div class="card">
+<h3>Niveles de Mercado</h3>
+<table class="tbl" id="levels-table">
+<thead><tr>
+  <th>Activo</th><th>Tipo</th><th>Precio</th><th>Fecha</th><th>Fuente</th><th>Dias</th><th>Estado</th>
+</tr></thead>
+<tbody id="levels-body"><tr><td colspan="7" class="empty">Sin niveles registrados</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<!-- PREDICTION HISTORY -->
+<section>
+<div class="kicker">Historial</div>
+<div class="section-title">Predicciones Resueltas</div>
+<div class="filter-bar">
+  <select id="f-asset"><option value="">Todos activos</option><option value="BTC">BTC</option><option value="SPY">SPY</option><option value="XAU">XAU</option></select>
+  <select id="f-type"><option value="">Todos tipos</option><option value="price_target">Price Target</option><option value="support_test">Support Test</option><option value="resistance_test">Resistance Test</option><option value="breakout">Breakout</option><option value="bias_shift">Bias Shift</option></select>
+  <select id="f-result"><option value="">Todos resultados</option><option value="achieved">Acertado</option><option value="partial">Parcial</option><option value="missed">Fallido</option></select>
+</div>
+<div class="card">
+<table class="tbl">
+<thead><tr>
+  <th>Fecha</th><th>Activo</th><th>Tipo</th><th>Direccion</th><th>Target</th><th>Resultado</th><th>Score</th>
+</tr></thead>
+<tbody id="pred-history"><tr><td colspan="7" class="empty">Sin historial</td></tr></tbody>
+</table>
+</div>
+</section>
+
+<!-- RECENT REPORTS -->
+<section>
+<div class="kicker">Reportes</div>
+<div class="section-title">Reportes Recientes</div>
+<div class="rep-grid" id="rep-grid"><div class="empty">Sin reportes archivados</div></div>
+</section>
+
+<div class="footer">
+  JHODLers Markets Dashboard — Fuentes: Yahoo Finance · bitview.space · FRED API · Exa Search<br>
+  No es consejo financiero. Solo datos y analisis.
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+const URL = "dashboard_latest.json";
+const INLINE_DATA = {"generated_at": "2026-10-08T21:51:56.655244", "macro": {"10y_yield": {"label": "Yield 10Y", "value": 5.28, "date": "2026-10-07", "unit": "percent", "source_series": "DGS10", "status": "ok"}, "2y_yield": {"label": "Yield 2Y", "value": 4.77, "date": "2026-10-07", "unit": "percent", "source_series": "DGS2", "status": "ok"}, "usd_broad": {"label": "USD Broad Index (not DXY)", "value": 121.3848, "date": "2026-10-02", "unit": "index", "source_series": "DTWEXBGS", "status": "ok"}, "vix": {"label": "VIX", "value": 15.08, "date": "2026-10-07", "unit": "index", "source_series": "VIXCLS", "status": "ok"}, "nfci": {"label": "NFCI", "value": -0.494, "date": "2026-10-02", "unit": "index", "source_series": "NFCI", "status": "ok"}, "unemployment": {"label": "Desempleo", "value": 4.2, "date": "2026-09-01", "unit": "percent", "source_series": "UNRATE", "status": "ok"}, "retail_sales": {"label": "Retail Sales", "value": 646347.0, "date": "2026-08-01", "unit": "millions_usd", "source_series": "RSXFS", "status": "ok"}, "btc_fred": {"label": "BTC (FRED)", "value": 81657.19, "date": "2026-10-08", "unit": "usd", "source_series": "CBBTCUSD", "status": "ok"}, "cpi_yoy": {"label": "CPI YoY (SA)", "value": 3.353, "date": "2026-08-01", "unit": "percent", "source_series": "CPIAUCSL", "status": "ok"}, "nfp_change": {"label": "NFP variaci\u00f3n mensual", "value": 29.0, "date": "2026-09-01", "unit": "thousand_persons", "source_series": "PAYEMS", "status": "ok"}}, "predictions": {"active": [], "resolved": []}, "hit_rates": {}, "levels": [], "reports": [{"id": 16, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 16, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-09 02:51:56"}, {"id": 15, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 15, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-09 02:01:55"}, {"id": 14, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 14, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-09 01:57:49"}, {"id": 13, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 13, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-09 01:57:13"}, {"id": 12, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 12, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:43:21"}, {"id": 11, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 11, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:42:28"}, {"id": 10, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 10, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:39:25"}, {"id": 9, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 9, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:38:03"}, {"id": 8, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 8, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:35:28"}, {"id": 7, "date": "2026-10-08", "asset": "ALL", "section": "daily", "version": 7, "filename": "reports/daily_report_2026-10-08.html", "created_at": "2026-10-08 22:24:38"}]}; // set inline data here for file:// viewing
+
+function getInlineData(){
+  try {
+    const s = sessionStorage.getItem("dash_data");
+    if(s) return JSON.parse(s);
+  } catch(e){}
+  return null;
+}
+
+function $(id){return document.getElementById(id)};
+
+function fmt(n,d=2){
+  if(n===null||n===undefined)return "---";
+  return Number(n).toFixed(d);
+}
+function pct(n){if(n===null||n===undefined)return "---";return (n>=0?"+":"")+Number(n).toFixed(2)+"%";}
+function arr(n){return n>=0?"▲":"▼";}
+function cls(n){return n>=0?"up":"dn";}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+
+function sparklineSVG(values, w=80, h=28, color="#0e7669"){
+  if(!values||values.length<2)return "";
+  const mn=Math.min(...values),mx=Math.max(...values);
+  const rng=mx-mn||1;
+  const pts=values.map((v,i)=>{
+    const x=i*(w/(values.length-1));
+    const y=h-((v-mn)/rng*(h-2)-1);
+    return x.toFixed(1)+","+y.toFixed(1);
+  });
+  return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+async function load(){
+  let d = null;
+  // Try inline data first (for file:// viewing with embedded data)
+  const stored = INLINE_DATA || getInlineData();
+  if(stored){ d = stored; render(d); return; }
+  // Try fetch
+  try{
+    const r=await fetch(URL);
+    if(!r.ok){renderEmpty();return;}
+    d=await r.json();
+    render(d);
+  }catch(e){
+    console.error(e);
+    renderEmpty();
+  }
+}
+
+function render(d){
+  // Header
+  const dt=new Date(d.generated_at);
+  $("gen-time").textContent=dt.toLocaleString("es-CO",{dateStyle:"medium",timeStyle:"short"});
+
+  // Ticker
+  renderTicker(d.macro);
+
+  // Macro
+  renderMacro(d.macro);
+
+  // Predictions active
+  renderPredActive(d.predictions.active);
+
+  // Hit rates
+  renderHitRates(d.hit_rates);
+
+  // Evolution
+  renderEvolution(d.macro);
+
+  // Levels
+  renderLevels(d.levels);
+
+  // Prediction history
+  renderPredHistory(d.predictions.resolved);
+
+  // Reports
+  renderReports(d.reports);
+
+  // Filters
+  setupFilters(d.predictions.resolved);
+}
+
+function renderTicker(macro){
+  const items = [
+    {pair:"BTC/USD", price: macro.btc_fred?.value, chg: null, color:"#16A34A"},
+    {pair:"USD Broad Index",    price: macro.usd_broad?.value,        chg: null, color:"#0e7669"},
+    {pair:"10Y YIELD", price: macro["10y_yield"]?.value, suffix:"%", chg:null, color:"#d5a844"},
+    {pair:"VIX",    price: macro.vix?.value,         chg:null, color:"#ef765f"},
+    {pair:"NFCI",   price: macro.nfci?.value,        chg:null, color:"#0e7669"},
+  ];
+  const html = items.map(it=>{
+    if(!it.price) return `<div class="tk"><div class="tk-pair">${it.pair}</div><div class="tk-price">---</div></div>`;
+    const v = typeof it.price==="number" ? fmt(it.price, it.suffix=="%"?3:2) : it.price;
+    return `<div class="tk">
+      <div class="tk-pair">${it.pair}</div>
+      <div class="tk-price">${it.suffix||""}${v}</div>
+      <div class="tk-chg neu">${it.chg?pct(it.chg):""}</div>
+    </div>`;
+  }).join("");
+  $("ticker").innerHTML = html;
+}
+
+function renderMacro(macro){
+  const cards = [
+    {key:"10y_yield",  label:"Yield 10Y",   fmt:v=>v?.toFixed(3)+"%",   neutral:5.27, warn:5.5, crit:6.0},
+    {key:"2y_yield",   label:"Yield 2Y",    fmt:v=>v?.toFixed(3)+"%",   neutral:4.79, warn:5.0, crit:5.5},
+    {key:"usd_broad",        label:"USD Broad Index Index",   fmt:v=>v?.toFixed(2),       neutral:121,  warn:125, crit:130},
+    {key:"vix",        label:"VIX",          fmt:v=>v?.toFixed(2),       neutral:16,   warn:25,  crit:35},
+    {key:"nfci",       label:"NFCI",         fmt:v=>v?.toFixed(4),       neutral:0,    warn:0.5, crit:1},
+    {key:"cpi_yoy",    label:"CPI YoY",      fmt:v=>v?.toFixed(2)+"%",   neutral:2.5,  warn:4,   crit:6},
+    {key:"unemployment",label:"Desempleo",   fmt:v=>v?.toFixed(2)+"%",   neutral:3.8,  warn:5.5, crit:7},
+    {key:"nfp_change",   label:"NFP Δ mensual",          fmt:v=>v?.toFixed(0)+"K", neutral:200, warn:400, crit:600},
+    {key:"retail_sales",label:"Retail Sales",fmt:v=>"$"+(v/1000)?.toFixed(0)+"B", neutral:640, warn:700, crit:800},
+    {key:"btc_fred",   label:"BTC (FRED)",   fmt:v=>"$"+v?.toFixed(0),  neutral:83000, warn:null, crit:null},
+  ];
+  const html = cards.map(c=>{
+    const m = macro[c.key];
+    if(!m) return "";
+    const val = c.fmt(m.value);
+    let sem="ok", semtxt="OK";
+    if(c.crit&&m.value>c.crit){sem="crit";semtxt="Critico";}
+    else if(c.warn&&m.value>c.warn){sem="warn";semtxt="Alerta";}
+    else if(c.neutral&&m.value<c.neutral){sem="warn";semtxt="Bajo";}
+    return `<div class="macro-card">
+      <div class="mc-name">${esc(c.label)}</div>
+      <div class="mc-value">${esc(val)}</div>
+      <div class="mc-date">${esc(m.date||"")}</div>
+      <div class="mc-status"><span class="sem ${sem}"></span>${semtxt}</div>
+    </div>`;
+  }).join("");
+  $("macro-grid").innerHTML = html || '<div class="empty">Sin datos macro</div>';
+}
+
+function renderPredActive(preds){
+  if(!preds||!preds.length){
+    $("pred-active").innerHTML='<div class="empty">Sin predicciones activas</div>';
+    return;
+  }
+  const html=preds.map(p=>{
+    const dc=p.direction==="bullish"?"bull":p.direction==="bearish"?"bear":"neu";
+    const target = p.price_target?"$"+Number(p.price_target).toFixed(0):"---";
+    const from   = p.price_from?"$"+Number(p.price_from).toFixed(0):"---";
+    return `<div class="pred-card ${dc}">
+      <div class="pred-asset">${esc(p.asset)}</div>
+      <div class="pred-type">${esc(p.type.replace(/_/g," "))}</div>
+      <div class="pred-target">Target: ${target}</div>
+      <div class="pred-exp">Desde ${from} &middot; Expira ${esc(p.expires_at)}</div>
+      <div class="pred-days">${p.days_left} dias restantes</div>
+      ${p.note?`<div class="pred-note">"${esc(p.note)}"</div>`:""}
+    </div>`;
+  }).join("");
+  $("pred-active").innerHTML=html;
+}
+
+function renderHitRates(rates){
+  if(!rates||!Object.keys(rates).length){
+    $("hit-rates").innerHTML='<div class="empty">Sin datos aun</div>';
+    return;
+  }
+  const html=Object.entries(rates).map(([asset,r])=>{
+    const pct=r.hit_rate;
+    const fill_cls=pct>=70?"ok":pct>=50?"warn":"bad";
+    return `<div class="hr-item">
+      <div class="hr-asset">${esc(asset)}</div>
+      <div class="hr-pct">${pct}%</div>
+      <div class="hr-bar"><div class="hr-fill ${fill_cls}" style="width:${pct}%"></div></div>
+      <div class="hr-detail">${r.achieved}/${r.total} acertadas</div>
+    </div>`;
+  }).join("");
+  $("hit-rates").innerHTML=html;
+}
+
+function renderEvolution(macro){
+  // Simple: mostrar USD Broad Index y 10Y como proxy de evolucion
+  const dxy = macro.usd_broad;
+  const ten = macro["10y_yield"];
+  if(!dxy&&!ten){
+    $("evo-row").innerHTML='<div class="empty">Sin datos de evolucion</div>';
+    return;
+  }
+  const items=[];
+  if(dxy) items.push({label:"USD Broad Index",val:dxy.value,unit:""});
+  if(ten)  items.push({label:"10Y Yield",val:ten.value,unit:"%"});
+  const html=items.map(it=>`
+    <div class="evo-card">
+      <div class="evo-asset">${esc(it.label)}</div>
+      <div class="evo-price">${it.unit}${typeof it.val==="number"?it.val.toFixed(2):it.val}</div>
+      <div class="evo-chg neu">Actual ${esc(it.val?String(it.val):"")}</div>
+    </div>`).join("");
+  $("evo-row").innerHTML=html;
+}
+
+function renderLevels(levels){
+  if(!levels||!levels.length){
+    $("levels-body").innerHTML='<tr><td colspan="7" class="empty">Sin niveles registrados</td></tr>';
+    return;
+  }
+  const rows=levels.map(l=>{
+    const typ=l.type==="support"?"sup":l.type==="resistance"?"res":"piv";
+    const price=typeof l.price==="number"?"$"+l.price.toFixed(0):l.price;
+    return `<tr>
+      <td>${esc(l.asset)}</td>
+      <td><span class="tag ${typ}">${esc(l.type)}</span></td>
+      <td>${esc(price)}</td>
+      <td>${esc(l.date||"")}</td>
+      <td>${esc(l.source||"")}</td>
+      <td>${l.days_old}d</td>
+      <td><span class="badge ${l.is_active?"active":"broken"}">${l.is_active?"Activo":"Roto"}</span></td>
+    </tr>`;
+  }).join("");
+  $("levels-body").innerHTML=rows;
+}
+
+let _allResolved=[];
+
+function renderPredHistory(preds){
+  _allResolved=preds||[];
+  filterPredHistory();
+}
+
+function filterPredHistory(){
+  const asset=$("f-asset").value;
+  const type=$("f-type").value;
+  const result=$("f-result").value;
+  let preds=_allResolved;
+  if(asset) preds=preds.filter(p=>p.asset===asset);
+  if(type)  preds=preds.filter(p=>p.type===type);
+  if(result)preds=preds.filter(p=>p.status===result);
+  if(!preds.length){
+    $("pred-history").innerHTML='<tr><td colspan="7" class="empty">Sin resultados</td></tr>';
+    return;
+  }
+  const rows=preds.map(p=>{
+    const ac=p.accuracy==="correct"?"up":p.accuracy==="partial"?"neu":"dn";
+    const score=p.score;
+    const scoreCls=score>=80?"ok":score>=50?"warn":"bad";
+    const scoreBar=score!==null?`<div class="score-bar">
+      <div class="score-fill"><div class="score-fill-inner ${scoreCls}" style="width:${score}%"></div></div>
+      <span>${score}</span>
+    </div>`:"---";
+    return `<tr>
+      <td>${esc(p.report_date||"")}</td>
+      <td>${esc(p.asset)}</td>
+      <td>${esc(p.type.replace(/_/g," "))}</td>
+      <td class="${p.direction==="bullish"?"up":p.direction==="bearish"?"dn":"neu"}">${esc(p.direction)}</td>
+      <td>${p.price_target?"$"+Number(p.price_target).toFixed(0):"---"}</td>
+      <td class="${ac}"><strong>${esc(p.status)}</strong>${p.price_achieved?" — $"+Number(p.price_achieved).toFixed(0):""}</td>
+      <td>${scoreBar}</td>
+    </tr>`;
+  }).join("");
+  $("pred-history").innerHTML=rows;
+}
+
+function setupFilters(){
+  ["f-asset","f-type","f-result"].forEach(id=>{
+    $(id).addEventListener("change",filterPredHistory);
+  });
+}
+
+function renderReports(reps){
+  if(!reps||!reps.length){
+    $("rep-grid").innerHTML='<div class="empty">Sin reportes archivados</div>';
+    return;
+  }
+  const html=reps.map(r=>`
+    <div class="rep-card">
+      <div class="rep-date">${esc(r.date)}</div>
+      <div class="rep-asset">${esc(r.asset)}</div>
+      <div class="rep-sec">${esc(r.section)}</div>
+      <div class="rep-ver">v${r.version}</div>
+      ${r.filename?`<a href="../${esc(r.filename)}" style="font:700 9px 'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--sea);text-decoration:none;margin-top:6px;display:block">Ver HTML &#8594;</a>`:""}
+    </div>`).join("");
+  $("rep-grid").innerHTML=html;
+}
+
+function renderEmpty(){
+  ["ticker","macro-grid","pred-active","hit-rates","evo-row","levels-body","pred-history","rep-grid"]
+    .forEach(id=>{
+      const el=$(id);
+      if(el) el.innerHTML='<div class="empty">Sin datos</div>';
+    });
+}
+
+load();
+</script>
+</body>
+</html>
