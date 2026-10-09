@@ -1,3 +1,5 @@
+> **SEGURIDAD (2026-10-08):** Este documento contenía credenciales que estuvieron expuestas públicamente. Se retiraron del estado actual; **rota/revoca FRED, Telegram Bot y Exa/ScrapeGraph inmediatamente**. El historial Git todavía conserva las versiones anteriores. No vuelvas a publicar valores de claves en docs, commits ni logs.
+
 # Scraping & Data Ingestion Tools
 
 ## 1. Fuentes de datos
@@ -28,7 +30,7 @@ python3 ingestion/ingest_price.py
 - **Dependencias:** ninguna (requests stdlib)
 
 ```bash
-FRED_API_KEY=your_key python3 ingestion/ingest_fred.py
+FRED_API_KEY="$FRED_API_KEY" python3 ingestion/ingest_fred.py
 ```
 
 ---
@@ -51,7 +53,7 @@ python3 ingestion/ingest.py
 - **Script:** `ingestion/news_pipeline.py`
 - **Wrapper CLI:** `mcporter` (MCP CLI, parte de `agent-reach`)
 - **Server:** ScrapeGraph AI MCP Server v3.4.7 (`sgai-*`)
-- **API Key:** `sgai-6199d8c9-796d-456e-8e56-86dcf648c9f1`
+- **API Key:** configurada como secreto del servidor MCP; nunca guardar su valor en Git.
 - **Venv:** `/home/ignotus/.agent-reach-venv/`
 - **Endpoint:** `exa.web_search_exa` via mcporter
 
@@ -145,16 +147,16 @@ def exa_search(query, n=5):
 
 | Variable | Valor | Ubicación |
 |---|---|---|
-| `FRED_API_KEY` | `d41bb4d61c7d02ffbd55dfe528c51d8c` | `/home/ignotus/.hermes/.env` |
-| `EXA_API_KEY` | `sgai-6199d8c9-796d-456e-8e56-86dcf648c9f1` | Configuración MCP server |
-| `TELEGRAM_BOT_TOKEN` | `8936134819:AAHTjRw702ATGFrcnmm2yvH11MbRpwExQ40` | `/home/ignotus/.hermes/.env` |
-| `TELEGRAM_HOME_CHANNEL` | `8246972` | `/home/ignotus/.hermes/.env` |
+| `FRED_API_KEY` | [REDACTED — usar una clave nueva en entorno] | `/home/ignotus/.hermes/.env` |
+| `EXA_API_KEY` | [REDACTED — rotar y configurar en MCP] | Configuración MCP server |
+| `TELEGRAM_BOT_TOKEN` | [REDACTED — rotar y configurar en Hermes] | `/home/ignotus/.hermes/.env` |
+| `TELEGRAM_CHAT_ID` | [CONFIGURAR EN ENTORNO] | `/home/ignotus/.hermes/.env` |
 
 ### Para agregar keys al config
 
 **FRED:** editar `ingestion/config.py`:
 ```python
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "your_key_here")
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")
 ```
 
 **No hardcodear keys en scripts** — usar `os.environ.get()`.
@@ -182,5 +184,5 @@ tail -20 logs/news_errors.log
 grep -i "fred\|error" cron.log | tail -10
 
 # Test ingest individual
-FRED_API_KEY=d41bb4d61c7d02ffbd55dfe528c51d8c python3 ingestion/ingest_fred.py
+FRED_API_KEY="$FRED_API_KEY" python3 ingestion/ingest_fred.py
 ```
