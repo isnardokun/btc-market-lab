@@ -123,6 +123,39 @@ class ReadOnlyV3PreflightTests(unittest.TestCase):
         self.assertEqual(result["quality_state"], "BLOCKED")
         self.assertTrue(any("market_request_lineage" in i for i in result["issues"]))
 
+    def test_post_rejects_v3_acquisition_table_without_constraints(self):
+        baseline = self._pre()
+        self._migrate_fixture()
+        with sqlite3.connect(self.db) as cx:
+            cx.execute("DROP TABLE market_request_acquisitions")
+            cx.execute(
+                "CREATE TABLE market_request_acquisitions("
+                "acquired_id TEXT PRIMARY KEY, request_id TEXT NOT NULL,"
+                "provider TEXT NOT NULL, endpoint_path TEXT NOT NULL,"
+                "raw_sha256 TEXT NOT NULL, acquired_utc TEXT NOT NULL)"
+            )
+        post = preflight.inspect(self.db, phase="post", baseline=baseline)
+        self.assertEqual(post["quality_state"], "BLOCKED")
+        self.assertTrue(any("FOREIGN KEY" in issue for issue in post["issues"]))
+        self.assertTrue(any("UNIQUE(request_id)" in issue for issue in post["issues"]))
+
+    def test_post_rejects_wrong_v3_acquisitions_column_type(self):
+        baseline = self._pre()
+        self._migrate_fixture()
+        with sqlite3.connect(self.db) as cx:
+            cx.execute("DROP TABLE market_request_acquisitions")
+            cx.execute(
+                "CREATE TABLE market_request_acquisitions("
+                "acquired_id TEXT PRIMARY KEY,"
+                "request_id INTEGER NOT NULL UNIQUE REFERENCES market_request_lineage(request_id),"
+                "provider TEXT NOT NULL, endpoint_path TEXT NOT NULL,"
+                "raw_sha256 TEXT NOT NULL REFERENCES market_raw_payloads(sha256),"
+                "acquired_utc TEXT NOT NULL)"
+            )
+        post = preflight.inspect(self.db, phase="post", baseline=baseline)
+        self.assertEqual(post["quality_state"], "BLOCKED")
+        self.assertTrue(any("type mismatch" in issue for issue in post["issues"]))
+
     def test_post_rejects_forward_cursor(self):
         baseline = self._pre()
         self._migrate_fixture()
