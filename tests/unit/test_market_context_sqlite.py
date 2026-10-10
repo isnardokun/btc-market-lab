@@ -211,6 +211,40 @@ class MarketStorageTests(unittest.TestCase):
         self.assertEqual(row,("failed","ValueError"))
         self.assertNotIn("secret",str(row))
 
+    def test_missing_fred_calendar_config_is_failed(self):
+        with self.assertRaises(sources.MissingFREDAPIKey):
+            sources.fetch_fred(self.db,api_key=None)
+        state,attempts,points=ingest.run(self.db,"fred",fred_api_key=None)
+        self.assertEqual((state,attempts,points),("failed",0,0))
+        row=self.db.execute("SELECT error_code FROM market_source_runs").fetchone()
+        self.assertEqual(row[0],"MissingFREDAPIKey")
+
+    def test_http_failure_counts_attempt_and_status(self):
+        from urllib.error import HTTPError
+        def reject(url,params=None):
+            raise HTTPError(url,403,"Forbidden",None,None)
+        with patch.object(ingest,"download",side_effect=reject):
+            state,attempts,points=ingest.run(self.db,"bls")
+        self.assertEqual((state,attempts,points),("failed",1,0))
+        row=self.db.execute("SELECT requests,error_code FROM market_source_runs").fetchone()
+        self.assertEqual(row,(1,"HTTPError_403"))
+
+    def test_strict_return_code_on_partial_market_pilot(self):
+        self.db.executemany("INSERT INTO market_source_runs "
+            "(run_id,provider,started_utc,ended_utc,status,requests,points) "
+            "VALUES(?,?,'2026-10-09T11:00:00+00:00','2026-10-09T11:00:00+00:00','success',2,100)",
+            [("binance1","binance"),("bybit1","bybit")])
+        self.db.commit()
+        from scripts.market_context_evidence import collect, main as audit_main
+        from contextlib import redirect_stdout
+        from io import StringIO
+        report=collect(self.path)
+        self.assertEqual(report["operational_state"],"INCOMPLETE_OR_FAILED")
+        self.assertIn("calendar: no events",report["missing_or_incomplete"])
+        with redirect_stdout(StringIO()):
+            code=audit_main(["--db",str(self.path),"--strict"])
+        self.assertEqual(code,1)
+
     def test_dry_run_and_no_implicit_migration(self):
         self.assertEqual(ingest.main(["--db",str(self.path),"--sources","bls"]),0)
         db=self.db.execute("SELECT COUNT(*) FROM market_source_runs").fetchone()[0]
