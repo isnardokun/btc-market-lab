@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from contextlib import closing, nullcontext
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,7 +95,7 @@ def expected_rows(provider,endpoint,body):
         indexed[key]=(value,unit,quote)
     return indexed
 
-def audit(path, *, max_issues=12):
+def audit(path, *, max_issues=12, connection=None):
     p=Path(path)
     if not p.is_file():
         raise FileNotFoundError("Existing SQLite required")
@@ -102,8 +103,15 @@ def audit(path, *, max_issues=12):
     counts={p+"_"+m:{"rows":0,"verified":0} for p,m in STREAMS}
     checked_blobs=0
     indexed={}
-    with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=30) as db:
-        db.execute("PRAGMA query_only=ON")
+    handle = (closing(sqlite3.connect(p.resolve().as_uri()+"?mode=ro",
+                                      uri=True,timeout=30))
+              if connection is None else nullcontext(connection))
+    with handle as db:
+        if connection is None:
+            db.execute("PRAGMA query_only=ON")
+        elif (not db.in_transaction or
+              db.execute("PRAGMA query_only").fetchone()[0] != 1):
+            raise ValueError("Shared audit requires active query-only transaction")
         tables={r[0] for r in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
         if not {"market_derivatives","market_raw_payloads"}<=tables:
