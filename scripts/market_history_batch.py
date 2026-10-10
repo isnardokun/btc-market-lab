@@ -84,6 +84,16 @@ def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time
     summary["post_audit_ok"]=(
         raw.get("state")=="PASS_SQLITE_TO_RAW"
         and chrono.get("quality_state")=="SNAPSHOT_INTERNAL_QA_OK")
+    # These are different assertions: post_audit_ok means existing
+    # observations are still intact, NOT that the backfill succeeded.
+    if not summary["post_audit_ok"]:
+        summary["batch_outcome"]="STOPPED_POST_AUDIT_FAILED"
+    elif summary["stopped_because"]=="page_budget_exhausted":
+        summary["batch_outcome"]="BUDGET_COMPLETED"
+    elif summary["stopped_because"]=="empty":
+        summary["batch_outcome"]="SOURCE_RETURNED_EMPTY"
+    else:
+        summary["batch_outcome"]="STOPPED_WITHOUT_SUCCESS"
     # A source can legitimately return an empty page at a provider limit;
     # it is NOT proof that all-time history exists or that pagination was exhaustive.
     return summary
