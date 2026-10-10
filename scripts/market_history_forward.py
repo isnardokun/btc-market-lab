@@ -960,191 +960,168 @@ def collect_one_page(db, provider: str, metric: str, *, fetch=download):
 
 
 def execute(db, provider: str, metric: str, *, fetch=download):
-    """Execute one forward page with full v3 lineage.
+    """One OI page with atomic writes and a separate failed-attempt receipt.
 
-    Returns a dict with:
-      - status: 'success' | 'empty' | 'stale_cutoff' | 'failed'
-      - requests, points
-      - request_lineage_logged: bool
-      - cursor_advanced: bool
-
-    All writes are atomic via the caller's transaction context.
+    No HTTP occurs under a SQLite write lock. BEGIN IMMEDIATE plus re-reading
+    MAX before INSERT protects against another writer extending the same series.
+    Caller must not supply an open transaction.
     """
-    if not request_lineage_installed(db):
-        return {"provider": provider, "metric": metric, "status": "failed",
-                "requests": 0, "points": 0,
-                "error_code": "SchemaV2Required"}
-
+    if (provider, metric) not in CONFIG or metric != "open_interest":
+        return {"status": "failed", "error_code": "UnsupportedStream",
+                "requests": 0, "points": 0}
+    if db.in_transaction:
+        return {"status": "failed", "error_code": "ActiveTransaction",
+                "requests": 0, "points": 0}
+    if not installed(db) or not request_lineage_installed(db):
+        return {"status": "failed", "error_code": "SchemaV3Required",
+                "requests": 0, "points": 0}
     cols = {r[1] for r in db.execute("PRAGMA table_info(market_request_lineage)")}
-    if "direction" not in cols or "requested_start_ms" not in cols:
-        return {"provider": provider, "metric": metric, "status": "failed",
-                "requests": 0, "points": 0,
-                "error_code": "SchemaV3Required"}
+    tables = {r[0] for r in db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    if not {"direction", "requested_start_ms"} <= cols or (
+            "market_request_acquisitions" not in tables):
+        return {"status": "failed", "error_code": "SchemaV3Required",
+                "requests": 0, "points": 0}
 
+    endpoint_path, page_limit, interval_label = CONFIG[(provider, metric)]
+    endpoint = SOURCE_URLS[provider] + endpoint_path
+    interval_ms = INTERVAL_5M_MS
     uid = uuid.uuid4().hex
-    db.execute(
-        "INSERT INTO market_source_runs(run_id,provider,started_utc,status) "
-        "VALUES(?,?,?,'running')",
-        (uid, provider, now_utc()))
-
+    request_id = f"req-{uid}"
     attempt_stamp = now_utc()
-    endpoint_path = CONFIG[(provider, metric)][0]
-    page_limit = CONFIG[(provider, metric)][1]
-    interval_label = CONFIG[(provider, metric)][2]
 
-    # ── Phase 1: Determine boundaries (no transaction needed) ───────────────────
-    try:
-        max_row = db.execute(
+    def latest_ms():
+        row = db.execute(
             "SELECT MAX(observed_utc) FROM market_derivatives "
-            "WHERE provider=? AND symbol='BTCUSDT' AND metric=?",
-            (provider, metric)).fetchone()[0]
-        if max_row is None:
-            raise ValueError(f"No existing {provider}/{metric} data")
+            "WHERE provider=? AND symbol='BTCUSDT' AND metric=? "
+            "AND interval_label='5m'", (provider, metric)).fetchone()[0]
+        if row is None:
+            raise ValueError("No existing 5m OI snapshot")
+        return ms_from_utc(row)
 
-        interval_ms = INTERVAL_5M_MS if metric == "open_interest" else (8 * 3600 * 1000)
-        next_start_ms = ms_from_utc(max_row) + interval_ms
-        cutoff_ms = _cutoff_now()
-
-        if next_start_ms > cutoff_ms:
-            # No HTTP was made — stale_cutoff: rollback the pre-inserted run row
-            if db.in_transaction:
-                db.rollback()
-            return {
-                "provider": provider, "metric": metric,
-                "status": "stale_cutoff", "requests": 0, "points": 0,
-                "request_lineage_logged": False, "cursor_advanced": False,
-            }
-
-        end_page_ms = min(next_start_ms + (page_limit - 1) * interval_ms, cutoff_ms)
-        if end_page_ms < next_start_ms:
-            # Valid boundary check: endpoint returned empty page — record it
-            db.execute(
-                "UPDATE market_source_runs SET ended_utc=?,status='empty',"
-                "requests=1,points=0 WHERE run_id=?",
-                (now_utc(), uid))
-            return {
-                "provider": provider, "metric": metric,
-                "status": "empty", "requests": 0, "points": 0,
-                "request_lineage_logged": False, "cursor_advanced": False,
-            }
-
-        # ── Phase 2: HTTP request ──────────────────────────────────────────────
-        suffix = CONFIG[(provider, metric)][0]
-        endpoint = SOURCE_URLS[provider] + suffix
-        params = {"symbol": "BTCUSDT", "limit": page_limit,
-                  "startTime": next_start_ms, "endTime": end_page_ms}
-        if provider == "binance" and metric == "open_interest":
-            params["period"] = "5m"
-        elif provider == "bybit":
-            params["category"] = "linear"
-            if metric == "open_interest":
-                params["intervalTime"] = "5min"
-
+    def failure(reason, start_ms, end_ms):
+        """Record the actual failed HTTP attempt AFTER rollback, atomically."""
+        if db.in_transaction:
+            db.rollback()
+        logged = False
         try:
-            body = fetch(endpoint, params)
-        except Exception as fetch_exc:
-            # Network error: mark run failed, write lineage record, return
-            reason = error_category(fetch_exc)
+            db.execute("BEGIN IMMEDIATE")
             db.execute(
-                "UPDATE market_source_runs SET ended_utc=?,status='failed',"
-                "requests=1,error_code=? WHERE run_id=?",
-                (now_utc(), reason, uid))
-            db.execute(
-                "INSERT INTO market_request_lineage"
-                "(request_id,run_id,provider,stream,symbol,interval_label,endpoint_path,"
-                "requested_start_ms,requested_end_ms,requested_limit,"
-                "attempted_utc,ended_utc,http_attempts,"
-                "status,error_class,raw_sha256,returned_rows,persisted_rows,"
-                "first_observed_utc,last_observed_utc,direction)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (f"req-{uid}", uid, provider, metric, "BTCUSDT", interval_label,
-                 endpoint_path,
-                 next_start_ms, end_page_ms, page_limit,
-                 attempt_stamp, now_utc(), 1,
-                 "failed", reason, None, 0, 0,
-                 None, None, "forward"))
-            return {
-                "provider": provider, "metric": metric,
-                "status": "failed", "requests": 1, "points": 0,
-                "error_code": reason,
-                "request_lineage_logged": True,
-                "cursor_advanced": False,
-            }
+                "INSERT INTO market_source_runs "
+                "(run_id,provider,started_utc,ended_utc,status,requests,points,error_code) "
+                "VALUES(?,?,?,?,'failed',1,0,?)",
+                (uid, provider, attempt_stamp, now_utc(), reason))
+            write_request_lineage(
+                db, request_id=request_id, run_id=uid,
+                provider=provider, metric=metric, interval_label=interval_label,
+                endpoint_path=endpoint_path, requested_start_ms=start_ms,
+                requested_end_ms=end_ms, requested_limit=page_limit,
+                attempted_utc=attempt_stamp, ended_utc=now_utc(),
+                http_attempts=1, status="failed", error_class=reason,
+                direction="forward")
+            db.commit()
+            logged = True
+        except (sqlite3.Error, ValueError):
+            db.rollback()
+        return {"provider": provider, "metric": metric, "status": "failed",
+                "requests": 1, "points": 0, "error_code": reason,
+                "request_lineage_logged": logged, "cursor_advanced": False}
 
-        # ── Phase 3: Parse and store ─────────────────────────────────────────
+    try:
+        initial_max_ms = latest_ms()
+    except (ValueError, TypeError, sqlite3.Error):
+        return {"provider": provider, "metric": metric, "status": "failed",
+                "requests": 0, "points": 0, "error_code": "SnapshotUnavailable",
+                "request_lineage_logged": False, "cursor_advanced": False}
+
+    start_ms = initial_max_ms + interval_ms
+    cutoff_ms = (_cutoff_now() // interval_ms) * interval_ms
+    if start_ms > cutoff_ms:
+        return {"provider": provider, "metric": metric, "status": "stale_cutoff",
+                "requests": 0, "points": 0, "request_lineage_logged": False,
+                "cursor_advanced": False}
+    end_ms = min(start_ms + (page_limit - 1) * interval_ms, cutoff_ms)
+    params = {"symbol": "BTCUSDT", "limit": page_limit,
+              "startTime": start_ms, "endTime": end_ms}
+    if provider == "binance":
+        params["period"] = "5m"
+    else:
+        params.update({"category": "linear", "intervalTime": "5min"})
+
+    try:
+        body = fetch(endpoint, params)
         rows = _parse_rows(provider, metric, body, interval_ms)
+        if len(rows) > page_limit:
+            raise ValueError("API response exceeds requested page limit")
         if rows:
-            _validate_forward_response(rows, next_start_ms, end_page_ms, interval_ms, metric)
+            _validate_forward_response(rows, start_ms, end_ms, interval_ms, metric)
+            if any(stamp % interval_ms for stamp, _value, _quote in rows):
+                raise ValueError("OI timestamp is not aligned to five-minute UTC boundary")
+    except Exception as exc:
+        return failure(error_category(exc), start_ms, end_ms)
+
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        # Concurrent writers may have advanced MAX while the HTTP was in flight.
+        if latest_ms() != initial_max_ms:
+            raise ValueError("ConcurrentWriterAdvancedMAX")
+        if rows:
+            # UPSERT is not a safe means of detecting overlap: reject it explicitly.
+            for stamp, _value, _quote in rows:
+                observed = utc_from_ms(stamp)
+                exists = db.execute(
+                    "SELECT 1 FROM market_derivatives WHERE provider=? "
+                    "AND symbol='BTCUSDT' AND metric='open_interest' "
+                    "AND interval_label='5m' AND observed_utc=?",
+                    (provider, observed)).fetchone()
+                if exists:
+                    raise ValueError("ForwardOverlapDetected")
 
         digest = raw_payload(db, provider, endpoint, body, "application/json")
-        acquired_id = f"acq-{uuid.uuid4().hex[:12]}"
-        acquired_utc = now_utc()
-
-        added = 0
+        db.execute(
+            "INSERT INTO market_source_runs(run_id,provider,started_utc,status) "
+            "VALUES(?,?,?,'running')",
+            (uid, provider, attempt_stamp))
+        inserted = 0
         for stamp, value, quote in rows:
-            observed = utc_from_ms(stamp)
-            added += int(store_derivative(
+            inserted += int(store_derivative(
                 db, provider=provider, symbol="BTCUSDT", metric=metric,
-                observed_utc=observed, interval_label=interval_label,
-                value=value, unit="BTC" if metric == "open_interest" else "fraction",
-                endpoint=endpoint, sha=digest, quote_usd=quote))
+                observed_utc=utc_from_ms(stamp), interval_label="5m",
+                value=value, unit="BTC", endpoint=endpoint, sha=digest,
+                quote_usd=quote))
+        if inserted != len(rows):
+            raise ValueError("ForwardRowCountMismatch")
 
+        status = "success" if rows else "empty"
         if rows:
-            new_max_ms = max(r[0] for r in rows)
-            stream = CURSOR_PREFIX + metric
-            save_cursor(db, provider, stream, str(new_max_ms))
-
-        lineage_status = "empty" if not rows else "success"
-        request_id = f"req-{uid}"
+            save_cursor(db, provider, CURSOR_PREFIX + metric, str(rows[-1][0]))
         write_request_lineage(
-            db, request_id=request_id, run_id=uid,
-            provider=provider, metric=metric,
-            interval_label=interval_label,
-            endpoint_path=endpoint_path,
-            requested_start_ms=next_start_ms,
-            requested_end_ms=end_page_ms,
-            requested_limit=page_limit,
+            db, request_id=request_id, run_id=uid, provider=provider,
+            metric=metric, interval_label=interval_label,
+            endpoint_path=endpoint_path, requested_start_ms=start_ms,
+            requested_end_ms=end_ms, requested_limit=page_limit,
             attempted_utc=attempt_stamp, ended_utc=now_utc(),
-            http_attempts=1, status=lineage_status,
-            raw_sha256=digest,
-            returned_rows=len(rows),
-            persisted_rows=len(rows),
+            http_attempts=1, status=status, raw_sha256=digest,
+            returned_rows=len(rows), persisted_rows=inserted,
             first_observed_utc=utc_from_ms(rows[0][0]) if rows else None,
             last_observed_utc=utc_from_ms(rows[-1][0]) if rows else None,
             direction="forward")
-
         db.execute(
             "INSERT INTO market_request_acquisitions "
             "(acquired_id,request_id,provider,endpoint_path,raw_sha256,acquired_utc) "
             "VALUES(?,?,?,?,?,?)",
-            (acquired_id, request_id, provider, endpoint_path, digest, acquired_utc))
-
+            (f"acq-{uuid.uuid4().hex}", request_id,
+             provider, endpoint_path, digest, now_utc()))
         db.execute(
             "UPDATE market_source_runs SET ended_utc=?,status=?,"
             "requests=1,points=? WHERE run_id=?",
-            (now_utc(), lineage_status, len(rows), uid))
-
-        return {
-            "provider": provider, "metric": metric,
-            "status": lineage_status, "requests": 1, "points": len(rows),
-            "request_lineage_logged": True,
-            "cursor_advanced": bool(rows),
-        }
-
+            (now_utc(), status, inserted, uid))
+        db.commit()
+        return {"provider": provider, "metric": metric, "status": status,
+                "requests": 1, "points": inserted,
+                "request_lineage_logged": True, "cursor_advanced": bool(rows)}
     except Exception as exc:
-        db.rollback()
-        reason = error_category(exc)
-        db.execute(
-            "UPDATE market_source_runs SET ended_utc=?,status='failed',"
-            "requests=1,error_code=? WHERE run_id=?",
-            (now_utc(), reason, uid))
-        return {
-            "provider": provider, "metric": metric,
-            "status": "failed", "requests": 1, "points": 0,
-            "error_code": reason,
-            "request_lineage_logged": False,
-            "cursor_advanced": False,
-        }
+        return failure(error_category(exc), start_ms, end_ms)
 
 
 def plan(db, provider: str, metric: str) -> dict:
@@ -1340,32 +1317,70 @@ def plan(db, provider: str, metric: str) -> dict:
 
 
 def main(argv=None, _db=None):
-    """Entry point. _db overrides the DB connection (for test injection)."""
-    import argparse
-
+    """Fail-closed CLI: PLAN is read-only; APPLY requires an existing SQLite."""
     p = argparse.ArgumentParser(description="Forward incremental OI pilot")
     p.add_argument("--provider", required=True, choices=["binance", "bybit"])
     p.add_argument("--metric", required=True, choices=["open_interest"])
-    p.add_argument("--apply", action="store_true", help="Execute one forward page (default: PLAN_ONLY)")
+    p.add_argument("--apply", action="store_true",
+                   help="Execute exactly one forward page (default: PLAN_ONLY)")
     p.add_argument("--db", type=Path, default=Path(DB_PATH))
     args = p.parse_args(argv)
-
-    if _db is not None:
-        db = _db
-    else:
-        db = sqlite3.connect(args.db)
+    if _db is None and not args.db.is_file():
+        print(json.dumps({"status": "failed", "error_code": "DatabaseNotFound"}))
+        return 2
+    own_db = _db is None
+    try:
+        db = _db if _db is not None else sqlite3.connect(
+            args.db.resolve().as_uri() + ("?mode=rw" if args.apply else "?mode=ro"),
+            uri=True, timeout=30)
+    except (sqlite3.Error, OSError) as exc:
+        print(json.dumps({"status": "failed", "error_code": type(exc).__name__}))
+        return 2
+    try:
         db.execute("PRAGMA foreign_keys=ON")
+        if not args.apply:
+            db.execute("PRAGMA query_only=ON")
+            result = plan(db, args.provider, args.metric)
+            print(json.dumps(result, indent=2, default=str))
+            return 2 if "error" in result else 0
 
-    if not args.apply:
-        db.execute("PRAGMA query_only=ON")
-        result = plan(db, args.provider, args.metric)
+        result = execute(db, args.provider, args.metric)
+        db.commit()
         print(json.dumps(result, indent=2, default=str))
-        return
+        if result.get("status") == "failed":
+            return 1
+        if result.get("status") == "stale_cutoff":
+            return 0
 
-    data = execute(db, args.provider, args.metric)
-    print(json.dumps(data, indent=2, default=str))
-    db.commit()
+        # Independent post-page gates. An audit failure stops the caller.
+        # Do not overwrite or roll back committed source evidence here.
+        if own_db:
+            from scripts.market_raw_reconcile import audit as raw_audit
+            from scripts.market_temporal_quality import inspect as temporal_inspect
+            from scripts.market_request_lineage_audit import audit as lineage_audit
+            raw = raw_audit(args.db)
+            temporal = temporal_inspect(args.db)
+            lineage = lineage_audit(args.db)
+            gates = {
+                "RAW": raw.get("state"),
+                "TEMPORAL": temporal.get("quality_state"),
+                "LINEAGE": lineage.get("quality_state"),
+            }
+            print(json.dumps({"post_page_quality_gates": gates}))
+            if (gates["RAW"] != "PASS_SQLITE_TO_RAW"
+                    or gates["TEMPORAL"] != "SNAPSHOT_INTERNAL_QA_OK"
+                    or gates["LINEAGE"] != "PASS_REQUEST_LINEAGE"):
+                return 3
+        return 0
+    except (sqlite3.Error, ValueError, OSError) as exc:
+        if db.in_transaction:
+            db.rollback()
+        print(json.dumps({"status": "failed", "error_code": type(exc).__name__}))
+        return 2
+    finally:
+        if own_db:
+            db.close()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
