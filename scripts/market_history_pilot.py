@@ -15,10 +15,10 @@ from pathlib import Path
 import sqlite3
 import sys
 import uuid
-from ingestion.market_network_errors import error_category
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from ingestion.market_network_errors import error_category
 from ingestion.config import DB_PATH
 from ingestion.market_context_sources import download, SOURCE_URLS, parse_api_json
 from storage.market_context import (
