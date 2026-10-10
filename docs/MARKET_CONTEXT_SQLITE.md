@@ -273,3 +273,72 @@ saneado/Markdown privado. No subir SQLite, BLOB, tokens, recibos Telegram,
 archivos de variables de entorno ni datos de terceros al repositorio
 público. El reporte del Publication Gate del flujo legacy es independiente
 de la certificación de estos nuevos datasets.
+
+
+## Backfill histórico controlado de una sola página — ETAPA 2E
+
+Tras obtener `PASS_SQLITE_TO_RAW` y `SNAPSHOT_INTERNAL_QA_OK`,
+los snapshots están internamente auditados. **Esto no demuestra
+histórico completo**. Los endpoints de derivados requieren rescate
+hacia atrás específico por fuente/métrica.
+
+Para evitar la ruta antigua `market_context_ingest.py --history`
+(la cual NO pagina OI de Binance hacia atrás, y mezcla mecanismos
+de paginación de funding/Bybit), se introduce un ejecutor SEPARADO
+de una página: `scripts/market_history_pilot.py`.
+
+| Fuente/métrica | API | Máx. una página | Contrato |
+|---|---|---:|---|
+| Binance OI | `/futures/data/openInterestHist` | 500 registros | UTC < primer OI registrado; límite de proveedor ~1 mes |
+| Binance funding | `/fapi/v1/fundingRate` | 1.000 registros | UTC < primer settlement registrado |
+| Bybit OI | `/v5/market/open-interest` | 200 registros | UTC < primer OI registrado |
+| Bybit funding | `/v5/market/funding/history` | 200 registros | UTC < primer settlement registrado |
+
+**PLAN SIN RED NI ESCRITURA**:
+
+```bash
+python3 scripts/market_history_pilot.py --provider binance --metric open_interest
+```
+
+**Sólo bajo autorización expresa tras backup SQLite WAL-safe comprobado**:
+
+```bash
+python3 scripts/market_history_pilot.py --apply --provider binance --metric open_interest
+python3 scripts/market_history_pilot.py --apply --provider binance --metric funding_settled
+python3 scripts/market_history_pilot.py --apply --provider bybit --metric open_interest
+python3 scripts/market_history_pilot.py --apply --provider bybit --metric funding_settled
+```
+
+La invocación acepta **una sola página**, **no** `--max-pages`.
+Deriva `endTime` inmediatamente anterior a `MIN(observed_utc)` en
+la SQLite actual, exige respuesta anterior al límite, valida símbolo y
+contrato, guarda cada BLOB original con SHA, observaciones nuevas y
+cursor `history_backward_v1_<metric>` atómicamente **en la misma SQLite**,
+y registra un `market_source_runs` con intentos/estado/errores sanitizados.
+No cambia datos de períodos más recientes; si el API contradice el límite
+o si existe un cursor incoherente, hace rollback del lote. Una respuesta
+vacía no equivale a histórico completo: puede ser ventana del proveedor.
+
+Después de **una sola página por proveedor y métrica**, PARAR, no
+ejecutar una segunda página sin revisar:
+
+```bash
+python3 scripts/market_raw_reconcile.py
+python3 scripts/market_temporal_quality.py
+python3 scripts/market_context_evidence.py --full-check
+```
+
+Exigir `PASS_SQLITE_TO_RAW`, revisar `SNAPSHOT_INTERNAL_QA_OK` y la
+continuidad entre la primera fila previa y última fila añadida, contadores
+`market_source_runs`, SHA nuevos y `market_source_cursors`, cambios
+de historial legado (idealmente cero) y `PRAGMA` de integridad/FK.
+Guardar output técnico **solo como evidencia privada**.
+
+**Límites esenciales:** OI Binance más allá de la ventana ~30 días
+**no se recupera por este endpoint**. Para más años habrá que evaluar una
+fuente alternativa con contrato, condiciones de acceso y metodología.
+Bybit histórico retrocede por `endTime` y se validará por página; no
+inferir que una muestra sin huecos prueba todo el catálogo histórico.
+Funding no se fuerza a un intervalo fijo de ocho horas si el proveedor
+ofrece un intervalo distinto para el instrumento. Nunca activar cron
+intradía, Telegram ni refresh automático como parte del backfill.
