@@ -27,6 +27,7 @@ TESTS = [
     ("Unit: Versioned Knowledge Corpus v2", "python3 -m unittest -v tests.unit.test_knowledge_corpus_v2"),
     ("Unit: Research Studio v2", "python3 -m unittest -v tests.unit.test_research_studio_v2"),
     ("Unit: FRED Entry & Market SQLite Evidence", "python3 -m unittest -v tests.unit.test_fred_cli_and_market_evidence"),
+    ("Unit: Independent Market Request Lineage Audit", "python3 -m unittest -v tests.unit.test_market_request_lineage_audit"),
     ("Unit: Market Request Lineage V2 Migration", "python3 -m unittest -v tests.unit.test_market_request_lineage_v2"),
     ("Unit: One-shot Binance Historical OI Endpoint", "python3 -m unittest -v tests.unit.test_binance_oi_endpoint_probe"),
     ("Unit: One-shot Binance HTTPS Connectivity", "python3 -m unittest -v tests.unit.test_binance_https_probe"),
