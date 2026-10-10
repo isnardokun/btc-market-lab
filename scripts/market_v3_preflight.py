@@ -10,7 +10,7 @@ The PRE result does not authorize production migration. Run existing RAW,
 TEMPORAL, and LINEAGE read-only auditors separately as independent gates.
 """
 import argparse
-from contextlib import closing
+from contextlib import closing, nullcontext
 import hashlib
 import json
 from pathlib import Path
@@ -139,7 +139,7 @@ def _fingerprint(db, table, columns, condition):
     return {"rows": count, "sha256": h.hexdigest()}
 
 
-def inspect(path, *, phase="pre", expected_backward=None, baseline=None):
+def inspect(path, *, phase="pre", expected_backward=None, baseline=None, connection=None):
     """Return evidence; fail closed on defects. No DB/file/network writes."""
     p = Path(path)
     if phase not in ("pre", "post"):
@@ -163,12 +163,19 @@ def inspect(path, *, phase="pre", expected_backward=None, baseline=None):
         "snapshot": {},
         "issues": [],
     }
-    with closing(sqlite3.connect(p.resolve().as_uri() + "?mode=ro",
-                                 uri=True, timeout=30)) as db:
-        db.execute("PRAGMA query_only=ON")
-        db.execute("PRAGMA foreign_keys=ON")
-        # One coherent read transaction: don't fingerprint across generations.
-        db.execute("BEGIN")
+    owned = connection is None
+    handle = (closing(sqlite3.connect(p.resolve().as_uri() + "?mode=ro",
+                                      uri=True, timeout=30)) if owned
+              else nullcontext(connection))
+    with handle as db:
+        if owned:
+            db.execute("PRAGMA query_only=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            # Keep a coherent read transaction for standalone PRE/POST too.
+            db.execute("BEGIN")
+        elif (not db.in_transaction or
+              db.execute("PRAGMA query_only").fetchone()[0] != 1):
+            raise ValueError("Shared preflight requires active query-only transaction")
         try:
             tables = {row[0] for row in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
@@ -250,7 +257,8 @@ def inspect(path, *, phase="pre", expected_backward=None, baseline=None):
                     if baseline.get("checks", {}).get("forward_cursors") != 0:
                         report["issues"].append("PRE evidence already had forward cursors")
         finally:
-            db.rollback()  # only closes the read transaction; never undo external work
+            if owned:
+                db.rollback()  # standalone inspector owns only its own transaction
     if not report["issues"]:
         report["quality_state"] = ("PASS_READ_ONLY_PRECHECK" if phase == "pre"
                                    else "PASS_READ_ONLY_POSTCHECK")

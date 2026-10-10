@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from contextlib import closing, nullcontext
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -26,7 +27,7 @@ def _utc(text):
         raise ValueError("timestamp lacks timezone")
     return instant.astimezone(dt.timezone.utc)
 
-def inspect(db_path, *, now=None):
+def inspect(db_path, *, now=None, connection=None):
     p=Path(db_path)
     if not p.is_file():
         raise FileNotFoundError("Existing SQLite required; never create a new DB")
@@ -46,8 +47,15 @@ def inspect(db_path, *, now=None):
             "etf_calendar":"Not checked here; requires independent provider ingest",
         },
     }
-    with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=30) as db:
-        db.execute("PRAGMA query_only=ON")
+    handle = (closing(sqlite3.connect(p.resolve().as_uri()+"?mode=ro",
+                                      uri=True,timeout=30))
+              if connection is None else nullcontext(connection))
+    with handle as db:
+        if connection is None:
+            db.execute("PRAGMA query_only=ON")
+        elif (not db.in_transaction or
+              db.execute("PRAGMA query_only").fetchone()[0] != 1):
+            raise ValueError("Shared audit requires active query-only transaction")
         tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not {"market_derivatives","market_raw_payloads","market_source_runs"}<=tables:
             report["issues"].append("Required market tables missing")
