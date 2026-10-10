@@ -14,6 +14,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from contextlib import closing, nullcontext
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -34,7 +35,7 @@ def _dt(value):
         raise ValueError("Missing UTC offset")
     return t.astimezone(dt.timezone.utc)
 
-def audit(db_path):
+def audit(db_path, *, connection=None):
     p=Path(db_path)
     if not p.is_file():
         raise FileNotFoundError("Existing SQLite required")
@@ -45,8 +46,15 @@ def audit(db_path):
             "backward_requests":0,"forward_requests":0,
             "source_records_verified":0,"observations_verified":0,
             "by_stream":{},"issues":[]}
-    with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=30) as db:
-        db.execute("PRAGMA query_only=ON")
+    handle = (closing(sqlite3.connect(p.resolve().as_uri()+"?mode=ro",
+                                      uri=True,timeout=30))
+              if connection is None else nullcontext(connection))
+    with handle as db:
+        if connection is None:
+            db.execute("PRAGMA query_only=ON")
+        elif (not db.in_transaction or
+              db.execute("PRAGMA query_only").fetchone()[0] != 1):
+            raise ValueError("Shared audit requires active query-only transaction")
         db.execute("PRAGMA foreign_keys=ON")
         tables={x[0] for x in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
