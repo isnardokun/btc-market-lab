@@ -8,13 +8,16 @@ no retries, no API credentials, no response-body printing or file writes.
 import argparse
 import datetime as dt
 import json
+from pathlib import Path
 import ssl
+import sys
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import (
     HTTPRedirectHandler, HTTPSHandler, Request, build_opener, ProxyHandler
 )
 
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ingestion.market_network_errors import error_category
 
 HOST = "fapi.binance.com"
