@@ -59,6 +59,7 @@ class MarketHistoryBatchTests(unittest.TestCase):
         self.assertEqual(result["pages_successful"],3)
         self.assertEqual(result["rows_added"],3)
         self.assertEqual(result["stopped_because"],"page_budget_exhausted")
+        self.assertEqual(result["batch_outcome"],"BUDGET_COMPLETED")
         self.assertEqual(len(pause),2)
         self.assertTrue(result["post_audit_ok"])
         with sqlite3.connect(self.dbpath) as db:
@@ -75,6 +76,7 @@ class MarketHistoryBatchTests(unittest.TestCase):
                                  pause_seconds=1,fetch=fetch,sleep=lambda x:None)
         self.assertEqual(len(calls),1)
         self.assertEqual(result["stopped_because"],"empty")
+        self.assertEqual(result["batch_outcome"],"SOURCE_RETURNED_EMPTY")
         self.assertEqual(result["rows_added"],0)
         self.assertEqual(result["historical_completeness"],"NOT_VERIFIED")
 
@@ -90,6 +92,8 @@ class MarketHistoryBatchTests(unittest.TestCase):
                                  pause_seconds=1,fetch=fetch,sleep=lambda x:None)
         self.assertEqual(len(calls),1)
         self.assertEqual(result["stopped_because"],"failed")
+        self.assertEqual(result["batch_outcome"],"STOPPED_WITHOUT_SUCCESS")
+        self.assertTrue(result["post_audit_ok"],"preserved data quality does not imply successful batch")
         self.assertEqual(result["pages_successful"],0)
         self.assertEqual(result["page_evidence"][0]["error_code"],"HTTPError_429")
 

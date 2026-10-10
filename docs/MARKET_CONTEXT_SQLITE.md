@@ -406,3 +406,46 @@ retrospectivamente a partir de BLOB sin contexto.
 En ningún caso `--apply` de este programa autoriza activar cron
 intradía, Telegram, FRED/BLS, Farside ni la publicación de información
 no certificada.
+
+
+## Fallos URLError: diagnóstico local previo a nuevas ingestas
+
+Un `URLError` en `market_history_batch.py` registra un intento HTTP
+fallido sin datos persistidos. Si el cursor y los conteos permanecen
+invariantes y los dos auditores regresan PASS, **solo se ha confirmado
+la preservación del histórico anterior**: el lote terminó en fallo.
+`post_audit_ok=true` no se debe presentar como ejecución exitosa.
+La salida nueva presenta por separado `batch_outcome`.
+
+La ejecución de un error `URLError` antiguo se conservó únicamente
+como clase general, sin su causa interna. **No se puede reconstruir
+retrospectivamente** un diagnóstico DNS/TLS/timeout a partir del valor
+SQLite. No suponer bloqueo regional, limite API, proxy ni error 403.
+
+Para obtener evidencia **sin repetir el acceso al endpoint ni escribir
+en SQLite**, ejecutar:
+
+```bash
+python3 scripts/market_network_preflight.py
+```
+
+La comprobación hace exclusivamente consultas **DNS** a
+`fapi.binance.com` y `api.bybit.com`, y consulta la presencia de
+configuración local de proxy y certificados CA. No abre conexiones HTTP
+o TLS, no captura IP, credenciales, URLs de proxy, rutas locales ni
+cuerpos y no consulta API de mercado. Un `dns=RESOLVED` no demuestra
+que HTTPS, el endpoint ni la API funcionen: el handshake y el estado HTTP
+quedan explícitamente como `NOT_TESTED`.
+
+Los **nuevos** fallos se registrarán como categorías seguras:
+`URLError_DNS`, `URLError_TLS`, `URLError_TIMEOUT`,
+`URLError_REFUSED`, `URLError_RESET` o
+`URLError_UNCLASSIFIED`; para un HTTP conocido, `HTTPError_<status>`.
+Nunca se registra el texto de la excepción, direcciones de proxy,
+consultas con claves ni datos privados.
+
+Si falla DNS para ambos hosts, revisar la configuración del resolver,
+rutas y proxy en el equipo, sin evadir controles. Si solo falla un
+host, entregar esa diferencia para evaluación. Si ambos resuelven,
+todavía faltará una validación HTTPS expresa y limitada antes de
+reanudar el lote; DNS correcto no autoriza nuevos backfills.
