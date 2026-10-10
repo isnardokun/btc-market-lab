@@ -43,6 +43,7 @@ TESTS = [
     ("Unit: R10-C SQLite Read-only Preflight", "python3 -m unittest -v tests.unit.test_market_v3_preflight"),
     ("Unit: Forward OI Atomic Pilot v3", "python3 -m unittest -v tests.unit.test_market_history_forward"),
     ("Unit: R10-E Offline OI Coverage Planner", "python3 -m unittest -v tests.unit.test_market_r10e_plan_only"),
+    ("Unit: R10-E.1 Offline OI Dispatch", "python3 -m unittest -v tests.unit.test_market_r10e_dispatch_offline"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
