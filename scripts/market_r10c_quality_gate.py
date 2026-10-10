@@ -10,6 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from contextlib import closing
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,15 +109,12 @@ def _valid_lineage(r, expected_backward):
     )
 
 
-def evaluate(db_path, *, expected_backward, auditors=None):
-    """Fail closed unless all separate read-only audits and two fingerprints agree.
+def _evaluate_once(p, *, expected_backward, audit_map, connection=None):
+    """Execute every evidence check inside one supplied read transaction.
 
-    Optional auditors mapping is for offline test injection only; CLI always
-    calls the real audit functions. Two fingerprints detect some concurrent
-    changes but DO NOT provide a globally atomic view across audit connections.
+    Without a shared connection, used only for injected offline audit tests,
+    retain the previous fingerprint-before/after drift detection.
     """
-    if type(expected_backward) is not int or expected_backward <= 0:
-        raise ValueError("positive expected-backward count is mandatory")
     report = {
         "contract": CONTRACT,
         "phase": "pre",
@@ -124,20 +122,21 @@ def evaluate(db_path, *, expected_backward, auditors=None):
         "authorization": "EVIDENCE_ONLY_NO_MIGRATION_NO_HTTP",
         "historical_completeness": "NOT_VERIFIED",
         "expected_backward": expected_backward,
+        "consistency": {
+            "mode": "SHARED_SQLITE_SNAPSHOT" if connection is not None
+                    else "INJECTED_AUDIT_FIXTURE",
+        },
         "preflight": None,
         "audits": {},
         "issues": [],
     }
-    p = Path(db_path)
-    audit_map = auditors or {
-        "RAW": market_raw_reconcile.audit,
-        "TEMPORAL": market_temporal_quality.inspect,
-        "LINEAGE": market_request_lineage_audit.audit,
-    }
-    first = market_v3_preflight.inspect(
-        p, phase="pre", expected_backward=expected_backward
-    )
-    # Refuse even to proceed if the original PRE is invalid or lacks v2.
+    def preflight():
+        args = {"phase": "pre", "expected_backward": expected_backward}
+        if connection is not None:
+            args["connection"] = connection
+        return market_v3_preflight.inspect(p, **args)
+
+    first = preflight()
     report["preflight"] = first
     if first.get("quality_state") != "PASS_READ_ONLY_PRECHECK":
         report["issues"].append("PRE_FINGERPRINT_BLOCKED")
@@ -153,7 +152,8 @@ def evaluate(db_path, *, expected_backward, auditors=None):
          lambda r: _valid_lineage(r, expected_backward)),
     ):
         try:
-            response = audit_map[name](p)
+            response = (audit_map[name](p, connection=connection)
+                        if connection is not None else audit_map[name](p))
             report["audits"][name] = normalize(response) if isinstance(
                 response, dict) else {"error_class": "InvalidAuditOutput"}
             if not validate(response):
@@ -163,13 +163,8 @@ def evaluate(db_path, *, expected_backward, auditors=None):
             report["audits"][name] = {"error_class": type(exc).__name__}
             report["issues"].append(name + "_AUDIT_UNAVAILABLE")
 
-    # Prevent a "green" gate when the underlying database changed during
-    # the multiple independent audit connections. The operator must also
-    # quiesce DB writers, which this tool cannot enforce.
     try:
-        second = market_v3_preflight.inspect(
-            p, phase="pre", expected_backward=expected_backward
-        )
+        second = preflight()
         if (second.get("quality_state") != "PASS_READ_ONLY_PRECHECK" or
                 second.get("snapshot") != first.get("snapshot")):
             report["issues"].append("SQLITE_CHANGED_DURING_AUDIT")
@@ -179,6 +174,51 @@ def evaluate(db_path, *, expected_backward, auditors=None):
 
     if not report["issues"]:
         report["state"] = "PASS_OFFLINE_PRE_EVIDENCE"
+    return report
+
+
+def evaluate(db_path, *, expected_backward, auditors=None):
+    """Read-only aggregate gate, real audits on ONE consistent SQLite view.
+
+    The real CLI shares a single read-only transaction across all auditors,
+    then checks PRAGMA data_version *after* ending that transaction to detect
+    external commits during the read. Auditors supplied for unit-test
+    injection deliberately retain isolated calls for negative fixtures.
+    """
+    if type(expected_backward) is not int or expected_backward <= 0:
+        raise ValueError("positive expected-backward count is mandatory")
+    p = Path(db_path)
+    if not p.is_file():
+        raise FileNotFoundError("Existing SQLite required; never create one")
+    if auditors is not None:
+        return _evaluate_once(
+            p, expected_backward=expected_backward, audit_map=auditors)
+
+    real_auditors = {
+        "RAW": market_raw_reconcile.audit,
+        "TEMPORAL": market_temporal_quality.inspect,
+        "LINEAGE": market_request_lineage_audit.audit,
+    }
+    with closing(sqlite3.connect(p.resolve().as_uri() + "?mode=ro",
+                                 uri=True, timeout=30)) as db:
+        db.execute("PRAGMA query_only=ON")
+        db.execute("PRAGMA foreign_keys=ON")
+        # A SQLite snapshot freezes on its first read. PRAGMA data_version
+        # must be sampled before BEGIN and after ROLLBACK: while pinned to a
+        # WAL snapshot, it does NOT report concurrent writer commits.
+        before_version = db.execute("PRAGMA data_version").fetchone()[0]
+        db.execute("BEGIN")
+        try:
+            report = _evaluate_once(
+                p, expected_backward=expected_backward,
+                audit_map=real_auditors, connection=db)
+        finally:
+            db.rollback()
+        after_version = db.execute("PRAGMA data_version").fetchone()[0]
+    report["consistency"]["external_commits_checked"] = True
+    if before_version != after_version:
+        report["issues"].append("EXTERNAL_SQLITE_COMMIT_DURING_AUDIT")
+        report["state"] = "BLOCKED"
     return report
 
 
