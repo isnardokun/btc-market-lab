@@ -547,3 +547,83 @@ Un ping correcto NO constituye prueba de cobertura histórica,
 permiso a reanudar los 56 pedidos suspendidos ni aprobación de ETF,
 BLS, FRED, informe o Telegram. Parar después del único GET incluso
 si el resultado es `PASS_OI_ENDPOINT_AND_BOUNDARY`.
+
+
+## Migración aditiva v2: procedencia estructurada por solicitud
+
+Tras aprobar una página histórica R1, el sistema conserva 2.935
+observaciones de derivados reportadas, diez BLOB originales y
+cuatro cursores, pero la tabla v1 `market_source_runs` identifica
+solo el proveedor: **no permite reconstruir qué parámetros
+específicos se enviaron para cada respuesta ya capturada**.
+
+La versión **v2** incorpora `market_request_lineage` (una solicitud
+histórica por `run_id`) con estos campos:
+
+| Campo | Significado |
+|---|---|
+| `request_id`, `run_id` | Llaves de solicitud y ejecución enlazadas mediante FK |
+| `provider`, `stream`, `symbol`, `interval_label` | Serie exacta solicitada |
+| `endpoint_path` | Solo ruta pública, sin query ni secretos |
+| `requested_end_ms`, `requested_limit` | Cursor temporal y tamaño real solicitados |
+| `attempted_utc`, `ended_utc`, `http_attempts` | Momento de consulta y cantidad de intentos |
+| `status`, `error_class` | Resultado seguro, sin texto ni secretos de excepción |
+| `raw_sha256` | FK a respuesta fuente íntegra archivada, en caso de éxito |
+| `returned_rows`, `persisted_rows` | Conciliación de volumen fuente y escritura |
+| `first_observed_utc`, `last_observed_utc` | Cobertura efectiva de esa respuesta |
+
+Esta tabla no altera, renombra ni copia las series existentes; tampoco
+reinterpreta las unidades `BTC`/`fraction` ni la antigua
+`quote_usd`. Los registros anteriores a la migración se conservan
+**sin asignarles parámetros retrospectivos inventados**. Solo las
+solicitudes futuras ejecutadas por el colector histórico v2 tendrán
+estos recibos individuales.
+
+### Procedimiento v2 — SOLO CON AUTORIZACIÓN Y BACKUP
+
+`python3 scripts/market_context_migrate.py` muestra PLAN sin
+red ni escritura. `--apply` comprueba SQLite, genera un **nuevo
+backup WAL-safe íntegro** y añade la tabla v2 y marca
+`market_context_migrations.version=2`; se detiene ante fallo de
+integridad o FK y conserva el backup. Cuando la versión 2 ya exista,
+la migración es idempotente y no crea copias adicionales.
+
+```bash
+python3 scripts/market_context_migrate.py
+python3 scripts/market_context_migrate.py --apply
+```
+
+La instalación v2 puede verificarse por SQL de solo lectura:
+
+```sql
+SELECT version, applied_at_utc
+FROM market_context_migrations ORDER BY version;
+
+SELECT sql FROM sqlite_master
+WHERE type='table' AND name='market_request_lineage';
+
+SELECT COUNT(*) FROM market_request_lineage;
+PRAGMA integrity_check;
+PRAGMA foreign_key_check;
+```
+
+Tras migración v2, pero **antes de cualquier descarga histórica**,
+el contador de `market_request_lineage` debe ser 0. Los
+`market_source_runs` y todos los `market_raw_payloads` antiguos
+seguirán exactamente como estaban; el contador 0 es correcto
+porque no se inventó metadato para ejecuciones previas.
+
+El colector `scripts/market_history_pilot.py` exige v2 antes
+de efectuar HTTP. Un éxito persiste **en una sola transacción** el
+BLOB, sus observaciones, el cursor y el nuevo recibo enlazado.
+Ante fallo HTTP, conserva un recibo seguro que contiene el
+`requested_end_ms`, límite, tipo de error y un intento, pero
+nunca una respuesta que no fue aceptada. Los demás módulos de
+ingesta existentes aún no implementan esta granularidad y
+requieren adaptación propia antes de declararlos completamente
+auditables a nivel de solicitud.
+
+**Prohibido** activar automáticamente históricos o publicación solo
+porque la migración v2 tuvo éxito. El próximo lote deberá autorizarse
+por separado, con evidencia nueva de continuidad, cursores,
+SHA y calidad posterior.

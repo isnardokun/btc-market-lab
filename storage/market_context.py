@@ -61,6 +61,72 @@ CREATE TABLE IF NOT EXISTS market_context_revisions(
 def now_utc():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
+REQUEST_LINEAGE_DDL = """
+CREATE TABLE IF NOT EXISTS market_request_lineage(
+ request_id TEXT PRIMARY KEY,
+ run_id TEXT NOT NULL UNIQUE REFERENCES market_source_runs(run_id),
+ provider TEXT NOT NULL CHECK(provider IN ('binance','bybit')),
+ stream TEXT NOT NULL CHECK(stream IN ('open_interest','funding_settled')),
+ symbol TEXT NOT NULL CHECK(symbol='BTCUSDT'),
+ interval_label TEXT NOT NULL,
+ endpoint_path TEXT NOT NULL,
+ requested_end_ms INTEGER,
+ requested_limit INTEGER NOT NULL CHECK(requested_limit BETWEEN 1 AND 1000),
+ attempted_utc TEXT NOT NULL,
+ ended_utc TEXT NOT NULL,
+ http_attempts INTEGER NOT NULL CHECK(http_attempts BETWEEN 0 AND 1),
+ status TEXT NOT NULL CHECK(status IN ('success','empty','failed')),
+ error_class TEXT,
+ raw_sha256 TEXT REFERENCES market_raw_payloads(sha256),
+ returned_rows INTEGER NOT NULL CHECK(returned_rows BETWEEN 0 AND 1000),
+ persisted_rows INTEGER NOT NULL CHECK(persisted_rows BETWEEN 0 AND 1000),
+ first_observed_utc TEXT,
+ last_observed_utc TEXT,
+ CHECK(status='failed' OR (http_attempts=1 AND raw_sha256 IS NOT NULL)),
+ CHECK(status!='failed' OR (raw_sha256 IS NULL AND persisted_rows=0))
+);
+"""
+
+def request_lineage_installed(db):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                      "AND name='market_request_lineage'").fetchone() is not None
+
+def install_request_lineage(db):
+    """Additive v2 installation. Caller controls the transaction and backup."""
+    require(db)
+    db.execute(REQUEST_LINEAGE_DDL)
+    db.execute("INSERT OR IGNORE INTO market_context_migrations(version,applied_at_utc)"
+               " VALUES(2,?)",(now_utc(),))
+
+def write_request_lineage(db,*,request_id,run_id,provider,metric,
+                          interval_label,endpoint_path,requested_end_ms,
+                          requested_limit,attempted_utc,ended_utc,http_attempts,
+                          status,error_class=None,raw_sha256=None,returned_rows=0,
+                          persisted_rows=0,first_observed_utc=None,last_observed_utc=None):
+    require(db)
+    if not request_lineage_installed(db):
+        raise RuntimeError("Market request lineage v2 not migrated")
+    if not endpoint_path.startswith("/") or "?" in endpoint_path:
+        raise ValueError("Only sanitized provider endpoint paths are allowed")
+    if provider not in ("binance","bybit") or metric not in ("open_interest","funding_settled"):
+        raise ValueError("Bad provider/stream")
+    if status not in ("success","empty","failed") or http_attempts not in (0,1):
+        raise ValueError("Bad request receipt")
+    if status=="failed" and (raw_sha256 is not None or persisted_rows):
+        raise ValueError("Failed request cannot retain uncommitted data")
+    db.execute(
+      "INSERT INTO market_request_lineage"
+      "(request_id,run_id,provider,stream,symbol,interval_label,endpoint_path,"
+      "requested_end_ms,requested_limit,attempted_utc,ended_utc,http_attempts,"
+      "status,error_class,raw_sha256,returned_rows,persisted_rows,"
+      "first_observed_utc,last_observed_utc)"
+      " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      (request_id,run_id,provider,metric,"BTCUSDT",interval_label,endpoint_path,
+       requested_end_ms,requested_limit,attempted_utc,ended_utc,http_attempts,
+       status,error_class,raw_sha256,returned_rows,persisted_rows,
+       first_observed_utc,last_observed_utc))
+
+
 def installed(db):
     return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='market_context_migrations'").fetchone() is not None
 
@@ -69,6 +135,7 @@ def install(db):
         raise TypeError("SQLite connection required")
     db.executescript(DDL)
     db.execute("INSERT OR IGNORE INTO market_context_migrations VALUES(1,?)",(now_utc(),))
+    install_request_lineage(db)
 
 def require(db):
     if not installed(db):
