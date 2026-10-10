@@ -91,8 +91,12 @@ class HermesSkillTests(unittest.TestCase):
                 (root / name).write_bytes(payload)
                 latest[name] = payload
             script = root / "scripts" / "local_artifact_retention.py"
+            # Do not inherit BTC_RESEARCH_HOME from the release smoke worktree.
+            # This subprocess must audit the synthetic Git fixture, never the host.
+            fixture_env = os.environ.copy()
+            fixture_env["BTC_RESEARCH_HOME"] = str(root)
             result = subprocess.run(
-                [sys.executable, str(script), "backup"], cwd=root,
+                [sys.executable, str(script), "backup"], cwd=root, env=fixture_env,
                 capture_output=True, text=True, check=True,
             )
             folder = Path(result.stdout.strip())
@@ -104,19 +108,19 @@ class HermesSkillTests(unittest.TestCase):
             git("commit", "-qm", "stop tracking generated files")
             restored = subprocess.run(
                 [sys.executable, str(script), "restore", "--folder", str(folder)],
-                cwd=root, capture_output=True, text=True, check=True,
+                cwd=root, env=fixture_env, capture_output=True, text=True, check=True,
             )
             self.assertIn("4", restored.stdout)
             for name, expected in latest.items():
                 self.assertEqual((root / name).read_bytes(), expected)
             self.assertEqual(git("ls-files", "--", *paths).stdout.strip(), "")
             self.assertEqual(subprocess.run(
-                [sys.executable, str(script), "backup"], cwd=root,
+                [sys.executable, str(script), "backup"], cwd=root, env=fixture_env,
                 capture_output=True, text=True, check=True,
             ).stdout.strip(), "-")
             bad = subprocess.run(
                 [sys.executable, str(script), "restore", "--folder", scratch],
-                cwd=root, capture_output=True, text=True,
+                cwd=root, env=fixture_env, capture_output=True, text=True,
             )
             self.assertNotEqual(bad.returncode, 0)
 
