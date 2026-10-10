@@ -108,9 +108,11 @@ class TestR10EOfflineDispatch(unittest.TestCase):
             self.assertFalse(path.with_name(path.name + "-wal").exists())
 
     def test_cli_explicit_apply_rejected(self):
-        p = subprocess.run(
-            [sys.executable, "scripts/market_r10e_dispatch_offline.py", "--apply"],
-            cwd=ROOT, capture_output=True, text=True, timeout=10)
+        with tempfile.TemporaryDirectory() as t:
+            p = subprocess.run(
+                [sys.executable, "scripts/market_r10e_dispatch_offline.py",
+                 "--db", str(Path(t) / "nonexistent_fixture.db"), "--apply"],
+                cwd=ROOT, capture_output=True, text=True, timeout=10)
         self.assertEqual(p.returncode, 2)
         self.assertIn("unrecognized arguments", p.stderr)
 
