@@ -45,6 +45,65 @@ REQUIRED = set(LEGACY_PROJECTIONS)
 V3_COLUMNS = {"direction", "requested_start_ms"}
 
 
+def _v3_layout_issues(db):
+    """Check *constraints*, not just names, before accepting a v3 POST."""
+    issues = []
+    columns = {r[1]: r for r in db.execute(
+        "PRAGMA table_info(market_request_lineage)")}
+    direction = columns.get("direction")
+    start_ms = columns.get("requested_start_ms")
+    if (direction is None or direction[2].upper() != "TEXT" or
+            direction[3] != 1):
+        issues.append("v3 lineage direction must be NOT NULL TEXT")
+    if start_ms is None or start_ms[2].upper() != "INTEGER":
+        issues.append("v3 lineage requested_start_ms must be INTEGER")
+
+    receipt_sql = db.execute(
+        "SELECT sql FROM sqlite_master "
+        "WHERE type='table' AND name='market_request_lineage'"
+    ).fetchone()
+    normalized = "".join(((receipt_sql or [""])[0] or "").lower().split())
+    if "check(directionin('backward','forward'))" not in normalized:
+        issues.append("v3 lineage direction CHECK missing")
+
+    acq = {r[1]: r for r in db.execute(
+        "PRAGMA table_info(market_request_acquisitions)")}
+    required = {"acquired_id", "request_id", "provider", "endpoint_path",
+                "raw_sha256", "acquired_utc"}
+    if required - acq.keys():
+        issues.append("v3 acquisitions required columns missing")
+        return issues
+    if acq["acquired_id"][5] != 1:
+        issues.append("v3 acquisitions acquired_id must be PRIMARY KEY")
+    for key in required:
+        if acq[key][2].upper() != "TEXT":
+            issues.append("v3 acquisitions type mismatch: " + key)
+        if key != "acquired_id" and acq[key][3] != 1:
+            issues.append("v3 acquisitions NOT NULL missing: " + key)
+
+    foreign = {(x[3], x[2], x[4]) for x in db.execute(
+        "PRAGMA foreign_key_list(market_request_acquisitions)")}
+    if ("request_id", "market_request_lineage", "request_id") not in foreign:
+        issues.append("v3 acquisitions lineage FOREIGN KEY missing")
+    if ("raw_sha256", "market_raw_payloads", "sha256") not in foreign:
+        issues.append("v3 acquisitions raw FOREIGN KEY missing")
+
+    # PRAGMA index_info on SQLite-managed index names: quote safely.
+    unique_request = False
+    for idx in db.execute("PRAGMA index_list(market_request_acquisitions)"):
+        if not idx[2]:
+            continue
+        quoted = '"' + idx[1].replace('"', '""') + '"'
+        indexed = [r[2] for r in db.execute(
+            "PRAGMA index_info(" + quoted + ")")]
+        if indexed == ["request_id"]:
+            unique_request = True
+            break
+    if not unique_request:
+        issues.append("v3 acquisitions UNIQUE(request_id) missing")
+    return issues
+
+
 def _record_value(value):
     if isinstance(value, bytes):
         return ["blob", len(value), hashlib.sha256(value).hexdigest()]
@@ -145,6 +204,8 @@ def inspect(path, *, phase="pre", expected_backward=None, baseline=None):
                 report["issues"].append("PRE expects existing v2, NOT migrated v3")
             if phase == "post" and not has_v3:
                 report["issues"].append("POST requires fully installed v3")
+            if phase == "post" and has_v3:
+                report["issues"].extend(_v3_layout_issues(db))
 
             for table, (projection, condition) in LEGACY_PROJECTIONS.items():
                 report["snapshot"][table] = _fingerprint(db, table, projection, condition)
