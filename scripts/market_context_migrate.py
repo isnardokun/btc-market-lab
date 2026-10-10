@@ -66,7 +66,10 @@ def _upgrade_v2_to_v3(db_path):
     with sqlite3.connect(db_path,timeout=30) as db:
         db.execute("PRAGMA foreign_keys=ON")
         existing_cols = {r[1] for r in db.execute("PRAGMA table_info(market_request_lineage)")}
+        # Python sqlite3 legacy mode does not implicitly BEGIN for DDL.
+        # An explicit write transaction makes ALTER TABLE and marker atomic.
         with db:
+            db.execute("BEGIN IMMEDIATE")
             if "direction" not in existing_cols:
                 db.execute(
                     "ALTER TABLE market_request_lineage "
