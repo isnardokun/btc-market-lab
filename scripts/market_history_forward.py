@@ -162,7 +162,6 @@ CONFIG = {
 
 
 
-    ("binance",  "funding_settled"): ("/fapi/v1/fundingRate",             1000, "settlement"),
 
 
 
@@ -170,7 +169,6 @@ CONFIG = {
 
 
 
-    ("bybit",    "funding_settled"):("/v5/market/funding/history",         200, "settlement"),
 
 
 
@@ -334,7 +332,7 @@ def _parse_rows(provider: str, metric: str, body: bytes, interval_ms: int):
 
 
 
-            continue
+            raise ValueError("Malformed provider row: expected JSON object")
 
 
 
