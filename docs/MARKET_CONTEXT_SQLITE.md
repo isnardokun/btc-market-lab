@@ -627,3 +627,48 @@ auditables a nivel de solicitud.
 porque la migración v2 tuvo éxito. El próximo lote deberá autorizarse
 por separado, con evidencia nueva de continuidad, cursores,
 SHA y calidad posterior.
+
+
+## Auditoría independiente de request-level lineage (v2)
+
+Después de migrar el esquema y **antes de autorizar** un lote histórico
+superior a una página, ejecutar este validador **sin peticiones HTTP ni
+escrituras SQLite**:
+
+```bash
+python3 scripts/market_request_lineage_audit.py
+printf 'lineage_exit=%s\n' "$?"
+```
+
+Este auditor contrasta **cada** recibo `market_request_lineage` con:
+- `market_source_runs`: mismo run_id, proveedor, estado,
+  intentos, recuento persistido y categoría de fallo.
+- `market_raw_payloads`: SHA256 completo recalculado y
+  contrato JSON nativo decodificado por endpoint, **sin imprimir BLOB**.
+- `market_derivatives`: todas las filas de origen persistidas con
+  el SHA exacto, y rango temporal que coincide con el recibo.
+- `requested_end_ms`, `requested_limit`, ruta y temporalidad:
+  para Open Interest 5m, exige último timestamp = endTime+1−300000 ms,
+  continuidad dentro de cada página y contacto con el histórico
+  existente en su frontera nueva.
+- `market_source_cursors`: checkpoint de la serie igual al
+  timestamp más antiguo observado menos 1 ms.
+
+`NO_REQUEST_RECEIPTS_YET` (cero recibos y exit 0) es el estado
+**esperado inmediatamente después de la migración v2**; NO se
+interpreta como request-level auditing ya aprobado. Luego de
+una primera ingesta, `PASS_REQUEST_LINEAGE` y exit 0 significan
+que los nuevos recibos, BLOB, fechas y filas concilian;
+`REVIEW_REQUIRED`/exit 1 detiene nuevas descargas.
+
+El validador **no reconstruye** endTime, límites o run IDs
+de las páginas anteriores a la migración. Esas páginas mantienen
+el control `PASS_SQLITE_TO_RAW` y `SNAPSHOT_INTERNAL_QA_OK`,
+pero no deben presentar un recibo v2 retroactivo inventado.
+
+La verificación de lineage debe acompañarse de las auditorías
+`market_raw_reconcile.py`, `market_temporal_quality.py`,
+integridad SQLite/FK y conteos PRE/POST de las tablas legacy.
+`PASS_REQUEST_LINEAGE` tampoco implica histórico completo:
+`historical_completeness` sigue `NOT_VERIFIED` hasta analizar
+explícitamente los límites de cobertura de cada proveedor.
