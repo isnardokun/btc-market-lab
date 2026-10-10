@@ -16,7 +16,8 @@ import uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from ingestion.market_context_sources import (
-    fetch_binance,fetch_bybit,fetch_farside,fetch_bls,fetch_fred)
+    download,fetch_binance,fetch_bybit,fetch_farside,fetch_bls,fetch_fred)
+from urllib.error import HTTPError
 from storage.market_context import installed,now_utc
 
 SOURCES=("binance","bybit","farside","bls","fred")
@@ -27,16 +28,24 @@ def run(db,source,*,history=False,max_pages=2,fred_api_key=None):
     db.execute("INSERT INTO market_source_runs(run_id,provider,started_utc,status)"
                " VALUES(?,?,?,'running')",(uid,source,now_utc()))
     db.commit()
+    attempts = [0]
+    def observed_fetch(url,params=None):
+        # Count outbound attempts even if HTTP fails before delivering a body.
+        # No URL, API keys or response bodies are logged here.
+        attempts[0] += 1
+        return download(url,params)
     calls={
-      "binance":lambda:fetch_binance(db,history=history,max_pages=max_pages),
-      "bybit":lambda:fetch_bybit(db,max_pages=max_pages,history=history),
-      "farside":lambda:fetch_farside(db),
-      "bls":lambda:fetch_bls(db),
-      "fred":lambda:fetch_fred(db,api_key=fred_api_key),
+      "binance":lambda:fetch_binance(db,history=history,max_pages=max_pages,fetch=observed_fetch),
+      "bybit":lambda:fetch_bybit(db,max_pages=max_pages,history=history,fetch=observed_fetch),
+      "farside":lambda:fetch_farside(db,fetch=observed_fetch),
+      "bls":lambda:fetch_bls(db,fetch=observed_fetch),
+      "fred":lambda:fetch_fred(db,api_key=fred_api_key,fetch=observed_fetch),
     }
     try:
         with db:
             count,points=calls[source]()
+            if count != attempts[0]:
+                raise RuntimeError("Provider request accounting mismatch")
             status="success" if count else "empty"
             db.execute("UPDATE market_source_runs SET ended_utc=?,status=?,requests=?,"
                        "points=? WHERE run_id=?",
@@ -44,11 +53,15 @@ def run(db,source,*,history=False,max_pages=2,fred_api_key=None):
         return status,count,points
     except Exception as exc:
         db.rollback()
-        # Error categories only: never log HTML, API tokens or raw responses.
+        # Persist only safe HTTP status / exception class; do not expose
+        # response bodies, request URLs (FRED token), host secrets or traces.
+        safe_error = ("HTTPError_" + str(exc.code) if isinstance(exc, HTTPError)
+                      else type(exc).__name__)
         with db:
             db.execute("UPDATE market_source_runs SET ended_utc=?,status='failed',"
-                       "error_code=? WHERE run_id=?",(now_utc(),type(exc).__name__,uid))
-        return "failed",0,0
+                       "requests=?,error_code=? WHERE run_id=?",
+                       (now_utc(),attempts[0],safe_error,uid))
+        return "failed",attempts[0],0
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
