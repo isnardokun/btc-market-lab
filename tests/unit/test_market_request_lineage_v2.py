@@ -1,5 +1,6 @@
 """Test v1 -> v2 migration, exact request lineage and fail-closed history without network."""
 import contextlib
+import hashlib
 import datetime as dt
 from io import StringIO
 import json
@@ -103,7 +104,7 @@ class LineageMigrationTests(unittest.TestCase):
             self.assertEqual(actual[0:5],("binance","open_interest","BTCUSDT","5m",
                               "/futures/data/openInterestHist"))
             self.assertEqual(actual[5:9],(int(BASE.timestamp()*1000)-1,500,1,"success"))
-            self.assertEqual(actual[9],out["source_sha256"] if len(out["source_sha256"])==64 else actual[9])
+            self.assertEqual(actual[9],hashlib.sha256(body).hexdigest())
             self.assertEqual(actual[10:12],(1,1))
             self.assertEqual(actual[12],prev.isoformat(timespec="seconds"))
             self.assertEqual(actual[13],prev.isoformat(timespec="seconds"))
