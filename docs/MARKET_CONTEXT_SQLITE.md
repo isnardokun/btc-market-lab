@@ -164,3 +164,25 @@ o licencia de redistribución.
 
 Fecha del diseño: 2026-10-09. Revisar contratos y cuotas cuando los
 proveedores publiquen nuevas versiones.
+
+
+## Control de envío a Telegram tras incidentes #11 y #12
+
+`scripts/send_report.py` bloquea cualquier envío real —incluyendo
+invocaciones manuales y `--force`— salvo que la variable de entorno
+`REPORT_SEND_APPROVED_SHA256` coincida exactamente con el SHA-256 del
+HTML portátil ya aprobado. La coincidencia es por **archivo específico**,
+no un permiso permanente para otro reporte. `--dry-run` valida
+únicamente el archivo sin contactar Telegram.
+
+Durante diagnósticos no establecer `REPORT_SEND_APPROVED_SHA256`,
+mantener `SEND_TELEGRAM_AUTO=0` y no enviar documentos manualmente.
+El bot ya no puede transmitir solo porque el entorno tenga un token y
+un identificador de chat. Cuando el usuario autorice una publicación
+concreta, el operador debe documentar esa autorización, confirmar el
+SHA y configurar la variable **solo para ese envío**; limpiar el
+permiso después.
+
+**La actualización de código del PR no supone consentimiento para
+publicar reportes por Telegram.** No cambiar variables, cron ni
+recibos de envíos previos para aparentar cumplimiento.

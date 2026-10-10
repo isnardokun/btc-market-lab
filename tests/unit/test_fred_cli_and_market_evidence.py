@@ -30,6 +30,23 @@ class EvidenceTests(unittest.TestCase):
             collect(absent)
         self.assertFalse(absent.exists())
 
+    def test_missing_market_tables_returns_incomplete_status_not_exception(self):
+        bare=Path(self.temp.name)/"legacy_only.db"
+        with sqlite3.connect(bare) as conn:
+            conn.execute("CREATE TABLE macro_fred(series_id TEXT,date TEXT,value REAL)")
+            conn.execute("INSERT INTO macro_fred VALUES('CPIAUCSL','2026-08-01',321.2)")
+        state=collect(bare,full_check=True)
+        self.assertEqual(state["operational_state"],"INCOMPLETE_OR_FAILED")
+        self.assertFalse(state["sqlite"]["market_schema_installed"])
+        self.assertEqual(len(state["sqlite"]["market_tables_missing"]),8)
+        self.assertEqual(state["sqlite"]["foreign_key_violations"],0)
+        self.assertEqual(state["provider_status"]["binance"]["status"],"NOT_INSTALLED")
+        with contextlib.redirect_stdout(io.StringIO()) as stream:
+            code=main(["--db",str(bare),"--strict","--full-check"])
+        self.assertEqual(code,1)
+        self.assertIn('"operational_state": "INCOMPLETE_OR_FAILED"',stream.getvalue())
+        self.assertNotIn("KeyError",stream.getvalue())
+
     def test_migration_without_data_does_not_pass(self):
         state=collect(self.db)
         self.assertEqual(state["sqlite"]["quick_check"],"ok")

@@ -2,6 +2,7 @@
 """Offline HTML and Hermes sendDocument regression tests (no network, no DB)."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -76,6 +77,50 @@ class PortableReportTests(unittest.TestCase):
         self.assertIn(b"Content-Type: text/html", body)
         self.assertIn(b"chat_id", body)
         self.assertEqual(meta["report_date"], "2026-10-08")
+
+    def test_telegram_direct_cli_blocked_without_per_report_authorization(self):
+        export(self.report, self.gate, self.output)
+        with patch.object(send_report, "PORTABLE_DIR", self.output.parent), \
+             patch.object(send_report, "DELIVERY_DIR", self.root / "deliveries"), \
+             patch.dict(os.environ, {
+                 "TELEGRAM_BOT_TOKEN": "fixture_token",
+                 "TELEGRAM_CHAT_ID": "fixture_chat",
+                 "REPORT_SEND_APPROVED_SHA256": "",
+             }), patch.object(send_report, "send_document") as transport:
+            for args in (
+                ["--file", str(self.output)],
+                ["--file", str(self.output), "--force"],
+            ):
+                with self.subTest(args=args):
+                    with self.assertRaises(SystemExit) as result:
+                        send_report.main(args)
+                    self.assertEqual(result.exception.code, 2)
+            transport.assert_not_called()
+        self.assertFalse((self.root / "deliveries").exists())
+
+    def test_telegram_approved_exact_digest_only_uses_mock_transport(self):
+        export(self.report, self.gate, self.output)
+        expected = hashlib.sha256(self.output.read_bytes()).hexdigest()
+        delivery_dir = self.root / "deliveries"
+        with patch.object(send_report, "PORTABLE_DIR", self.output.parent), \
+             patch.object(send_report, "DELIVERY_DIR", delivery_dir), \
+             patch.dict(os.environ, {
+                 "TELEGRAM_BOT_TOKEN": "fixture_token",
+                 "TELEGRAM_CHAT_ID": "fixture_chat",
+                 "REPORT_SEND_APPROVED_SHA256": "0" * 64,
+             }), patch.object(send_report, "send_document", return_value=246) as transport:
+            with self.assertRaises(SystemExit) as result:
+                send_report.main(["--file", str(self.output)])
+            self.assertEqual(result.exception.code, 2)
+            transport.assert_not_called()
+            with patch.dict(os.environ, {"REPORT_SEND_APPROVED_SHA256": expected}):
+                send_report.main(["--file", str(self.output)])
+            transport.assert_called_once()
+        receipts = list(delivery_dir.glob("*.json"))
+        self.assertEqual(len(receipts), 1)
+        receipt = json.loads(receipts[0].read_text())
+        self.assertEqual(receipt["portable_sha256"], expected)
+        self.assertEqual(receipt["telegram_message_id"], 246)
 
     def test_edited_portable_file_cannot_be_sent(self):
         export(self.report, self.gate, self.output)

@@ -92,12 +92,12 @@ def write_receipt(destination, payload):
             os.unlink(tmp)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Enviar el último reporte HTML portátil a Telegram")
     parser.add_argument("--file", type=Path, help="Archivo de reports/portable/ (por defecto el más reciente)")
     parser.add_argument("--dry-run", action="store_true", help="Validar sin enviar")
     parser.add_argument("--force", action="store_true", help="Reenviar incluso si existe recibo")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.file:
         path = args.file
@@ -115,6 +115,15 @@ def main():
     if args.dry_run:
         print(f"DRY RUN OK: {path.name}, {len(content)} bytes, SHA256 {sha256_bytes(content)}")
         return
+
+    # No sending by default, even if an agent invokes this script directly.
+    # The operator must authorize THIS exact file digest for each delivery.
+    # SEND_TELEGRAM_AUTO=0 only controls daily.sh; it never authorizes send_report.
+    digest = sha256_bytes(content)
+    approved = os.getenv("REPORT_SEND_APPROVED_SHA256", "").strip().lower()
+    if approved != digest:
+        parser.exit(2, "ENVIO BLOQUEADO: requiere autorizacion explicita "
+                    "REPORT_SEND_APPROVED_SHA256 para este HTML validado\\n")
 
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()

@@ -40,6 +40,8 @@ def collect(db_path, *, full_check=False, now=None):
         "data_types": ["ETF USD millions", "derivatives raw BTC/fraction",
                        "BLS/FRED calendar", "raw bytes and revisions"],
         "provider_status": {}, "missing_or_incomplete": [],
+        "operational_state": "INCOMPLETE_OR_FAILED",
+        "historical_completeness_claim": "NOT ASSESSED: no claim of complete histories without provider-window audit",
     }
     with sqlite3.connect(source.resolve().as_uri()+"?mode=ro",uri=True,timeout=20) as db:
         db.execute("PRAGMA query_only=ON")
@@ -61,6 +63,13 @@ def collect(db_path, *, full_check=False, now=None):
         report["sqlite"]["market_tables_missing"]=absent
         if absent:
             report["missing_or_incomplete"].append("missing market_* migration/tables")
+            report["sqlite"]["foreign_key_violations"] = len(
+                db.execute("PRAGMA foreign_key_check").fetchall()
+            )
+            report["provider_status"] = {
+                provider: {"status": "NOT_INSTALLED", "runs": 0, "last": None}
+                for provider in SOURCES
+            }
             return report
         report["sqlite"]["foreign_key_violations"]=len(db.execute("PRAGMA foreign_key_check").fetchall())
         migration=_rows(db,"SELECT version,applied_at_utc FROM market_context_migrations ORDER BY version")
