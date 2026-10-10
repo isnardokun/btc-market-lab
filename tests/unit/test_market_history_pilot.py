@@ -117,6 +117,23 @@ class OnePageHistoryTests(unittest.TestCase):
         self.assertLess(seen[1],seen[0])
         self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0],3)
 
+    def test_direct_cli_plan_imports_from_unrelated_working_directory(self):
+        # Exercise the actual script entry point, not the unittest import path.
+        # An early ingestion import before sys.path setup previously failed here.
+        import os
+        import subprocess
+        env=dict(os.environ)
+        env.pop("PYTHONPATH",None)
+        result=subprocess.run(
+            [sys.executable,str(Path(__file__).resolve().parents[2] /
+               "scripts" / "market_history_pilot.py"),
+             "--provider","binance","--metric","open_interest"],
+            cwd=self.dir.name if hasattr(self,"dir") else self.tmp.name,
+            env=env,capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn("PLAN:",result.stdout)
+        self.assertNotIn("ModuleNotFoundError",result.stderr)
+
     def test_plan_mode_has_zero_sqlite_or_network_effects(self):
         absent=Path(self.tmp.name)/"no-such.db"
         self.assertEqual(history.main(["--provider","bybit","--metric",
