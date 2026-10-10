@@ -196,10 +196,16 @@ def audit(db_path):
                     raw_provider,raw_endpoint,body=raw
                     if hashlib.sha256(body).hexdigest()!=sha:
                         problems.append("BLOB SHA256 mismatch")
-                    if not raw_endpoint.endswith(rec["endpoint_path"]):
-                        problems.append("raw provider/endpoint mismatch")
+                    # market_raw_payloads is content-addressed by body only.
+                    # Its provider/endpoint describe the FIRST acquisition;
+                    # newer v3 acquisitions attribute identical bodies to
+                    # their actual request/provider/endpoint.
+                    if direction != "forward" and (
+                            raw_provider != provider or
+                            not raw_endpoint.endswith(rec["endpoint_path"])):
+                        problems.append("legacy raw provider/endpoint mismatch")
                     try:
-                        source=expected_rows(provider,raw_endpoint,body)
+                        source=expected_rows(provider,rec["endpoint_path"],body)
                     except (ValueError,TypeError,KeyError,OverflowError,IndexError) as exc:
                         problems.append("cannot parse source BLOB: "+type(exc).__name__)
 
