@@ -39,6 +39,7 @@ def audit(db_path):
     if not p.is_file():
         raise FileNotFoundError("Existing SQLite required")
     report={"quality_state":"REVIEW_REQUIRED",
+            "historical_completeness":"NOT_VERIFIED",
             "requests_total":0,"requests_verified":0,
             "success":0,"empty":0,"failed":0,
             "backward_requests":0,"forward_requests":0,
@@ -262,7 +263,7 @@ def audit(db_path):
                             end_ms = rec.get("requested_end_ms")
                             if end_ms is not None:
                                 if newest_ms != end_ms + 1 - 300_000:
-                                    problems.append(f"backward newest {newest_ms} != end_ms+1-300000 ({end_ms+1-300_000})")
+                                    problems.append(f"backward page boundary: newest {newest_ms} != end_ms+1-300000 ({end_ms+1-300_000})")
                             stamps=[int(_dt(row[0]).timestamp()*1000) for row in stored]
                             if any(b-a!=300_000 for a,b in zip(stamps,stamps[1:])):
                                 problems.append("backward internal 5m gap")
