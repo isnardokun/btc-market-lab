@@ -56,8 +56,21 @@ class SharedConnectionIdentityTests(unittest.TestCase):
             db.execute("BEGIN")
             for invoke in self._auditors(db):
                 with self.subTest(auditor=repr(invoke)):
-                    with self.assertRaisesRegex(ValueError, "one SQLite main"):
+                    with self.assertRaisesRegex(ValueError, "attached databases"):
                         invoke()
+            db.rollback()
+
+    def test_internal_sqlite_temp_schema_after_integrity_check_is_allowed(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA query_only=ON")
+            db.execute("BEGIN")
+            self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+            listed = db.execute("PRAGMA database_list").fetchall()
+            self.assertIn("temp", [row[1] for row in listed],
+                          "SQLite integrity_check opens an internal temp schema")
+            verify_read_snapshot(db, self.path)
+            self.assertEqual(raw.audit(self.path, connection=db)["state"],
+                             "PASS_SQLITE_TO_RAW")
             db.rollback()
 
     def test_memory_database_rejected_for_existing_file_path(self):
