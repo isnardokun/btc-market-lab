@@ -23,8 +23,14 @@ def verify_read_snapshot(connection, requested_path):
 
     expected = Path(requested_path).resolve(strict=True)
     databases = connection.execute("PRAGMA database_list").fetchall()
-    if len(databases) != 1 or databases[0][1] != "main":
-        raise ValueError("Shared snapshot must have one SQLite main database")
-    actual = databases[0][2]
+    # SQLite may create its own unnamed "temp" schema as a SIDE EFFECT of
+    # PRAGMA integrity_check, even with query_only=ON. Reject external ATTACH
+    # aliases, but do not mistake SQLite's empty-path temp schema for one.
+    main_entries = [file for _, name, file in databases if name == "main"]
+    extra = [(name, file) for _, name, file in databases
+             if name != "main" and not (name == "temp" and not file)]
+    if len(main_entries) != 1 or extra:
+        raise ValueError("Shared snapshot cannot have attached databases")
+    actual = main_entries[0]
     if not actual or Path(actual).resolve(strict=True) != expected:
         raise ValueError("Shared snapshot SQLite main path mismatch")
