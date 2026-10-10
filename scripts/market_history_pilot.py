@@ -11,7 +11,6 @@ Use only after a verified WAL-safe backup and independent operator approval.
 import argparse
 import datetime as dt
 import json
-import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -101,6 +100,8 @@ def collect_one_page(db,provider,metric,*,fetch=download):
         if metric=="open_interest":params["intervalTime"]="5min"
     body=fetch(endpoint,params)
     rows=_rows(provider,metric,body)
+    if len(rows)>page_limit:
+        raise ValueError("Provider returned more records than the approved single page limit")
     if any(stamp>initial_end or stamp<=0 for stamp,_,_ in rows):
         raise ValueError("Provider returned observation outside requested historical boundary")
     digest=raw_payload(db,provider,endpoint,body,"application/json")
