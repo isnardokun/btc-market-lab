@@ -27,6 +27,7 @@ TESTS = [
     ("Unit: Versioned Knowledge Corpus v2", "python3 -m unittest -v tests.unit.test_knowledge_corpus_v2"),
     ("Unit: Research Studio v2", "python3 -m unittest -v tests.unit.test_research_studio_v2"),
     ("Unit: FRED Entry & Market SQLite Evidence", "python3 -m unittest -v tests.unit.test_fred_cli_and_market_evidence"),
+    ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
     ("Unit: Historical API Archive + Research Design", "python3 -m unittest -v tests.unit.test_historical_archive_and_design"),
     ("Unit: Archive Schema, Lineage & Tier 2 Migration", "python3 -m unittest -v tests.unit.test_archive_schema_v1"),
