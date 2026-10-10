@@ -92,12 +92,12 @@ def write_receipt(destination, payload):
             os.unlink(tmp)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Enviar el último reporte HTML portátil a Telegram")
     parser.add_argument("--file", type=Path, help="Archivo de reports/portable/ (por defecto el más reciente)")
     parser.add_argument("--dry-run", action="store_true", help="Validar sin enviar")
     parser.add_argument("--force", action="store_true", help="Reenviar incluso si existe recibo")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.file:
         path = args.file
