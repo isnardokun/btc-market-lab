@@ -20,6 +20,7 @@ import sys
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from ingestion.config import DB_PATH
+from scripts.market_readonly_snapshot import verify_read_snapshot
 from scripts.market_history_pilot import CONFIG
 from scripts.market_raw_reconcile import expected_rows
 
@@ -52,9 +53,8 @@ def audit(db_path, *, connection=None):
     with handle as db:
         if connection is None:
             db.execute("PRAGMA query_only=ON")
-        elif (not db.in_transaction or
-              db.execute("PRAGMA query_only").fetchone()[0] != 1):
-            raise ValueError("Shared audit requires active query-only transaction")
+        else:
+            verify_read_snapshot(db, p)
         db.execute("PRAGMA foreign_keys=ON")
         tables={x[0] for x in db.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}

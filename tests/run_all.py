@@ -34,6 +34,7 @@ TESTS = [
     ("Unit: Market Network Diagnostics", "python3 -m unittest -v tests.unit.test_market_network_diagnostics"),
     ("Unit: Bounded Market Historical Batches", "python3 -m unittest -v tests.unit.test_market_history_batch"),
     ("Unit: Bounded Derivatives Historical Pilot", "python3 -m unittest -v tests.unit.test_market_history_pilot"),
+    ("Unit: R10-C.6 Shared SQLite Identity", "python3 -m unittest -v tests.unit.test_market_readonly_snapshot_identity"),
     ("Unit: R10-C.5 Shared Read Snapshot", "python3 -m unittest -v tests.unit.test_market_r10c_shared_snapshot"),
     ("Unit: R10-C.4 Real Auditors E2E PRE Gate", "python3 -m unittest -v tests.unit.test_market_r10c_real_auditors_e2e"),
     ("Unit: R10-C.3 Read-only PRE Quality Gate", "python3 -m unittest -v tests.unit.test_market_r10c_quality_gate"),

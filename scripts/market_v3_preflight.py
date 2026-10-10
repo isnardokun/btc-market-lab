@@ -20,6 +20,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ingestion.config import DB_PATH
+from scripts.market_readonly_snapshot import verify_read_snapshot
 
 V2_RECEIPT_COLS = (
     "request_id", "run_id", "provider", "stream", "symbol",
@@ -173,9 +174,8 @@ def inspect(path, *, phase="pre", expected_backward=None, baseline=None, connect
             db.execute("PRAGMA foreign_keys=ON")
             # Keep a coherent read transaction for standalone PRE/POST too.
             db.execute("BEGIN")
-        elif (not db.in_transaction or
-              db.execute("PRAGMA query_only").fetchone()[0] != 1):
-            raise ValueError("Shared preflight requires active query-only transaction")
+        else:
+            verify_read_snapshot(db, p)
         try:
             tables = {row[0] for row in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")}
