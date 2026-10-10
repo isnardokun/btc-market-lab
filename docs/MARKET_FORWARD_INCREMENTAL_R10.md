@@ -73,7 +73,7 @@ entero, `start<=end`, `limit` validado, URI sin query/secretos,
 `returned_rows/persisted_rows` y `status`.
 
 **Por investigar antes de cerrar DDL:** `market_raw_payloads`
-deduplica solo por SHA256 del cuerpo; si dos endpoints/devices
+deduplica solo por SHA256 del cuerpo; si dos endpoints/proveedores
 devuelven el mismo cuerpo (por ejemplo `[]`), el primer
 `provider/endpoint` queda asociado al SHA y una auditoría
 multifuente puede atribuir mal una adquisición posterior.
@@ -146,7 +146,7 @@ FRED y modelos analíticos quedan en otras fases.
 | --- | --- |
 | API tarda en publicar la próxima barra | no avanzar; estado explícito; sin completar huecos |
 | Servidor devuelve 200 filas duplicadas / desordenadas | ordenar para validar, rechazar timestamps duplicados |
-| Baras saltadas o faltantes | STOP, rollback por página y evidencia |
+| Barras saltadas o faltantes | STOP, rollback por página y evidencia |
 | Respuesta `empty` o body válido idéntico de otra fuente | conservar provenance de adquisición, no atribución falsa |
 | HTTP 403/429/451 y errores TLS/DNS | sin retry automático, guardar error clasificado |
 | Error después de archivar BLOB pero antes del cursor | rollback de toda página |
