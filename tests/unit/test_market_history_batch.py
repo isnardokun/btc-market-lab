@@ -33,7 +33,10 @@ class MarketHistoryBatchTests(unittest.TestCase):
 
     def _pass_audits(self):
         return (patch.object(batch,"reconcile",return_value={"state":"PASS_SQLITE_TO_RAW","rows":1,"verified":1,"issues_count":0}),
-                patch.object(batch,"temporal",return_value={"quality_state":"SNAPSHOT_INTERNAL_QA_OK","historical_completeness":"NOT_VERIFIED","issues":[]}))
+                patch.object(batch,"temporal",return_value={"quality_state":"SNAPSHOT_INTERNAL_QA_OK","historical_completeness":"NOT_VERIFIED","issues":[]}),
+                patch.object(batch,"lineage",return_value={
+                    "quality_state":"PASS_REQUEST_LINEAGE","requests_total":1,
+                    "requests_verified":1,"success":1,"failed":0,"issues":[]}))
 
     def test_plan_only_has_no_network_or_missing_db_creation(self):
         missing=Path(self.temp.name)/"absent.db"
@@ -51,8 +54,8 @@ class MarketHistoryBatchTests(unittest.TestCase):
             t=BASE-dt.timedelta(minutes=5*len(touched))
             return json.dumps([{"symbol":"BTCUSDT","timestamp":int(t.timestamp()*1000),
                                 "sumOpenInterest":"100","sumOpenInterestValue":"8200000"}]).encode()
-        first,second=self._pass_audits()
-        with first,second:
+        first,second,third=self._pass_audits()
+        with first,second,third:
             result=batch.process(self.dbpath,"binance","open_interest",max_pages=3,
                                  pause_seconds=1,fetch=fetch,sleep=pause.append)
         self.assertEqual(result["pages_attempted"],3)
@@ -70,8 +73,8 @@ class MarketHistoryBatchTests(unittest.TestCase):
         def fetch(url,params):
             calls.append(1)
             return b"[]"
-        first,second=self._pass_audits()
-        with first,second:
+        first,second,third=self._pass_audits()
+        with first,second,third:
             result=batch.process(self.dbpath,"binance","open_interest",max_pages=20,
                                  pause_seconds=1,fetch=fetch,sleep=lambda x:None)
         self.assertEqual(len(calls),1)
@@ -86,8 +89,8 @@ class MarketHistoryBatchTests(unittest.TestCase):
         def fetch(url,params):
             calls.append(1)
             raise HTTPError(url,429,"rate limited",None,None)
-        first,second=self._pass_audits()
-        with first,second:
+        first,second,third=self._pass_audits()
+        with first,second,third:
             result=batch.process(self.dbpath,"binance","open_interest",max_pages=20,
                                  pause_seconds=1,fetch=fetch,sleep=lambda x:None)
         self.assertEqual(len(calls),1)
@@ -96,6 +99,29 @@ class MarketHistoryBatchTests(unittest.TestCase):
         self.assertTrue(result["post_audit_ok"],"preserved data quality does not imply successful batch")
         self.assertEqual(result["pages_successful"],0)
         self.assertEqual(result["page_evidence"][0]["error_code"],"HTTPError_429")
+
+    def test_invalid_lineage_after_first_page_blocks_second_http_call(self):
+        seen=[]
+        def fetch(url,params):
+            seen.append(dict(params))
+            t=BASE-dt.timedelta(minutes=5*len(seen))
+            return json.dumps([{"symbol":"BTCUSDT","timestamp":int(t.timestamp()*1000),
+                                "sumOpenInterest":"100","sumOpenInterestValue":"8200000"}]).encode()
+        with patch.object(batch,"reconcile",return_value={
+             "state":"PASS_SQLITE_TO_RAW"}),patch.object(batch,"temporal",
+             return_value={"quality_state":"SNAPSHOT_INTERNAL_QA_OK","issues":[]}),patch.object(
+             batch,"lineage",return_value={"quality_state":"REVIEW_REQUIRED",
+             "requests_total":1,"requests_verified":0,"issues":["tampered receipt"]}):
+            result=batch.process(self.dbpath,"binance","open_interest",
+                                 max_pages=10,pause_seconds=1,fetch=fetch,sleep=lambda s:None)
+        self.assertEqual(len(seen),1,"must audit previous request before any next API call")
+        self.assertEqual(result["pages_successful"],1)
+        self.assertEqual(result["stopped_because"],"per_page_provenance_audit_failed")
+        self.assertFalse(result["page_qa"][0]["ok"])
+        self.assertEqual(result["batch_outcome"],"STOPPED_POST_AUDIT_FAILED")
+        with sqlite3.connect(self.dbpath) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0],2)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM market_request_lineage").fetchone()[0],1)
 
     def test_environment_and_bounds_preflight(self):
         with self.assertRaises(ValueError):
