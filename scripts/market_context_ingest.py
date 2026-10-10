@@ -17,7 +17,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from ingestion.market_context_sources import (
     download,fetch_binance,fetch_bybit,fetch_farside,fetch_bls,fetch_fred)
-from urllib.error import HTTPError
+from ingestion.market_network_errors import error_category
 from storage.market_context import installed,now_utc
 
 SOURCES=("binance","bybit","farside","bls","fred")
@@ -55,8 +55,7 @@ def run(db,source,*,history=False,max_pages=2,fred_api_key=None):
         db.rollback()
         # Persist only safe HTTP status / exception class; do not expose
         # response bodies, request URLs (FRED token), host secrets or traces.
-        safe_error = ("HTTPError_" + str(exc.code) if isinstance(exc, HTTPError)
-                      else type(exc).__name__)
+        safe_error = error_category(exc)
         with db:
             db.execute("UPDATE market_source_runs SET ended_utc=?,status='failed',"
                        "requests=?,error_code=? WHERE run_id=?",
