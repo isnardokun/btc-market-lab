@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from scripts.backup_db import create_backup
-from storage.market_context import install,installed
+from storage.market_context import install,installed,request_lineage_installed,install_request_lineage
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
@@ -21,15 +21,27 @@ def main(argv=None):
         print("STOP: original SQLite not found",file=sys.stderr);return 2
     try:
         with sqlite3.connect(args.db) as db:
-            if installed(db):
-                print("Market context SQLite schema already installed; no migration needed.")
+            if installed(db) and request_lineage_installed(db):
+                print("Market context SQLite v2 schema already installed; no migration needed.")
                 return 0
         backup=create_backup(args.db,args.db.parent/"backups")
-        with sqlite3.connect(args.db) as db:
-            install(db)
-            status=db.execute("PRAGMA quick_check").fetchone()[0]
-            if status!="ok":raise RuntimeError("SQLite post-migration quick_check failed")
-        print("Market context schema installed; verified WAL-safe backup retained.")
+        with sqlite3.connect(args.db,timeout=30) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            if not installed(db):
+                install(db)
+            with db:
+                if not request_lineage_installed(db):
+                    install_request_lineage(db)
+                status=db.execute("PRAGMA integrity_check").fetchone()[0]
+                if status!="ok":
+                    raise RuntimeError("SQLite post-migration integrity_check failed")
+                if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                    raise RuntimeError("SQLite post-migration foreign_key_check failed")
+                if db.execute(
+                    "SELECT COUNT(*) FROM market_context_migrations WHERE version=2"
+                ).fetchone()[0]!=1:
+                    raise RuntimeError("Market request lineage v2 migration version absent")
+        print("Market context SQLite v2 installed; WAL-safe checked backup retained.")
         print("Backup location: "+str(backup))
         return 0
     except (OSError,ValueError,sqlite3.Error,RuntimeError) as exc:
