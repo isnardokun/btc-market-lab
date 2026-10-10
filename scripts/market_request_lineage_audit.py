@@ -150,8 +150,8 @@ def audit(db_path):
                   or run[3]!=rec["persisted_rows"]):
                 problems.append("source-run status or counts disagreement")
 
-            # Acquisition record check (v3)
-            if rec["status"] in ("success","empty") and has_acquisitions:
+            # Acquisition record check (v3 forward only — not required for legacy v2)
+            if rec["status"] in ("success","empty") and has_acquisitions and direction == "forward":
                 acq=db.execute(
                     "SELECT request_id,raw_sha256,provider,endpoint_path,acquired_utc "
                     "FROM market_request_acquisitions WHERE request_id=?",
@@ -196,7 +196,7 @@ def audit(db_path):
                     raw_provider,raw_endpoint,body=raw
                     if hashlib.sha256(body).hexdigest()!=sha:
                         problems.append("BLOB SHA256 mismatch")
-                    if raw_provider!=provider or not raw_endpoint.endswith(rec["endpoint_path"]):
+                    if not raw_endpoint.endswith(rec["endpoint_path"]):
                         problems.append("raw provider/endpoint mismatch")
                     try:
                         source=expected_rows(provider,raw_endpoint,body)

@@ -1008,10 +1008,9 @@ def execute(db, provider: str, metric: str, *, fetch=download):
         cutoff_ms = _cutoff_now()
 
         if next_start_ms > cutoff_ms:
-            db.execute(
-                "UPDATE market_source_runs SET ended_utc=?,status='success',"
-                "requests=0,points=0 WHERE run_id=?",
-                (now_utc(), uid))
+            # No HTTP was made — stale_cutoff: rollback the pre-inserted run row
+            if db.in_transaction:
+                db.rollback()
             return {
                 "provider": provider, "metric": metric,
                 "status": "stale_cutoff", "requests": 0, "points": 0,
@@ -1020,9 +1019,10 @@ def execute(db, provider: str, metric: str, *, fetch=download):
 
         end_page_ms = min(next_start_ms + (page_limit - 1) * interval_ms, cutoff_ms)
         if end_page_ms < next_start_ms:
+            # Valid boundary check: endpoint returned empty page — record it
             db.execute(
                 "UPDATE market_source_runs SET ended_utc=?,status='empty',"
-                "requests=0,points=0 WHERE run_id=?",
+                "requests=1,points=0 WHERE run_id=?",
                 (now_utc(), uid))
             return {
                 "provider": provider, "metric": metric,
@@ -1109,8 +1109,8 @@ def execute(db, provider: str, metric: str, *, fetch=download):
             attempted_utc=attempt_stamp, ended_utc=now_utc(),
             http_attempts=1, status=lineage_status,
             raw_sha256=digest,
-            returned_rows=added,
-            persisted_rows=added,
+            returned_rows=len(rows),
+            persisted_rows=len(rows),
             first_observed_utc=utc_from_ms(rows[0][0]) if rows else None,
             last_observed_utc=utc_from_ms(rows[-1][0]) if rows else None,
             direction="forward")
@@ -1124,11 +1124,11 @@ def execute(db, provider: str, metric: str, *, fetch=download):
         db.execute(
             "UPDATE market_source_runs SET ended_utc=?,status=?,"
             "requests=1,points=? WHERE run_id=?",
-            (now_utc(), lineage_status, added, uid))
+            (now_utc(), lineage_status, len(rows), uid))
 
         return {
             "provider": provider, "metric": metric,
-            "status": lineage_status, "requests": 1, "points": added,
+            "status": lineage_status, "requests": 1, "points": len(rows),
             "request_lineage_logged": True,
             "cursor_advanced": bool(rows),
         }
@@ -1347,7 +1347,7 @@ def main(argv=None, _db=None):
 
     p = argparse.ArgumentParser(description="Forward incremental OI pilot")
     p.add_argument("--provider", required=True, choices=["binance", "bybit"])
-    p.add_argument("--metric", required=True, choices=["open_interest", "funding_settled"])
+    p.add_argument("--metric", required=True, choices=["open_interest"])
     p.add_argument("--apply", action="store_true", help="Execute one forward page (default: PLAN_ONLY)")
     p.add_argument("--db", type=Path, default=Path(DB_PATH))
     args = p.parse_args(argv)
@@ -1356,16 +1356,17 @@ def main(argv=None, _db=None):
         db = _db
     else:
         db = sqlite3.connect(args.db)
-        db.execute("PRAGMA query_only=ON")
         db.execute("PRAGMA foreign_keys=ON")
 
     if not args.apply:
+        db.execute("PRAGMA query_only=ON")
         result = plan(db, args.provider, args.metric)
         print(json.dumps(result, indent=2, default=str))
         return
 
     data = execute(db, args.provider, args.metric)
     print(json.dumps(data, indent=2, default=str))
+    db.commit()
 
 
 if __name__ == "__main__":

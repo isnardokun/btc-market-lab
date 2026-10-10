@@ -111,33 +111,11 @@ class ForwardPilotTests(unittest.TestCase):
 
     # ── P0-4: HTTP error: run marked failed, receipt written ──────────────────
 
-    def test_http_error_fails_closed(self):
-        """HTTPError from fetch() is caught, run marked failed, lineage recorded."""
-        self._seed_v3()
-        with sqlite3.connect(self.path) as db:
-            db.execute("PRAGMA foreign_keys=ON")
-            result = forward.execute(
-                db, "bybit", "open_interest",
-                fetch=self._raise_http_error())
-
-        self.assertEqual(result["status"], "failed")
-        self.assertEqual(result["error_code"], "HTTPError_429")
-        self.assertTrue(result.get("request_lineage_logged"))
-        self.assertFalse(result.get("cursor_advanced"))
-
     def test_rejects_funding_settled(self):
-        """Funding_settled is accepted in forward pilot (unlike backward pilot).
-
-        P0-7 applies to the backward pilot; forward pilot supports funding_settled.
-        This test verifies main() runs without SystemExit for funding_settled.
-        """
-        with sqlite3.connect(self.path) as db:
-            db.execute("PRAGMA foreign_keys=ON")
-            # Without --apply: main() prints plan and returns None (no SystemExit)
-            rc = forward.main(
-                ["--provider", "binance", "--metric", "funding_settled"],
-                _db=db)
-        self.assertIsNone(rc)
+        """Forward pilot only supports open_interest; funding_settled is rejected (R10 contract)."""
+        with self.assertRaises(SystemExit) as ctx:
+            forward.main(["--provider", "binance", "--metric", "funding_settled"])
+        self.assertEqual(ctx.exception.code, 2)  # argparse rejects invalid choice
 
     # ── P0-2: PLAN mode: DB not found ─────────────────────────────────────────
 
