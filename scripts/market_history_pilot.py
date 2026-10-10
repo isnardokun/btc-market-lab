@@ -15,7 +15,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import uuid
-from urllib.error import HTTPError
+from ingestion.market_network_errors import error_category
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
@@ -152,7 +152,7 @@ def execute(db,provider,metric,*,fetch=download):
         return data
     except Exception as exc:
         db.rollback()
-        reason="HTTPError_"+str(exc.code) if isinstance(exc,HTTPError) else type(exc).__name__
+        reason=error_category(exc)
         with db:
             db.execute(
                 "UPDATE market_source_runs SET ended_utc=?,status='failed',requests=?,error_code=? "
