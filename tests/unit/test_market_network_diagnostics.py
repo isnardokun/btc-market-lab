@@ -21,7 +21,7 @@ class TransportClassificationTests(unittest.TestCase):
             (URLError(TimeoutError("private host address")),"URLError_TIMEOUT"),
             (URLError(ConnectionRefusedError("private host address")),"URLError_REFUSED"),
             (URLError(ConnectionResetError("private host address")),"URLError_RESET"),
-            (URLError("private proxy URL")),"URLError_UNCLASSIFIED"),
+            (URLError("private proxy URL"),"URLError_UNCLASSIFIED"),
             (HTTPError("https://internal.example",429,"private",None,None),"HTTPError_429"),
         ]
         for error, expected in cases:
