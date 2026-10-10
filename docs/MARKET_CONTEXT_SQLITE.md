@@ -672,3 +672,40 @@ integridad SQLite/FK y conteos PRE/POST de las tablas legacy.
 `PASS_REQUEST_LINEAGE` tampoco implica histórico completo:
 `historical_completeness` sigue `NOT_VERIFIED` hasta analizar
 explícitamente los límites de cobertura de cada proveedor.
+
+
+## Per-page hardening antes de lotes de recuperación mayores
+
+El segundo piloto v2 (R3) fue validado por Hermes con dos páginas
+Binance OI consecutivas, `PASS_REQUEST_LINEAGE`, 2.500
+observaciones Binance OI y 3.935 observaciones de derivados en total.
+Eso certifica esas páginas; `historical_completeness`
+sigue `NOT_VERIFIED`.
+
+El procesador `scripts/market_history_batch.py` incorpora ahora
+**un control independiente obligatorio después de CADA página
+confirmada en SQLite y ANTES de la próxima petición HTTP**:
+
+1. `market_raw_reconcile.audit`: exige
+   `PASS_SQLITE_TO_RAW` (fuente archivada ↔ valores guardados).
+2. `market_temporal_quality.inspect`: exige
+   `SNAPSHOT_INTERNAL_QA_OK` (continuidad temporal observada).
+3. `market_request_lineage_audit.audit`: exige
+   `PASS_REQUEST_LINEAGE` y `requests_verified=requests_total`
+   (solicitud ↔ raw ↔ filas ↔ cursor).
+
+La salida `page_qa[]` contiene por número de página los tres estados,
+número de recibos verificados y `ok`. Un fallo detiene el bucle con
+`stopped_because=per_page_provenance_audit_failed`, sin solicitar
+otra página ni deshacer transacciones previas que ya fueran válidas;
+conservar backup y reportar. La comprobación final de lectura también
+incluye `request_lineage_audit` y `post_audit_ok` exige los
+tres controles aprobados.
+
+Esta garantía es distinta de tener suficientes datos de toda la
+historia: el OI Binance USD-M `/futures/data/openInterestHist`
+ofrece **solo aproximadamente el último mes**, con
+`limit <= 500` por solicitud; la fuente puede agotar la ventana
+sin servir una página completa. Ante una respuesta `empty`,
+HTTP 403/429, valores anómalos o auditoría fallida, nunca
+autocompletar huecos ni cambiar de endpoints para eludir límites.
