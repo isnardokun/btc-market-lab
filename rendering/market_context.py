@@ -33,7 +33,8 @@ def render_market_context(db_path, now=None):
                 title=source.title()+" · "+("OI" if metric=="open_interest" else "Funding liquidado")
                 number=(f"{value*100:+.4f}%" if metric=="funding_settled"
                         else f"{value:,.2f} {unit}")
-                note=("USD equivalente: "+f"US$ {usd:,.0f}" if usd is not None and metric=="open_interest"
+                note=("Nocional reportado: "+f"{usd:,.0f}"+" (unidad cotizada no validada como USD fiat)"
+                      if usd is not None and metric=="open_interest"
                       else "sin conversión USD verificada" if metric=="open_interest"
                       else "fracción ×100; liquidación pasada, no estimación futura")
                 blocks.append(
