@@ -709,3 +709,13 @@ ofrece **solo aproximadamente el último mes**, con
 sin servir una página completa. Ante una respuesta `empty`,
 HTTP 403/429, valores anómalos o auditoría fallida, nunca
 autocompletar huecos ni cambiar de endpoints para eludir límites.
+
+## Siguiente etapa: incremento forward (aún NO AUTORIZADO)
+
+El contrato propuesto de migración v3, independencia de los cursores
+backward/forward, recibos por solicitud, control de barras cerradas,
+fronteras de API, pruebas offline y despliegue por etapas se describe en
+[MARKET_FORWARD_INCREMENTAL_R10.md](MARKET_FORWARD_INCREMENTAL_R10.md).
+
+**Este diseño no instala v3 ni autoriza tráfico de red, ingesta diaria,
+cron, publicación o Telegram.**
