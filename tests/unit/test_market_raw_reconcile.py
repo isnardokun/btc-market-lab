@@ -99,6 +99,22 @@ class RawReconciliationTests(unittest.TestCase):
         self.assertEqual(r["state"],"REJECTED")
         self.assertTrue(any("raw sha256 mismatch" in x for x in r["issues"]))
 
+    def test_deleted_archived_source_observation_is_rejected(self):
+        self.seeded()
+        self.db.execute(
+            "DELETE FROM market_derivatives "
+            "WHERE provider='bybit' AND metric='open_interest'"
+        )
+        self.db.commit()
+        result = audit(self.path)
+        self.assertEqual(result["state"], "REJECTED")
+        self.assertTrue(any(
+            "archived source observation missing from SQLite" in issue
+            for issue in result["issues"]
+        ), result["issues"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--db", str(self.path)]), 1)
+
     def test_empty_legacy_db_never_passes_or_gets_created(self):
         r=audit(self.path)
         self.assertEqual(r["state"],"REJECTED")

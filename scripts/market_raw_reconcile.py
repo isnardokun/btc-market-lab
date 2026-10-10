@@ -126,6 +126,22 @@ def audit(path, *, max_issues=12):
             "raw_unit,quote_usd,raw_sha256,source_endpoint "
             "FROM market_derivatives WHERE provider IN ('binance','bybit') "
             "ORDER BY provider,metric,observed_utc").fetchall()
+        stored_keys = {
+            (provider, metric, at, interval)
+            for provider, symbol, metric, at, interval, value, unit, quote, sha, endpoint
+            in observations if symbol == "BTCUSDT"
+        }
+        # Reconciliation MUST be bidirectional: checking only SQLite -> RAW
+        # incorrectly PASSED if an archived provider observation was deleted.
+        # Superseded payloads may reference an existing observation now tied
+        # to another SHA; do not misclassify those as missing.
+        for sha, provider, endpoint, body in payloads:
+            for metric, stamp, interval in indexed.get(sha, {}):
+                if (provider, metric, stamp, interval) not in stored_keys:
+                    errors.append(
+                        "archived source observation missing from SQLite "
+                        + provider + "_" + metric + " " + stamp
+                    )
         for provider,symbol,metric,at,interval,value,unit,quote,sha,endpoint in observations:
             key=provider+"_"+metric
             if key not in counts:

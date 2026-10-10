@@ -27,6 +27,12 @@ EXPECTED = {
     "TEMPORAL": "SNAPSHOT_INTERNAL_QA_OK",
     "LINEAGE": "PASS_REQUEST_LINEAGE",
 }
+# All four observed streams must exist. This is a market data provenance gate,
+# not a way to declare a blank or half-populated snapshot ready for migration.
+REQUIRED_STREAMS = frozenset({
+    "binance_open_interest", "binance_funding_settled",
+    "bybit_open_interest", "bybit_funding_settled",
+})
 
 
 def _summary_raw(result):
@@ -70,7 +76,19 @@ def _valid_temporal(r):
         and r.get("historical_completeness") == "NOT_VERIFIED"
         and isinstance(r.get("issues"), list) and not r["issues"]
         and isinstance(r.get("streams"), dict)
-        and bool(r["streams"])
+        and REQUIRED_STREAMS <= r["streams"].keys()
+        and all(
+            isinstance(r["streams"].get(key), dict)
+            and type(r["streams"][key].get("rows")) is int
+            and r["streams"][key]["rows"] > 0
+            and r["streams"][key].get("valid_timestamps") == r["streams"][key]["rows"]
+            and r["streams"][key].get("duplicate_timestamps") == 0
+            and (
+                key.endswith("_funding_settled")
+                or r["streams"][key].get("five_minute_gaps_inside_observed_window") == 0
+            )
+            for key in REQUIRED_STREAMS
+        )
         and r.get("source_rows_unstored") == []
     )
 
