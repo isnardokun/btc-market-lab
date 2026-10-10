@@ -44,8 +44,11 @@ La migración v1 añade solo objetos nuevos, sin modificar tablas previas:
   fecha de captura y SHA de fuente. `TOTAL` es la cifra declarada
   por Farside, independiente de valores parciales por fondo.
 - `market_derivatives`: fuente/instrumento, tipo, UTC, intervalo,
-  valor bruto, unidad (BTC, USD, fracción), USD normalizado solo
-  cuando el proveedor ofrece un valor explícito, endpoint y SHA.
+  valor bruto, unidad (BTC, USD, fracción), valor nocional original
+  del proveedor si existe, endpoint y SHA. **Atención:** la columna heredada
+  `quote_usd` conserva literalmente `sumOpenInterestValue` de Binance;
+  su nombre NO demuestra denominación USD fiat. No rotularlo como USD
+  verificado ni sumar nocionales entre venues sin documentar conversión.
 - `market_calendar_events`: identificador por emisor, UTC verificado,
   precisión de fecha/hora, estado, fecha de evento, fuente y SHA.
 - `market_context_revisions`: copia anterior y nueva JSON dentro de
@@ -186,3 +189,37 @@ permiso después.
 **La actualización de código del PR no supone consentimiento para
 publicar reportes por Telegram.** No cambiar variables, cron ni
 recibos de envíos previos para aparentar cumplimiento.
+
+
+## Validación directa de respuestas originales contra SQLite
+
+Con el módulo de mercado instalado y observaciones reales de Binance/Bybit,
+ejecutar, **sin hacer peticiones HTTP ni escrituras**:
+
+```bash
+python3 scripts/market_raw_reconcile.py
+```
+
+El auditor lee el **BLOB original** de cada respuesta de la SQLite existente,
+verifica SHA256 íntegro, decodifica campos nativos por endpoint, reconstruye
+las marcas UTC, y contrasta **cada observación persistida** (valor, intervalo,
+unidad, referencia SHA y el nocional opcional) con los campos del JSON fuente.
+Entrega cantidad de filas y observaciones verificadas por fuente/métrica,
+además de errores de conciliación. Exit 0 implica `PASS_SQLITE_TO_RAW`;
+exit 1 implica una discrepancia o flujo sin cobertura, y exit 2 implica
+que la comprobación no pudo ejecutarse. Ningún estado prueba por sí mismo
+que el exchange haya reportado valores económicamente correctos.
+
+Ejemplo de verificación del piloto: Binance OI 500, funding 135;
+Bybit OI 200, funding 200: **1.035 registros objetivo**. La cifra
+sigue siendo un objetivo hasta que Hermes entregue la salida de la
+consulta sobre su base, no un resultado afirmado a priori.
+
+La cifra `sumOpenInterestValue` informada en el piloto fue
+7.648.807.675,8016 unidades cotizadas por 92.702,932 BTC:
+precio implícito 82.508,80 por BTC. El texto original de Hermes
+«≈ 4,7B (76K × 61K)» no concilia y es un error aritmético.
+No renombrar retrospectivamente el contenido de origen ni sustituir
+un valor por un supuesto USD/USDT hasta confirmar el contrato y la
+moneda real. No entregar claves, BLOB, informes integrales o tokens
+en comentarios públicos de GitHub.
