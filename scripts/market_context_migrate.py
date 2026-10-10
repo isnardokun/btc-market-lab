@@ -21,9 +21,21 @@ def main(argv=None):
         print("STOP: original SQLite not found",file=sys.stderr);return 2
     try:
         with sqlite3.connect(args.db) as db:
+            db.execute("PRAGMA foreign_keys=ON")
             if installed(db) and request_lineage_installed(db):
-                print("Market context SQLite v2 schema already installed; no migration needed.")
-                return 0
+                v2 = db.execute("SELECT COUNT(*) FROM market_context_migrations WHERE version=2").fetchone()[0]
+                v3 = db.execute("SELECT COUNT(*) FROM market_context_migrations WHERE version=3").fetchone()[0]
+                if v2 and v3:
+                    print("Market context SQLite v2+v3 schema already installed; no migration needed.")
+                    return 0
+                if v2 and not v3:
+                    print("Market context SQLite v2 installed; adding v3 (direction + acquisitions)...")
+                    install_request_lineage(db)
+                    v3_after = db.execute("SELECT COUNT(*) FROM market_context_migrations WHERE version=3").fetchone()[0]
+                    if not v3_after:
+                        raise RuntimeError("Market request lineage v3 migration version absent")
+                    print("Market context SQLite v3 added.")
+                    return 0
         backup=create_backup(args.db,args.db.parent/"backups")
         with sqlite3.connect(args.db,timeout=30) as db:
             db.execute("PRAGMA foreign_keys=ON")
@@ -37,11 +49,17 @@ def main(argv=None):
                     raise RuntimeError("SQLite post-migration integrity_check failed")
                 if db.execute("PRAGMA foreign_key_check").fetchone() is not None:
                     raise RuntimeError("SQLite post-migration foreign_key_check failed")
-                if db.execute(
+                v2_count = db.execute(
                     "SELECT COUNT(*) FROM market_context_migrations WHERE version=2"
-                ).fetchone()[0]!=1:
+                ).fetchone()[0]
+                if v2_count != 1:
                     raise RuntimeError("Market request lineage v2 migration version absent")
-        print("Market context SQLite v2 installed; WAL-safe checked backup retained.")
+                v3_count = db.execute(
+                    "SELECT COUNT(*) FROM market_context_migrations WHERE version=3"
+                ).fetchone()[0]
+                if v3_count != 1:
+                    raise RuntimeError("Market request lineage v3 migration version absent")
+        print("Market context SQLite v2+v3 installed; WAL-safe checked backup retained.")
         print("Backup location: "+str(backup))
         return 0
     except (OSError,ValueError,sqlite3.Error,RuntimeError) as exc:

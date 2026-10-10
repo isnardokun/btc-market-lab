@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS market_request_lineage(
  symbol TEXT NOT NULL CHECK(symbol='BTCUSDT'),
  interval_label TEXT NOT NULL,
  endpoint_path TEXT NOT NULL,
+ requested_start_ms INTEGER,
  requested_end_ms INTEGER,
  requested_limit INTEGER NOT NULL CHECK(requested_limit BETWEEN 1 AND 1000),
  attempted_utc TEXT NOT NULL,
@@ -82,8 +83,21 @@ CREATE TABLE IF NOT EXISTS market_request_lineage(
  persisted_rows INTEGER NOT NULL CHECK(persisted_rows BETWEEN 0 AND 1000),
  first_observed_utc TEXT,
  last_observed_utc TEXT,
+ direction TEXT NOT NULL CHECK(direction IN ('backward','forward')),
  CHECK(status='failed' OR (http_attempts=1 AND raw_sha256 IS NOT NULL)),
  CHECK(status!='failed' OR (raw_sha256 IS NULL AND persisted_rows=0))
+);
+"""
+
+REQUEST_ACQUISITIONS_DDL = """
+CREATE TABLE IF NOT EXISTS market_request_acquisitions(
+ acquired_id TEXT PRIMARY KEY,
+ request_id TEXT REFERENCES market_request_lineage(request_id),
+ provider TEXT NOT NULL,
+ endpoint_path TEXT NOT NULL,
+ raw_sha256 TEXT NOT NULL,
+ acquired_utc TEXT NOT NULL,
+ UNIQUE(raw_sha256, provider, endpoint_path)
 );
 """
 
@@ -92,17 +106,19 @@ def request_lineage_installed(db):
                       "AND name='market_request_lineage'").fetchone() is not None
 
 def install_request_lineage(db):
-    """Additive v2 installation. Caller controls the transaction and backup."""
+    """Additive v2+v3 installation. Caller controls the transaction and backup."""
     require(db)
     db.execute(REQUEST_LINEAGE_DDL)
+    db.execute(REQUEST_ACQUISITIONS_DDL)
     db.execute("INSERT OR IGNORE INTO market_context_migrations(version,applied_at_utc)"
-               " VALUES(2,?)",(now_utc(),))
+               " VALUES(2,?),(3,?)",(now_utc(),now_utc()))
 
 def write_request_lineage(db,*,request_id,run_id,provider,metric,
                           interval_label,endpoint_path,requested_end_ms,
                           requested_limit,attempted_utc,ended_utc,http_attempts,
                           status,error_class=None,raw_sha256=None,returned_rows=0,
-                          persisted_rows=0,first_observed_utc=None,last_observed_utc=None):
+                          persisted_rows=0,first_observed_utc=None,last_observed_utc=None,
+                          direction="backward",requested_start_ms=None):
     require(db)
     if not request_lineage_installed(db):
         raise RuntimeError("Market request lineage v2 not migrated")
@@ -114,17 +130,19 @@ def write_request_lineage(db,*,request_id,run_id,provider,metric,
         raise ValueError("Bad request receipt")
     if status=="failed" and (raw_sha256 is not None or persisted_rows):
         raise ValueError("Failed request cannot retain uncommitted data")
+    if direction not in ("backward","forward"):
+        raise ValueError("direction must be backward or forward")
     db.execute(
       "INSERT INTO market_request_lineage"
       "(request_id,run_id,provider,stream,symbol,interval_label,endpoint_path,"
       "requested_end_ms,requested_limit,attempted_utc,ended_utc,http_attempts,"
       "status,error_class,raw_sha256,returned_rows,persisted_rows,"
-      "first_observed_utc,last_observed_utc)"
-      " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "first_observed_utc,last_observed_utc,direction,requested_start_ms)"
+      " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       (request_id,run_id,provider,metric,"BTCUSDT",interval_label,endpoint_path,
        requested_end_ms,requested_limit,attempted_utc,ended_utc,http_attempts,
        status,error_class,raw_sha256,returned_rows,persisted_rows,
-       first_observed_utc,last_observed_utc))
+       first_observed_utc,last_observed_utc,direction,requested_start_ms))
 
 
 def installed(db):

@@ -49,7 +49,7 @@ class LineageMigrationTests(unittest.TestCase):
         with sqlite3.connect(self.path) as db:
             db.execute("PRAGMA foreign_keys=ON")
             self.assertTrue(dbm.request_lineage_installed(db))
-            self.assertEqual(db.execute("SELECT version FROM market_context_migrations ORDER BY version").fetchall(),[(1,),(2,)])
+            self.assertEqual(db.execute("SELECT version FROM market_context_migrations ORDER BY version").fetchall(),[(1,),(2,),(3,)])
             self.assertEqual(db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0],1)
             self.assertEqual(db.execute("SELECT value FROM legacy_stable").fetchone()[0],"original")
             self.assertEqual(db.execute("PRAGMA integrity_check").fetchone()[0],"ok")
