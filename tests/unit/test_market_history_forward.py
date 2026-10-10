@@ -129,9 +129,9 @@ class ForwardPilotTests(unittest.TestCase):
              f"from scripts import market_history_forward as f; "
              f"sys.exit(f.main(['--provider','bybit','--metric','open_interest','--db','{fake}']))"],
             capture_output=True, text=True, cwd=str(ROOT))
-        # _open_db returns None for missing DB → main() returns None → sys.exit(None) = 0
-        self.assertEqual(cp.returncode, 0)
-        self.assertIn("Market schema not installed", cp.stdout)
+        self.assertEqual(cp.returncode, 2)
+        self.assertIn("DatabaseNotFound", cp.stdout)
+        self.assertFalse(fake.exists())
 
     # ── P0-2: PLAN mode: URI read-only, no writes ─────────────────────────────
 
@@ -162,8 +162,7 @@ class ForwardPilotTests(unittest.TestCase):
             rc = forward.main(
                 ["--provider", "bybit", "--metric", "open_interest", "--apply"],
                 _db=db)
-        # main() returns None on failure (prints error JSON, no sys.exit)
-        self.assertIsNone(rc)
+        self.assertNotEqual(rc, 0)
 
     # ── P0-3: Bybit uses "timestamp" field ─────────────────────────────────────
 
