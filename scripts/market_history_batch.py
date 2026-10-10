@@ -20,6 +20,7 @@ from ingestion.config import DB_PATH
 from scripts.market_history_pilot import execute
 from scripts.market_raw_reconcile import audit as reconcile
 from scripts.market_temporal_quality import inspect as temporal
+from scripts.market_request_lineage_audit import audit as lineage
 
 def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time.sleep):
     from ingestion.market_context_sources import download
@@ -39,7 +40,7 @@ def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time
         "pages_attempted":0,"pages_successful":0,"rows_added":0,
         "stopped_because":None,"page_evidence":[],
         "historical_completeness":"NOT_VERIFIED",
-        "warnings":[],
+        "warnings":[],"page_qa":[],
     }
     with sqlite3.connect(path,timeout=30) as db:
         db.execute("PRAGMA foreign_keys=ON")
@@ -60,6 +61,30 @@ def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time
                 break
             summary["pages_successful"]+=1
             summary["rows_added"]+=result["points"]
+            # Mandatory independent read-only audit after EACH committed page,
+            # before ANY further API request. Database write transaction has
+            # already committed the BLOB, rows, cursor and request receipt.
+            checked_raw=reconcile(path)
+            checked_temporal=temporal(path)
+            checked_lineage=lineage(path)
+            qa={
+                "page_number":page+1,
+                "raw_state":checked_raw.get("state"),
+                "temporal_state":checked_temporal.get("quality_state"),
+                "lineage_state":checked_lineage.get("quality_state"),
+                "lineage_requests_verified":checked_lineage.get("requests_verified"),
+                "lineage_requests_total":checked_lineage.get("requests_total"),
+            }
+            qa["ok"]=(
+                qa["raw_state"]=="PASS_SQLITE_TO_RAW"
+                and qa["temporal_state"]=="SNAPSHOT_INTERNAL_QA_OK"
+                and qa["lineage_state"]=="PASS_REQUEST_LINEAGE"
+                and checked_lineage.get("requests_verified",0)==checked_lineage.get("requests_total",-1))
+            summary["page_qa"].append(qa)
+            if not qa["ok"]:
+                summary["stopped_because"]="per_page_provenance_audit_failed"
+                summary["warnings"].append("Stopped before next page; source/temporal/request audit mismatch")
+                break
             if (page+1)%5==0:
                 if db.execute("PRAGMA quick_check(1)").fetchone()[0]!="ok":
                     summary["stopped_because"]="sqlite_quick_check"
@@ -74,6 +99,14 @@ def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time
     # Read-only independent auditors run after all DB writers are closed.
     raw=reconcile(path)
     chrono=temporal(path)
+    final_lineage=lineage(path)
+    summary["request_lineage_audit"]={
+        "quality_state":final_lineage.get("quality_state"),
+        "requests_total":final_lineage.get("requests_total"),
+        "requests_verified":final_lineage.get("requests_verified"),
+        "success":final_lineage.get("success"),
+        "failed":final_lineage.get("failed"),
+        "issues_count":len(final_lineage.get("issues",[]))}
     summary["raw_reconciliation"]={
         "state":raw.get("state"),"rows":raw.get("rows"),
         "verified":raw.get("verified"),"issues_count":raw.get("issues_count")}
@@ -83,7 +116,10 @@ def process(path,provider,metric,*,max_pages,pause_seconds,fetch=None,sleep=time
         "historical_completeness":chrono.get("historical_completeness")}
     summary["post_audit_ok"]=(
         raw.get("state")=="PASS_SQLITE_TO_RAW"
-        and chrono.get("quality_state")=="SNAPSHOT_INTERNAL_QA_OK")
+        and chrono.get("quality_state")=="SNAPSHOT_INTERNAL_QA_OK"
+        and final_lineage.get("quality_state")=="PASS_REQUEST_LINEAGE"
+        and final_lineage.get("requests_total",0)>0
+        and final_lineage.get("requests_total")==final_lineage.get("requests_verified"))
     # These are different assertions: post_audit_ok means existing
     # observations are still intact, NOT that the backfill succeeded.
     if not summary["post_audit_ok"]:
