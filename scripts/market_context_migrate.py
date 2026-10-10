@@ -47,9 +47,10 @@ def main(argv=None):
             db.execute("PRAGMA foreign_keys=ON")
             if not installed(db):
                 install(db)
-            else:
-                install_request_lineage(db)
-            _integrity_check(args.db)
+            # Fresh installs must create v3 lineage too; older v1 installs
+            # must receive the same additive upgrades before declaring success.
+            install_request_lineage(db)
+        _integrity_check(args.db)
         print("Market context SQLite v1+v2+v3 installed; WAL-safe checked backup retained.")
         print("Backup location: "+str(backup))
         return 0
