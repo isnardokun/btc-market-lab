@@ -104,6 +104,13 @@ def collect_one_page(db,provider,metric,*,fetch=download):
         raise ValueError("Provider returned more records than the approved single page limit")
     if any(stamp>initial_end or stamp<=0 for stamp,_,_ in rows):
         raise ValueError("Provider returned observation outside requested historical boundary")
+    # For 5m open interest, reject a missing boundary candle or an internal
+    # gap BEFORE persisting anything or advancing the history cursor.
+    if metric=="open_interest" and rows:
+        times=sorted(stamp for stamp,_,_ in rows)
+        if times[-1]!=ms_utc(earliest)-300_000 or any(
+            b-a!=300_000 for a,b in zip(times,times[1:])):
+            raise ValueError("Five-minute open interest history is not continuous")
     digest=raw_payload(db,provider,endpoint,body,"application/json")
     added=0
     for stamp,value,quote in rows:
