@@ -10,6 +10,10 @@ import datetime as dt
 import json
 from pathlib import Path
 import sqlite3
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from scripts.market_r10e_plan_only import PAGE_LIMITS, UTC, plan_snapshot
 
@@ -64,6 +68,9 @@ def dispatch_offline(coverage: dict) -> dict:
                 raise ValueError("Incomplete eligible stream plan")
         by_provider[provider] = stream
 
+    if len({stream.get("cutoff_utc") for stream in by_provider.values()}) != 1:
+        raise ValueError("Inconsistent closed-bar cutoff among providers")
+
     result = {
         "state": "PLAN_ONLY_DISPATCH",
         "execution_authorized": False,
@@ -73,7 +80,8 @@ def dispatch_offline(coverage: dict) -> dict:
         "http_requests": 0,
         "sqlite_writes": 0,
         "maximum_future_requests_if_authorized": 1,
-        "cutoff_utc": coverage.get("now_utc"),
+        "planned_at_utc": coverage.get("now_utc"),
+        "closed_bar_cutoff_utc": next(iter(by_provider.values())).get("cutoff_utc"),
         "candidates": [],
         "selected": None,
     }
