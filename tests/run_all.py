@@ -34,6 +34,7 @@ TESTS = [
     ("Unit: Market Network Diagnostics", "python3 -m unittest -v tests.unit.test_market_network_diagnostics"),
     ("Unit: Bounded Market Historical Batches", "python3 -m unittest -v tests.unit.test_market_history_batch"),
     ("Unit: Bounded Derivatives Historical Pilot", "python3 -m unittest -v tests.unit.test_market_history_pilot"),
+    ("Unit: R10-C v3 Migrator Fail-closed Atomicity", "python3 -m unittest -v tests.unit.test_market_v3_migrator_atomicity"),
     ("Unit: R10-C WAL-safe v2-v3 Migration Rehearsal", "python3 -m unittest -v tests.unit.test_market_v3_migration_rehearsal"),
     ("Unit: R10-C SQLite Read-only Preflight", "python3 -m unittest -v tests.unit.test_market_v3_preflight"),
     ("Unit: Forward OI Atomic Pilot v3", "python3 -m unittest -v tests.unit.test_market_history_forward"),
