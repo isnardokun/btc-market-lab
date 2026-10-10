@@ -658,9 +658,17 @@ class ForwardPilotTests(unittest.TestCase):
         self.assertEqual(report["forward_requests"], 1)
 
     def test_cli_apply_commits_real_sqlite_with_mocked_http(self):
-        """Production CLI path, mock network, durable SQLite row, exit 0 on valid QA."""
+        """Production CLI path; mock network; durable SQLite and fail-closed QA."""
         self._seed_v3()
         with sqlite3.connect(self.path) as db:
+            self.assertTrue(dbm.installed(db))
+            self.assertTrue(dbm.request_lineage_installed(db))
+            self.assertEqual(
+                {r[1] for r in db.execute("PRAGMA table_info(market_request_lineage)")}
+                .issuperset({"direction", "requested_start_ms"}), True)
+            self.assertIsNotNone(db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='market_request_acquisitions'"
+            ).fetchone())
             base = db.execute(
                 "SELECT MAX(observed_utc) FROM market_derivatives").fetchone()[0]
         next_stamp = int(dt.datetime.fromisoformat(base).timestamp() * 1000) + 300000
