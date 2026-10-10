@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS market_context_revisions(
 def now_utc():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
+# v3 DDL — used only for NEW installations (v1→v3 or fresh)
 REQUEST_LINEAGE_DDL = """
 CREATE TABLE IF NOT EXISTS market_request_lineage(
  request_id TEXT PRIMARY KEY,
@@ -89,15 +90,19 @@ CREATE TABLE IF NOT EXISTS market_request_lineage(
 );
 """
 
+# One acquisition record PER REQUEST — not per SHA.
+# request_id is NOT NULL and FK'd to lineage (each request = one acquisition).
+# The same SHA+provider+endpoint can appear in multiple acquisitions (different requests).
+# raw_sha256 is NOT NULL and FK'd to market_raw_payloads.
 REQUEST_ACQUISITIONS_DDL = """
 CREATE TABLE IF NOT EXISTS market_request_acquisitions(
  acquired_id TEXT PRIMARY KEY,
- request_id TEXT REFERENCES market_request_lineage(request_id),
+ request_id TEXT NOT NULL REFERENCES market_request_lineage(request_id),
  provider TEXT NOT NULL,
  endpoint_path TEXT NOT NULL,
- raw_sha256 TEXT NOT NULL,
+ raw_sha256 TEXT NOT NULL REFERENCES market_raw_payloads(sha256),
  acquired_utc TEXT NOT NULL,
- UNIQUE(raw_sha256, provider, endpoint_path)
+ UNIQUE(request_id)
 );
 """
 
@@ -106,12 +111,88 @@ def request_lineage_installed(db):
                       "AND name='market_request_lineage'").fetchone() is not None
 
 def install_request_lineage(db):
-    """Additive v2+v3 installation. Caller controls the transaction and backup."""
+    """
+    Additive upgrade: adds missing columns to EXISTING market_request_lineage table.
+    
+    Cases:
+      - No lineage table: CREATE v3 (full schema with all columns)
+      - v1 present: ALTER to add stream, symbol, interval_label
+      - v2 present: ALTER to add direction, requested_start_ms
+      - v3 present: idempotent no-op
+    
+    Caller controls the transaction and backup.
+    """
     require(db)
-    db.execute(REQUEST_LINEAGE_DDL)
-    db.execute(REQUEST_ACQUISITIONS_DDL)
+
+    existing_cols = {r[1] for r in db.execute("PRAGMA table_info(market_request_lineage)")}
+
+    if not existing_cols:
+        # Fresh install: create v3 schema (complete)
+        db.execute(REQUEST_LINEAGE_DDL)
+        db.execute(REQUEST_ACQUISITIONS_DDL)
+        db.execute("INSERT OR IGNORE INTO market_context_migrations(version,applied_at_utc)"
+                   " VALUES(2,?),(3,?)",(now_utc(),now_utc()))
+        return
+
+    # Upgrade existing table: add missing columns one by one
+    # v1→v2: stream, symbol, interval_label (v2 introduced these)
+    if "stream" not in existing_cols:
+        db.execute("ALTER TABLE market_request_lineage ADD COLUMN stream TEXT NOT NULL "
+                   "CHECK(stream IN ('open_interest','funding_settled'))")
+    if "symbol" not in existing_cols:
+        db.execute("ALTER TABLE market_request_lineage ADD COLUMN symbol TEXT NOT NULL "
+                   "CHECK(symbol='BTCUSDT')")
+    if "interval_label" not in existing_cols:
+        db.execute("ALTER TABLE market_request_lineage ADD COLUMN interval_label TEXT NOT NULL")
+
+    # v2→v3: direction, requested_start_ms
+    if "direction" not in existing_cols:
+        db.execute("ALTER TABLE market_request_lineage ADD COLUMN direction TEXT NOT NULL "
+                   "DEFAULT 'backward' CHECK(direction IN ('backward','forward'))")
+    if "requested_start_ms" not in existing_cols:
+        db.execute("ALTER TABLE market_request_lineage ADD COLUMN requested_start_ms INTEGER")
+
+    # Mark migrations as applied (idempotent — INSERT OR IGNORE handles re-runs)
     db.execute("INSERT OR IGNORE INTO market_context_migrations(version,applied_at_utc)"
                " VALUES(2,?),(3,?)",(now_utc(),now_utc()))
+
+    # Create acquisitions table (always safe with IF NOT EXISTS)
+    db.execute(REQUEST_ACQUISITIONS_DDL)
+
+def install_request_lineage_v2_only(db):
+    """
+    Legacy v2 installer — used ONLY for tests that seed v1 schema and
+    expect v2 migration. Creates v2-compatible table (without direction/requested_start_ms).
+    """
+    require(db)
+    V2_DDL = """
+    CREATE TABLE IF NOT EXISTS market_request_lineage(
+     request_id TEXT PRIMARY KEY,
+     run_id TEXT NOT NULL UNIQUE REFERENCES market_source_runs(run_id),
+     provider TEXT NOT NULL CHECK(provider IN ('binance','bybit')),
+     stream TEXT NOT NULL CHECK(stream IN ('open_interest','funding_settled')),
+     symbol TEXT NOT NULL CHECK(symbol='BTCUSDT'),
+     interval_label TEXT NOT NULL,
+     endpoint_path TEXT NOT NULL,
+     requested_end_ms INTEGER,
+     requested_limit INTEGER NOT NULL CHECK(requested_limit BETWEEN 1 AND 1000),
+     attempted_utc TEXT NOT NULL,
+     ended_utc TEXT NOT NULL,
+     http_attempts INTEGER NOT NULL CHECK(http_attempts BETWEEN 0 AND 1),
+     status TEXT NOT NULL CHECK(status IN ('success','empty','failed')),
+     error_class TEXT,
+     raw_sha256 TEXT REFERENCES market_raw_payloads(sha256),
+     returned_rows INTEGER NOT NULL CHECK(returned_rows BETWEEN 0 AND 1000),
+     persisted_rows INTEGER NOT NULL CHECK(persisted_rows BETWEEN 0 AND 1000),
+     first_observed_utc TEXT,
+     last_observed_utc TEXT,
+     CHECK(status='failed' OR (http_attempts=1 AND raw_sha256 IS NOT NULL)),
+     CHECK(status!='failed' OR (raw_sha256 IS NULL AND persisted_rows=0))
+    );
+    """
+    db.execute(V2_DDL)
+    db.execute("INSERT OR IGNORE INTO market_context_migrations(version,applied_at_utc)"
+               " VALUES(2,?)",(now_utc(),))
 
 def write_request_lineage(db,*,request_id,run_id,provider,metric,
                           interval_label,endpoint_path,requested_end_ms,
@@ -284,4 +365,3 @@ def save_cursor(db,provider,stream,cursor):
                "ON CONFLICT(provider,stream) DO UPDATE SET cursor=excluded.cursor,"
                "updated_utc=excluded.updated_utc",
                (provider,stream,str(cursor),now_utc()))
-
