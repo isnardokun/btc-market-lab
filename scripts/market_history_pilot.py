@@ -22,7 +22,8 @@ from ingestion.market_network_errors import error_category
 from ingestion.config import DB_PATH
 from ingestion.market_context_sources import download, SOURCE_URLS, parse_api_json
 from storage.market_context import (
-    installed, now_utc, raw_payload, store_derivative, get_cursor, save_cursor
+    installed, now_utc, raw_payload, store_derivative, get_cursor, save_cursor,
+    request_lineage_installed, write_request_lineage
 )
 
 CONFIG={
@@ -127,28 +128,62 @@ def collect_one_page(db,provider,metric,*,fetch=download):
         save_cursor(db,provider,stream,str(newest_checkpoint))
     return {"provider":provider,"metric":metric,"status":"success" if rows else "empty",
             "requests":1,"points":added,"source_sha256":digest[:16],
+            "_full_source_sha256":digest,
             "first_utc":dt.datetime.fromtimestamp(min(stamp for stamp,_,_ in rows)/1000,dt.timezone.utc).isoformat() if rows else None,
             "last_utc":dt.datetime.fromtimestamp(max(stamp for stamp,_,_ in rows)/1000,dt.timezone.utc).isoformat() if rows else None,
             "cursor_advanced":bool(rows),
             "provider_limit_caveat":"Binance OI only latest about one month" if provider=="binance" and metric=="open_interest" else "Provider availability must be independently assessed"}
 
 def execute(db,provider,metric,*,fetch=download):
+    # Production market schema v1 must be migrated under WAL-safe backup
+    # before any further historical request. No implicit schema mutation.
+    if not request_lineage_installed(db):
+        return {"provider":provider,"metric":metric,"status":"failed",
+                "requests":0,"points":0,"error_code":"SchemaV2Required"}
     uid=uuid.uuid4().hex
     db.execute("INSERT INTO market_source_runs(run_id,provider,started_utc,status)"
                " VALUES(?,?,?,'running')",(uid,provider,now_utc()))
     db.commit()
     attempts=0
+    request_params=None
+    attempt_stamp=now_utc()
+    endpoint_path=CONFIG[(provider,metric)][0]
+    page_size=CONFIG[(provider,metric)][1]
+    interval=CONFIG[(provider,metric)][2]
     def observed_fetch(url,params):
-        nonlocal attempts
+        nonlocal attempts,request_params,attempt_stamp
         attempts+=1
+        if attempts!=1 or not url.endswith(endpoint_path):
+            raise ValueError("One-page collector attempted unapproved HTTP call")
+        # Only capture explicit public pagination fields; no URL, key, headers
+        # or query strings are persisted in request lineage.
+        request_params={"endTime":int(params["endTime"]),
+                        "limit":int(params["limit"])}
+        if request_params["limit"]!=page_size:
+            raise ValueError("Unexpected historical page limit")
+        attempt_stamp=now_utc()
         return fetch(url,params)
     try:
         with db:
             data=collect_one_page(db,provider,metric,fetch=observed_fetch)
+            digest=data.pop("_full_source_sha256")
+            write_request_lineage(
+                db,request_id="req-"+uid,run_id=uid,
+                provider=provider,metric=metric,interval_label=interval,
+                endpoint_path=endpoint_path,
+                requested_end_ms=request_params["endTime"],
+                requested_limit=request_params["limit"],
+                attempted_utc=attempt_stamp,ended_utc=now_utc(),
+                http_attempts=attempts,status=data["status"],
+                raw_sha256=digest,returned_rows=data["points"],
+                persisted_rows=data["points"],
+                first_observed_utc=data["first_utc"],
+                last_observed_utc=data["last_utc"])
             db.execute(
                 "UPDATE market_source_runs SET ended_utc=?,status=?,requests=?,points=? "
                 "WHERE run_id=?",
                 (now_utc(),data["status"],attempts,data["points"],uid))
+        data["request_lineage_logged"]=True
         return data
     except Exception as exc:
         db.rollback()
@@ -157,8 +192,18 @@ def execute(db,provider,metric,*,fetch=download):
             db.execute(
                 "UPDATE market_source_runs SET ended_utc=?,status='failed',requests=?,error_code=? "
                 "WHERE run_id=?",(now_utc(),attempts,reason,uid))
+            if attempts and request_params is not None:
+                write_request_lineage(
+                    db,request_id="req-"+uid,run_id=uid,
+                    provider=provider,metric=metric,interval_label=interval,
+                    endpoint_path=endpoint_path,
+                    requested_end_ms=request_params["endTime"],
+                    requested_limit=request_params["limit"],
+                    attempted_utc=attempt_stamp,ended_utc=now_utc(),
+                    http_attempts=1,status="failed",error_class=reason)
         return {"provider":provider,"metric":metric,"status":"failed",
-                "requests":attempts,"points":0,"error_code":reason}
+                "requests":attempts,"points":0,"error_code":reason,
+                "request_lineage_logged":bool(attempts and request_params)}
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
