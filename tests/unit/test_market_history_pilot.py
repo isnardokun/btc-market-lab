@@ -123,6 +123,33 @@ class OnePageHistoryTests(unittest.TestCase):
                                        "open_interest","--db",str(absent)]),0)
         self.assertFalse(absent.exists())
 
+    def test_oi_missing_boundary_stops_before_raw_archive(self):
+        self.seed("binance","open_interest")
+        gap=BASE-dt.timedelta(minutes=10)
+        res=history.execute(
+            self.db,"binance","open_interest",
+            fetch=lambda url,params:json.dumps(
+                self.payload("binance","open_interest",gap)).encode())
+        self.assertEqual(res["status"],"failed")
+        self.assertEqual(res["error_code"],"ValueError")
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0],1)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_raw_payloads").fetchone()[0],1)
+        self.assertIsNone(get_cursor(self.db,"binance",history.CURSOR_PREFIX+"open_interest"))
+
+    def test_oi_inside_page_gap_stops_before_cursor_write(self):
+        self.seed("bybit","open_interest")
+        first=BASE-dt.timedelta(minutes=15)
+        last=BASE-dt.timedelta(minutes=5)
+        payload=self.payload("bybit","open_interest",first)
+        payload["result"]["list"].append(
+            self.payload("bybit","open_interest",last)["result"]["list"][0])
+        res=history.execute(
+            self.db,"bybit","open_interest",
+            fetch=lambda url,params:json.dumps(payload).encode())
+        self.assertEqual(res["status"],"failed")
+        self.assertEqual(res["error_code"],"ValueError")
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0],1)
+
     def test_empty_page_does_not_fabricate_earlier_history(self):
         self.seed("binance","open_interest")
         empty=history.execute(self.db,"binance","open_interest",
