@@ -211,6 +211,24 @@ class MarketStorageTests(unittest.TestCase):
         self.assertEqual(row,("failed","ValueError"))
         self.assertNotIn("secret",str(row))
 
+    def test_missing_fred_calendar_config_is_failed(self):
+        with self.assertRaises(sources.MissingFREDAPIKey):
+            sources.fetch_fred(self.db,api_key=None)
+        state,attempts,points=ingest.run(self.db,"fred",fred_api_key=None)
+        self.assertEqual((state,attempts,points),("failed",0,0))
+        row=self.db.execute("SELECT error_code FROM market_source_runs").fetchone()
+        self.assertEqual(row[0],"MissingFREDAPIKey")
+
+    def test_http_failure_counts_attempt_and_status(self):
+        from urllib.error import HTTPError
+        def reject(url,params=None):
+            raise HTTPError(url,403,"Forbidden",None,None)
+        with patch.object(ingest,"download",side_effect=reject):
+            state,attempts,points=ingest.run(self.db,"bls")
+        self.assertEqual((state,attempts,points),("failed",1,0))
+        row=self.db.execute("SELECT requests,error_code FROM market_source_runs").fetchone()
+        self.assertEqual(row,(1,"HTTPError_403"))
+
     def test_dry_run_and_no_implicit_migration(self):
         self.assertEqual(ingest.main(["--db",str(self.path),"--sources","bls"]),0)
         db=self.db.execute("SELECT COUNT(*) FROM market_source_runs").fetchone()[0]
