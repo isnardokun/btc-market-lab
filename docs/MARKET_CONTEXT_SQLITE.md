@@ -342,3 +342,67 @@ inferir que una muestra sin huecos prueba todo el catálogo histórico.
 Funding no se fuerza a un intervalo fijo de ocho horas si el proveedor
 ofrece un intervalo distinto para el instrumento. Nunca activar cron
 intradía, Telegram ni refresh automático como parte del backfill.
+
+
+## Recuperación histórica por lotes acotados (Etapa 2F)
+
+Una página exitosa por stream es una prueba de paginación, **no** una
+autorización automática para descargar todo el historial. El operador
+puede ejecutar, tras una nueva instrucción de alcance específico,
+`scripts/market_history_batch.py` contra la **SQLite original**.
+
+Este ejecutor es **PLAN ONLY por defecto**:
+```bash
+python3 scripts/market_history_batch.py --provider binance --metric open_interest --max-pages 20
+```
+
+Y solo bajo autorización expresa de ChatGPT/usuario, tras nuevo backup
+WAL-safe validado, se permite la variante `--apply` para una fuente
+y métrica concreta:
+
+```bash
+python3 scripts/market_history_batch.py --apply --provider binance --metric open_interest --max-pages 20 --pause-seconds 2
+```
+
+Controles explícitos: máximo 100 páginas por invocación; mínima pausa
+de 1 segundo entre llamadas; ingesta **secuencial** sin concurrencia;
+una transacción por página que conserva BLOB original, SHA256, nuevas
+filas, cursor, estado y contador de la solicitud; `PRAGMA quick_check`
+y claves foráneas cada cinco páginas; parada inmediata en HTTP error,
+cursor no avanzado, respuesta vacía u otra inconsistencia. No reintenta
+errores ni elude 403/429. Después de cerrar las escrituras, ejecuta
+reconciliación fuente→SQLite y auditoría temporal de **solo lectura**.
+
+Los estados `page_budget_exhausted` y `empty` no garantizan
+que no haya más datos históricos; `historical_completeness`
+se mantiene `NOT_VERIFIED` hasta documentar el **límite externo de
+disponibilidad** por fuente, símbolo, período y su ventana. No
+continuar con nuevos lotes cuando un auditor falla, aunque ya se hayan
+almacenado páginas correctas: conservar backup y evidencia, reportar
+el punto exacto y esperar dictamen.
+
+**Contratos especiales:**
+- Binance OI 5m: solo aproximadamente el último mes desde consulta,
+  no se recuperan años por este endpoint.
+- Binance funding: acepta hasta 1.000 registros por petición según la
+  documentación; una respuesta con menos de 1.000 **no significa**
+  por sí sola fin de histórico.
+- Bybit OI 5m: máximo 200 registros; para historiales extensos se
+  necesitan múltiples páginas y control de ventana/latencia.
+- Bybit funding: máximo 200; frecuencia exacta puede variar por
+  instrumento/fecha, por lo que no se infieren huecos comparando
+  siempre contra ocho horas.
+
+**Deuda arquitectónica identificada:** `market_source_runs` sigue
+registrando proveedor y no un identificador de stream o parámetros
+públicos de la solicitud; `market_raw_payloads` tampoco guarda
+parámetros no secretos. Antes de automatizar backfills masivos
+recurrentes debe añadirse un registro persistente sanitizado de
+solicitud (run_id, stream, UTC, parámetros de paginación sin claves,
+SHA de respuesta, estado) enlazado a la respuesta cruda. Esta mejora
+de linaje es independiente de verificar valores y no puede inferirse
+retrospectivamente a partir de BLOB sin contexto.
+
+En ningún caso `--apply` de este programa autoriza activar cron
+intradía, Telegram, FRED/BLS, Farside ni la publicación de información
+no certificada.
