@@ -116,6 +116,8 @@ def inspect(db_path, *, now=None):
                                                "minutes":delta,"missing_slots_at_5m":missed})
                     if delta!=5 and delta>0 and delta<5:
                         report["issues"].append(key+": unexpected sub-5min spacing")
+                if missing_5m:
+                    report["issues"].append(key+": missing 5-minute slots inside stored observation window")
                 if observed and not all(t.minute%5==0 and t.second==0 for t in observed):
                     report["issues"].append(key+": timestamps not aligned to 5m boundaries")
             report["streams"][key]={
