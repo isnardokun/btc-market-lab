@@ -223,3 +223,53 @@ No renombrar retrospectivamente el contenido de origen ni sustituir
 un valor por un supuesto USD/USDT hasta confirmar el contrato y la
 moneda real. No entregar claves, BLOB, informes integrales o tokens
 en comentarios públicos de GitHub.
+
+
+## Auditoría temporal y cobertura antes de cualquier histórico
+
+Superar `PASS_SQLITE_TO_RAW` significa que las **filas existentes**
+concuerdan con sus BLOB originales verificados. NO significa que se haya
+guardado la totalidad de filas que la API entregó, que exista continuidad
+de 5 minutos, que la ventana histórica del proveedor esté cubierta, ni
+que una fuente externa haya calculado correctamente el valor.
+
+La segunda comprobación, de **solo lectura y sin red**, es:
+
+```bash
+python3 scripts/market_temporal_quality.py
+```
+
+Incluye, por Binance/Bybit y OI/funding: mínimo/máximo UTC real,
+número de observaciones, tiempo de última captura, delta entre registros,
+**huecos de 5 minutos dentro del tramo disponible**, timestamps
+duplicados o en el futuro y observaciones de respuestas originales
+que **no tienen ninguna fila persistida**. Registra el recuento original
+por BLOB y la diferencia contra las filas existentes; indica aparte
+cuando un SHA fuente previo fue reemplazado por uno posterior.
+
+Para funding NO se presuponen ciclos fijos de 8 horas. Bybit documenta
+que la frecuencia depende del instrumento y puede variar; se requiere
+consultar `instruments-info` antes de declarar faltantes con base
+en un intervalo de liquidación. Las distribuciones de deltas se
+publican como diagnóstico, no como prueba automática de un gap.
+
+Estados:
+- `SNAPSHOT_INTERNAL_QA_OK`: las ventanas de observaciones disponibles
+  no presentan irregularidades detectadas con estas pruebas.
+- `REVIEW_REQUIRED`: se detectó un hueco temporal, fuente sin persistir,
+  duplicado, timestamp irregular o otro hallazgo.
+- `historical_completeness = NOT_VERIFIED`: **siempre** hasta contrastar
+  límites del proveedor, paginación, cursores, revisiones y calendario de
+  operaciones. Sin un backfill formal no existe completitud demostrada.
+
+No ejecutar `--history` para intentar borrar un error del auditor: primero
+revisar el alcance del proveedor y autorizar la ingesta, con cuotas,
+respaldo y checkpoint por serie. Binance Open Interest 5m está limitado
+por su proveedor aproximadamente al último mes; no prometer años de datos.
+La estrategia de históricos **debe ser específica por proveedor y métrica**.
+
+La evidencia técnica se puede entregar a ChatGPT como JSON de salida
+saneado/Markdown privado. No subir SQLite, BLOB, tokens, recibos Telegram,
+archivos de variables de entorno ni datos de terceros al repositorio
+público. El reporte del Publication Gate del flujo legacy es independiente
+de la certificación de estos nuevos datasets.
