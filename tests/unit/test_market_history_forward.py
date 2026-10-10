@@ -39,7 +39,11 @@ def _aligned_utc(minutes_in_past=20):
     """Return a UTC datetime aligned to 5-min boundary, minutes_in_past in the past."""
     now_ts = int(dt.datetime.now(dt.timezone.utc).timestamp())
     aligned_ts = (now_ts // 300) * 300
-    return dt.datetime.fromtimestamp(aligned_ts, dt.timezone.utc) - dt.timedelta(minutes=minutes_in_past)
+    # All OI observations, including the seeded historical MAX, MUST be
+    # aligned to UTC :00/:05. E.g. 26 minutes becomes 30, not minute :34.
+    aligned_minutes = ((minutes_in_past + 4) // 5) * 5
+    return (dt.datetime.fromtimestamp(aligned_ts, dt.timezone.utc)
+            - dt.timedelta(minutes=aligned_minutes))
 
 
 class ForwardPilotTests(unittest.TestCase):
