@@ -275,8 +275,13 @@ def fetch_bls(db,*,fetch=download):
          source_url="https://www.bls.gov/schedule/news_release/",sha=sha,state=state))
          for uid,title,date,stamp,precision,state in events)
 
+class MissingFREDAPIKey(ValueError):
+    """Missing configuration is an ingestor failure, never an empty release calendar."""
+
+
 def fetch_fred(db,*,fetch=download,api_key=None):
-    if not api_key:return 0,0
+    if not api_key:
+        raise MissingFREDAPIKey("No FRED key available in collector process")
     url=SOURCE_URLS["fred"]
     # FRED releases have source calendar dates, NOT confirmed release hours.
     body=fetch(url,{"api_key":api_key,"file_type":"json","limit":1000,
