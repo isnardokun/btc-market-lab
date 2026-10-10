@@ -56,7 +56,15 @@ class ReadOnlyAggregateGateTests(unittest.TestCase):
             "TEMPORAL": {
                 "quality_state": "SNAPSHOT_INTERNAL_QA_OK",
                 "historical_completeness": "NOT_VERIFIED", "issues": [],
-                "streams": {"bybit_open_interest": {"rows": 1}},
+                "streams": {
+                    name: {
+                        "rows": 1, "valid_timestamps": 1,
+                        "duplicate_timestamps": 0,
+                        "five_minute_gaps_inside_observed_window": 0
+                        if name.endswith("_open_interest") else None,
+                    }
+                    for name in gate.REQUIRED_STREAMS
+                },
                 "source_rows_unstored": [],
             },
             "LINEAGE": {
@@ -105,6 +113,29 @@ class ReadOnlyAggregateGateTests(unittest.TestCase):
                          "historical_completeness": "VERIFIED"}
         }))
         self.assertIn("TEMPORAL_AUDIT_BLOCKED", result["issues"])
+
+    def test_temporal_fake_pass_with_missing_stream_or_gap_is_blocked(self):
+        for corrupted in (
+            {"streams": {"bybit_open_interest": {
+                "rows": 1, "valid_timestamps": 1,
+                "duplicate_timestamps": 0,
+                "five_minute_gaps_inside_observed_window": 0}}},
+            {"streams": {
+                **self.outputs()["TEMPORAL"]["streams"],
+                "binance_open_interest": {
+                    "rows": 3, "valid_timestamps": 3,
+                    "duplicate_timestamps": 0,
+                    "five_minute_gaps_inside_observed_window": 2,
+                },
+            }},
+        ):
+            with self.subTest(corrupted=corrupted):
+                result = gate.evaluate(
+                    self.db, expected_backward=1,
+                    auditors=self.audits({"TEMPORAL": corrupted}),
+                )
+                self.assertEqual(result["state"], "BLOCKED")
+                self.assertIn("TEMPORAL_AUDIT_BLOCKED", result["issues"])
 
     def test_lineage_no_receipts_yet_is_not_a_pass(self):
         result = gate.evaluate(self.db, expected_backward=1, auditors=self.audits({
