@@ -543,5 +543,149 @@ class ForwardPilotTests(unittest.TestCase):
         self.assertFalse(result.get("cursor_advanced"))
 
 
+    def test_failed_http_persists_failed_run_and_receipt(self):
+        """The page rollback must never erase the failed-attempt provenance."""
+        self._seed_v3()
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            result = forward.execute(db, "bybit", "open_interest",
+                                     fetch=self._raise_http_error())
+            self.assertEqual(result["status"], "failed")
+            self.assertTrue(result["request_lineage_logged"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(
+                db.execute("SELECT status,requests,points FROM market_source_runs").fetchall(),
+                [("failed", 1, 0)])
+            self.assertEqual(
+                db.execute(
+                    "SELECT direction,status,http_attempts,raw_sha256,persisted_rows "
+                    "FROM market_request_lineage").fetchall(),
+                [("forward", "failed", 1, None, 0)])
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM market_source_cursors").fetchone()[0], 0)
+
+    def test_invalid_oi_row_rejects_page_without_cursor(self):
+        self._seed_v3()
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            max_utc = db.execute(
+                "SELECT MAX(observed_utc) FROM market_derivatives").fetchone()[0]
+            stamp = int(dt.datetime.fromisoformat(max_utc).timestamp() * 1000) + 300000
+            body = json.dumps({
+                "retCode": 0,
+                "result": {"category": "linear", "symbol": "BTCUSDT",
+                           "list": [{"timestamp": str(stamp),
+                                     "openInterest": "12"}, 12]}
+            }).encode()
+            result = forward.execute(db, "bybit", "open_interest",
+                                     fetch=lambda _url, _params: body)
+            self.assertEqual(result["status"], "failed")
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM market_source_cursors").fetchone()[0], 0)
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM market_request_lineage "
+                           "WHERE status='failed'").fetchone()[0], 1)
+
+    def test_auditor_valid_102_backward_plus_1_forward(self):
+        """A valid mixed-direction dataset MUST pass, not merely count issues."""
+        from scripts.market_request_lineage_audit import audit
+        path = "/v5/market/open-interest"
+        endpoint = "https://api.bybit.com" + path
+        base = _aligned_utc(102 * 5 + 25)
+        self._seed_v3()
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            # Remove unrelated seed fixture: audit concerns only provenance rows.
+            db.execute("DELETE FROM market_derivatives")
+            db.execute("DELETE FROM market_raw_payloads")
+            for i in range(103):
+                stamp = base + dt.timedelta(minutes=5 * i)
+                at = stamp.isoformat()
+                ms = int(stamp.timestamp() * 1000)
+                body = json.dumps({
+                    "retCode": 0, "result": {
+                        "category": "linear", "symbol": "BTCUSDT",
+                        "list": [{"timestamp": str(ms),
+                                  "openInterest": str(20000 + i)}]}
+                }).encode()
+                sha = dbm.raw_payload(db, "bybit", endpoint, body,
+                                      "application/json")
+                changed = dbm.store_derivative(
+                    db, provider="bybit", symbol="BTCUSDT", metric="open_interest",
+                    observed_utc=at, interval_label="5m",
+                    value=float(20000 + i), unit="BTC", endpoint=endpoint, sha=sha)
+                self.assertTrue(changed)
+                uid = f"mix-run-{i:03}"
+                req_id = f"mix-req-{i:03}"
+                db.execute(
+                    "INSERT INTO market_source_runs "
+                    "(run_id,provider,started_utc,ended_utc,status,requests,points) "
+                    "VALUES(?,?,?,?,'success',1,1)",
+                    (uid, "bybit", at, at))
+                direction = "backward" if i < 102 else "forward"
+                dbm.write_request_lineage(
+                    db, request_id=req_id, run_id=uid, provider="bybit",
+                    metric="open_interest", interval_label="5m",
+                    endpoint_path=path, requested_end_ms=ms + 300000 - 1,
+                    requested_start_ms=ms if direction == "forward" else None,
+                    requested_limit=200, attempted_utc=at, ended_utc=at,
+                    http_attempts=1, status="success", raw_sha256=sha,
+                    returned_rows=1, persisted_rows=1,
+                    first_observed_utc=at, last_observed_utc=at,
+                    direction=direction)
+                if direction == "forward":
+                    db.execute(
+                        "INSERT INTO market_request_acquisitions "
+                        "(acquired_id,request_id,provider,endpoint_path,raw_sha256,acquired_utc) "
+                        "VALUES(?,?,?,?,?,?)",
+                        ("mix-acq-forward", req_id, "bybit", path, sha, at))
+            first_ms = int(base.timestamp() * 1000)
+            newest_ms = first_ms + 102 * 300000
+            dbm.save_cursor(db, "bybit", "history_backward_v1_open_interest",
+                            str(first_ms - 1))
+            dbm.save_cursor(db, "bybit", "forward_v1_open_interest",
+                            str(newest_ms))
+        report = audit(self.path)
+        self.assertEqual(report["quality_state"], "PASS_REQUEST_LINEAGE",
+                         report["issues"][:5])
+        self.assertEqual(report["requests_verified"], 103)
+        self.assertEqual(report["backward_requests"], 102)
+        self.assertEqual(report["forward_requests"], 1)
+
+    def test_cli_apply_commits_real_sqlite_with_mocked_http(self):
+        """Production CLI path, mock network, durable SQLite row, exit 0 on valid QA."""
+        self._seed_v3()
+        with sqlite3.connect(self.path) as db:
+            base = db.execute(
+                "SELECT MAX(observed_utc) FROM market_derivatives").fetchone()[0]
+        next_stamp = int(dt.datetime.fromisoformat(base).timestamp() * 1000) + 300000
+        payload = json.dumps({
+            "retCode": 0, "result": {
+                "category": "linear", "symbol": "BTCUSDT",
+                "list": [{"timestamp": str(next_stamp), "openInterest": "25001"}]}
+        })
+        # Exercise the actual CLI open/commit path, keeping the fetch offline.
+        # External QA may reject the incomplete single-stream fixture; that is
+        # expected, but the committed page and exit=3 make the failure explicit.
+        import subprocess
+        script = (
+            "import sys; from scripts import market_history_forward as m; "
+            f"body={payload.encode()!r}; original=m.execute; "
+            "m.execute=lambda db,p,metric: original(db,p,metric,fetch=lambda u,q:body); "
+            f"sys.exit(m.main(['--provider','bybit','--metric','open_interest','--apply','--db',{str(self.path)!r}]))"
+        )
+        cp = subprocess.run([sys.executable, "-c", script],
+                            cwd=str(ROOT), capture_output=True, text=True)
+        self.assertEqual(cp.returncode, 3, cp.stderr + cp.stdout)
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM market_derivatives").fetchone()[0], 2)
+            self.assertEqual(
+                db.execute("SELECT COUNT(*) FROM market_request_lineage").fetchone()[0], 1)
+            self.assertEqual(
+                db.execute("SELECT status FROM market_source_runs").fetchone()[0], "success")
+
+
 if __name__ == "__main__":
     unittest.main()
