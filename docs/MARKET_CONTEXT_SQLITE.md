@@ -449,3 +449,51 @@ rutas y proxy en el equipo, sin evadir controles. Si solo falla un
 host, entregar esa diferencia para evaluación. Si ambos resuelven,
 todavía faltará una validación HTTPS expresa y limitada antes de
 reanudar el lote; DNS correcto no autoriza nuevos backfills.
+
+
+## Fase 2F-HTTPS — Una prueba de conectividad, sin recuperar mercado
+
+El diagnóstico 2F-DIAG observó `RESOLVED` para
+`fapi.binance.com` y `api.bybit.com`, con
+`http_attempts=0`. Esto valida la resolución DNS en esa ejecución,
+**no** el handshake TLS, alcance del endpoint, ni disponibilidad de
+histórico. `ssl_cert_file_available=false` con un directorio CA
+disponible tampoco demuestra una falla TLS.
+
+La prueba oficial Binance USD-M Futures `GET /fapi/v1/ping`
+consume un peso IP de 1 y sirve exclusivamente para comprobar HTTPS.
+Nunca permite inferir el alcance de `openInterestHist`.
+
+El nuevo comando es **PLAN ONLY por defecto**:
+
+```bash
+python3 scripts/binance_https_probe.py
+```
+
+Una vez **autorizada expresamente** la única prueba HTTPS, ejecutar:
+
+```bash
+python3 scripts/binance_https_probe.py --probe
+printf 'ping_exit=%s\n' "$?"
+```
+
+El cliente intenta exactamente **un GET** con validación de
+certificados del sistema (sin `-k`, sin desactivar TLS), timeout
+de ocho segundos, sin seguir redirecciones ni reintentar; no envía
+API keys, consulta históricos, escribe SQLite ni imprime cuerpos,
+headers, IP, proxy o credenciales. Acepta HTTP 200 con cuerpo
+vacío u objeto JSON vacío `{}`. Publica solo estado HTTP,
+categoría de error sanitizada y latencia.
+
+- `PASS_HTTPS_CONNECTIVITY` y exit 0: **únicamente** TLS/HTTP ping
+  aprobado. **NO** autoriza repetir página OI ni lotes.
+- Exit 1 o `HTTPError_<status>`, `URLError_DNS/TLS/TIMEOUT/...`:
+  detener sin reintentar; preservar evidencia local.
+- Un error de certificado debe resolverse mediante configuración
+  de confianza legítima. No eludir certificados, bloqueos regionales,
+  controles de proveedor, 403 o 429.
+
+La autorización anterior de 56 páginas permanece suspendida.
+Tras analizar el resultado de ping, ChatGPT decidirá sobre una
+sola consulta controlada al endpoint OI o una alternativa legítima
+que respete licencias, restricciones y límites del proveedor.
