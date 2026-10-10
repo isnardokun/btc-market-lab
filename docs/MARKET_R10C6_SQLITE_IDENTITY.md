@@ -17,8 +17,9 @@ presentarse un resultado PASS con atribución a la DB equivocada.
 1. Nueva función `scripts/market_readonly_snapshot.py::verify_read_snapshot`.
 2. Exige una instancia real de `sqlite3.Connection`, una transacción
    activa y `PRAGMA query_only=ON`.
-3. Valida `PRAGMA database_list`: solo se admite `main` y ninguna
-   otra base `ATTACH`. Rechaza conexiones a SQLite en memoria.
+3. Valida `PRAGMA database_list`: solo admite `main` como base persistente
+   y el esquema interno `temp` sin ruta que SQLite puede generar al ejecutar
+   `PRAGMA integrity_check`; rechaza bases externas `ATTACH` y SQLite en memoria.
 4. Compara la ruta canónica real de `main` con `Path(--db).resolve(strict=True)`.
    Los symlinks hacia el MISMO archivo son válidos; otros archivos,
    aun con contenido idéntico, están prohibidos.
