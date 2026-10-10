@@ -497,3 +497,53 @@ La autorización anterior de 56 páginas permanece suspendida.
 Tras analizar el resultado de ping, ChatGPT decidirá sobre una
 sola consulta controlada al endpoint OI o una alternativa legítima
 que respete licencias, restricciones y límites del proveedor.
+
+
+## Etapa 2F-OI: comprobación mínima del endpoint histórico de Binance
+
+Tras confirmar `HTTP 200` con TLS en `GET /fapi/v1/ping`,
+**solo** se acredita el acceso a ese endpoint. Las estadísticas
+históricas de OI están en una ruta diferente:
+`GET /futures/data/openInterestHist`, con `symbol=BTCUSDT`,
+`period=5m`, `endTime` y `limit`. Binance documenta un máximo
+de 500 y disponibilidad aproximada del último mes para esa serie.
+
+El diagnóstico propuesto es **una única solicitud**, no un backfill:
+`scripts/binance_oi_endpoint_probe.py` calcula, en la SQLite
+existente y abierta con `mode=ro`, el `endTime` anterior al
+`MIN(observed_utc)` de Binance OI; comprueba el cursor histórico.
+Si no coinciden, **no realiza HTTP**. Si coinciden, mediante
+`--probe` pide **una sola fila (`limit=1`)** y verifica si
+corresponde exactamente a los cinco minutos anteriores al mínimo
+almacenado.
+
+**PLAN — cero red, cero escritura:**
+
+```bash
+python3 scripts/binance_oi_endpoint_probe.py
+```
+
+**Solo después de autorización de una petición de diagnóstico:**
+
+```bash
+python3 scripts/binance_oi_endpoint_probe.py --probe
+printf 'oi_endpoint_exit=%s\n' "$?"
+```
+
+El cliente usa TLS validado contra el CA del sistema, máximo ocho
+segundos, sin seguir redirecciones, sin reintentos, sin credenciales,
+sin alterar `market_source_runs`, BLOB, cursores ni observaciones.
+Solo imprime el estado HTTP, categoría de error, número de filas,
+timestamp público esperado/observado y SHA parcial del cuerpo;
+**el cuerpo completo se desecha y no es una ingesta científica**.
+Cualquier dato histórico destinado a los análisis debe volver a
+recuperarse con el colector autorizado que archive el BLOB crudo y
+su linaje en SQLite.
+
+Si responde HTTP 200 pero la lista está vacía, la fila no coincide
+con el corte esperado o el cuerpo tiene un formato inesperado, el
+diagnóstico **no aprueba** el endpoint; no inventar la observación.
+Un ping correcto NO constituye prueba de cobertura histórica,
+permiso a reanudar los 56 pedidos suspendidos ni aprobación de ETF,
+BLS, FRED, informe o Telegram. Parar después del único GET incluso
+si el resultado es `PASS_OI_ENDPOINT_AND_BOUNDARY`.
