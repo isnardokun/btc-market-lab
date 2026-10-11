@@ -857,10 +857,10 @@ class FrozenLegacyTransportTests(unittest.TestCase):
 
     def test_recovery_rejects_successful_prefix_unit_scale_change_before_http(self):
         rbn=self.as_frozen_page(scenarios()[0])
-        yahoo=self.as_frozen_page(scenarios()[3])
+        bitview=self.as_frozen_page(scenarios()[1])
         failure=self.as_frozen_page(scenarios()[4],status=503,body=b"503")
-        prior=run_synthetic_batch(self.path,self.locks,[rbn,yahoo,failure],now=NOW)
-        spec,start,end,payload=scenarios()[3]
+        prior=run_synthetic_batch(self.path,self.locks,[rbn,bitview,failure],now=NOW)
+        spec,start,end,payload=scenarios()[1]
         from ingestion.package_a_contracts import SeriesSpec
         fake_unit=SeriesSpec(spec.provider,spec.metric,spec.symbol,spec.frequency,
                              "EUR",spec.raw_scale)
