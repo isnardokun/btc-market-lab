@@ -326,7 +326,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertFalse(evidence["upstream_requests_verified"])
         with sqlite3.connect(self.path) as db:
             self.assertEqual(db.execute(
-                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(3,)])
             fred=db.execute(
                 "SELECT request_params_json FROM package_a_request_provenance "
                 "WHERE endpoint_origin='api.stlouisfed.org'").fetchone()[0]
@@ -339,7 +339,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         # Build a faithful old version-1 Package A schema in disposable SQLite.
         with sqlite3.connect(self.path) as db:
             db.execute("PRAGMA foreign_keys=ON")
-            for statement in ledger.DDL[:-1]:
+            for statement in ledger.DDL[:-3]:
                 db.execute(statement)
             db.execute(
                 "INSERT INTO package_a_schema_migrations VALUES(1,?)", (NOW,))
@@ -353,7 +353,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
             db.execute("PRAGMA foreign_keys=ON")
             ledger.initialize(db,now=NOW)
             self.assertEqual(db.execute(
-                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(3,)])
             self.assertEqual(db.execute(
                 "SELECT COUNT(*) FROM package_a_request_provenance").fetchone()[0],0)
             self.assertEqual(db.execute(
@@ -362,7 +362,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                 "receipts_without_frozen_request_metadata"],1)
             ledger.initialize(db,now=NOW)
             self.assertEqual(db.execute(
-                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(3,)])
 
     def test_tampered_request_metadata_blocks_new_atomic_page_write(self):
         first=scenarios()[0]
