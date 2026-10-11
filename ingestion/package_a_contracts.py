@@ -185,18 +185,26 @@ def parse_fixture(spec, payload, *, start, end):
                 if when in seen_days:
                     raise ValueError("Duplicate Yahoo daily session date")
                 seen_days.add(when)
-                lo = quote.get("low")
-                hi = quote.get("high")
-                if lo is not None and hi is not None and (
-                        lo[i] is not None and hi[i] is not None and
-                        scalar(lo[i]) > scalar(hi[i])):
-                    raise ValueError("Yahoo low exceeds high")
+                bar = {}
+                for field in fields:
+                    part = quote.get(field)
+                    bar[field] = (
+                        scalar(part[i]) if part is not None and
+                        part[i] is not None else None)
+                if bar["volume"] is not None and bar["volume"] < 0:
+                    raise ValueError("Negative Yahoo native volume")
+                for field in ("open", "high", "low", "close"):
+                    if bar[field] is not None and bar[field] <= 0:
+                        raise ValueError("Nonpositive Yahoo " + field)
+                low,high = bar["low"],bar["high"]
+                if low is not None and high is not None:
+                    if low > high:
+                        raise ValueError("Yahoo low exceeds high")
+                    if any(bar[k] is not None and
+                           not low <= bar[k] <= high for k in ("open","close")):
+                        raise ValueError("Yahoo open or close outside OHLC range")
                 if value is None:
                     continue
-                if spec.metric == "volume" and scalar(value) < 0:
-                    raise ValueError("Negative Yahoo native volume")
-                if spec.metric != "volume" and scalar(value) <= 0:
-                    raise ValueError("Nonpositive Yahoo price")
                 out.append(_point(when, value))
         except (KeyError, IndexError, TypeError, AttributeError) as exc:
             raise ValueError("Malformed Yahoo fixture") from exc
