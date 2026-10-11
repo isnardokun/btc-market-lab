@@ -1,4 +1,5 @@
 """R10-E.2 SHADOW policy gate regression tests. Synthetic JSON; zero live IO."""
+import ast
 import contextlib
 import copy
 import datetime as dt
@@ -161,6 +162,21 @@ class TestR10E2ShadowGate(unittest.TestCase):
                            "--now-utc", NOW.isoformat()])
             self.assertEqual(rc, 2)
             self.assertEqual(json.loads(captured.getvalue())["decision"], "BLOCKED_BAD_INPUT")
+
+    def test_runner_suite_count_and_registration(self):
+        runner_path = Path(__file__).resolve().parents[1] / "run_all.py"
+        parsed = ast.parse(runner_path.read_text(encoding="utf-8"))
+        declared = [
+            ast.literal_eval(node.value)
+            for node in parsed.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "TESTS" for t in node.targets)
+        ]
+        self.assertEqual(len(declared), 1)
+        suites = declared[0]
+        self.assertEqual(len(suites), 40)
+        self.assertEqual(
+            sum("tests.unit.test_market_r10e2_shadow_gate" in command for _, command in suites), 1)
 
     def test_invalid_json_and_naive_utc_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
