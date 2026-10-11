@@ -91,6 +91,12 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32,
         outcomes.append({
             "index": index, "source": page.source.provider,
             "metric": page.source.metric, "state": result["state"],
+            # Preserve classified failure reason in the whole-batch outcome,
+            # not only the raw page receipt. This permits a retry policy to
+            # distinguish 429/503/timeout/200-parse-rejection without
+            # claiming that a rejected page advanced its cursor.
+            "status": result.get("status","blocked"),
+            "failure_class": result.get("failure_class"),
             "receipt_id": result.get("receipt_id"),
             "new_rows": result.get("new_rows",0),
             "cursor_advanced": result.get("cursor_advanced",False),
