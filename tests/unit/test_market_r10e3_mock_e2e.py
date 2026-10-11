@@ -1,6 +1,9 @@
 """R10-E.3 full synthetic v3 forward test: mocked HTTP and temp SQLite only."""
 import ast
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from scripts.market_r10e3_mock_e2e import TABLES, run_mock_cycle
@@ -116,6 +119,34 @@ class TestR10E3MockOnePage(unittest.TestCase):
         self.assertFalse(any(isinstance(n, ast.Call)
                              and isinstance(n.func, ast.Attribute)
                              and n.func.attr == "urlopen" for n in ast.walk(tree)))
+
+    def test_runner_propagates_failed_suite_exit_code(self):
+        # Reproduce the runner with ONLY a synthetic failing command.
+        # No test in this fixture calls APIs or opens project databases.
+        runner = Path(__file__).resolve().parents[1] / "run_all.py"
+        tree = ast.parse(runner.read_text(encoding="utf-8"))
+        declarations = [
+            node for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "TESTS"
+                    for t in node.targets)
+        ]
+        self.assertEqual(len(declarations), 1)
+        declarations[0].value = ast.parse(
+            repr([("Synthetic failing suite",
+                   sys.executable + " -c 'import sys;sys.exit(7)'")]),
+            mode="eval").body
+        with tempfile.TemporaryDirectory() as temp_dir:
+            test_dir = Path(temp_dir) / "tests"
+            test_dir.mkdir()
+            synthetic_runner = test_dir / "run_all.py"
+            synthetic_runner.write_text(ast.unparse(tree) + "\\n", encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, str(synthetic_runner)],
+                cwd=temp_dir, capture_output=True, text=True, timeout=10)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("Some tests failed", proc.stdout)
+        self.assertIn("Synthetic failing suite", proc.stdout)
 
     def test_runner_registers_exactly_one_e3_and_preserves_predecessors(self):
         target = Path(__file__).resolve().parents[1] / "run_all.py"
