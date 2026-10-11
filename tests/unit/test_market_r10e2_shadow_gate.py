@@ -176,9 +176,20 @@ class TestR10E2ShadowGate(unittest.TestCase):
         ]
         self.assertEqual(len(declared), 1)
         suites = declared[0]
-        self.assertEqual(len(suites), 40)
-        self.assertEqual(
-            sum("tests.unit.test_market_r10e2_shadow_gate" in command for _, command in suites), 1)
+        # R10-E.2 requires its original registry baseline, not a permanently
+        # fixed total: subsequent E.3/E.4 suites must not break this test.
+        self.assertGreaterEqual(len(suites), 40)
+        labels = [label for label, _ in suites]
+        commands = [command for _, command in suites]
+        self.assertEqual(len(labels), len(set(labels)))
+        self.assertEqual(len(commands), len(set(commands)))
+        for module in (
+            "tests.unit.test_market_r10e_plan_only",
+            "tests.unit.test_market_r10e_dispatch_offline",
+            "tests.unit.test_market_r10e2_shadow_gate",
+        ):
+            with self.subTest(module=module):
+                self.assertEqual(sum(module in command for command in commands), 1)
 
     def test_cli_has_no_apply_argument(self):
         with contextlib.redirect_stderr(StringIO()) as stderr:
