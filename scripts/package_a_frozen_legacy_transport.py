@@ -10,6 +10,7 @@ This proves compatibility with source request construction under mock HTTP,
 NOT real upstream retention, entitlement, API schema or deployment readiness.
 """
 import datetime as dt
+from contextlib import nullcontext
 import io
 import json
 from urllib.error import HTTPError
@@ -189,7 +190,7 @@ def _legacy_fake_fetch(spec, start, end, frozen):
 
 def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
                            *, raw_bytes, status_code=200, now, fault=None,
-                           _batch_run=None):
+                           _batch_run=None, _parent_lock_held=False):
     """Full lock -> real legacy builder -> frozen HTTP -> RAW/SQL on temp DB.
 
     Not a network client. Never accepts an HTTP callable or arbitrary URL.
@@ -206,7 +207,14 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
     try:
         # Required global lock begins BEFORE even the fake HTTP operation.
         # The fixture-only page writer is explicitly told the parent holds it.
-        with hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE):
+        # Only the marker-guarded offline recovery engine may request
+        # parent-owned lock reuse. Do not obtain the same nonrecursive
+        # flock twice when the parent covers preflight + all pages.
+        if type(_parent_lock_held) is not bool:
+            raise ValueError("Invalid synthetic parent lock marker")
+        lock_context = (nullcontext() if _parent_lock_held else
+                        hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE))
+        with lock_context:
             try:
                 parsed = _legacy_fake_fetch(spec, start, end, frozen)
             except (HTTPError, RuntimeError, TimeoutError):
