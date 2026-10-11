@@ -49,6 +49,7 @@ TESTS = [
     ("Unit: R10-E.4 Synthetic Full Cycle", "python3 -m unittest -v tests.unit.test_market_r10e4_synthetic_cycle"),
     ("Unit: R10-E.5 Synthetic Backward Coverage", "python3 -m unittest -v tests.unit.test_market_r10e5_backward_fixture_plan"),
     ("Unit: R10-E.6 ResearchBitcoin Tier 2 Synthetic Entitlement", "python3 -m unittest -v tests.unit.test_market_r10e6_rbn_tier2_shadow"),
+    ("Unit: R10-E.7 Read-Only Multi-Provider Archive Manifest", "python3 -m unittest -v tests.unit.test_market_r10e7_ro_archive_manifest"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
