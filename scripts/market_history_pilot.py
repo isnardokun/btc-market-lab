@@ -12,13 +12,13 @@ import argparse
 import datetime as dt
 import json
 from pathlib import Path
-from scripts.package_a_writer_guard import run_with_optional_writer_lock
 import sqlite3
 import sys
 import uuid
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from ingestion.market_network_errors import error_category
 from ingestion.config import DB_PATH
 from ingestion.market_context_sources import download, SOURCE_URLS, parse_api_json
