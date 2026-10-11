@@ -12,6 +12,7 @@ import argparse
 import datetime as dt
 import json
 from pathlib import Path
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 import sqlite3
 import sys
 import uuid
@@ -211,7 +212,16 @@ def main(argv=None):
     p.add_argument("--metric",choices=("open_interest","funding_settled"),required=True)
     p.add_argument("--apply",action="store_true",help="Explicit one-page network+SQLite write")
     p.add_argument("--db",type=Path,default=Path(DB_PATH))
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Explicit shared writer lock directory for apply")
     args=p.parse_args(argv)
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda:_run_pilot_args(args), label="oi-backward-pilot")
+    return _run_pilot_args(args)
+
+
+def _run_pilot_args(args):
     if not args.apply:
         print("PLAN: one backward history page; no HTTP or SQLite writes")
         print("Source: "+args.provider+"/"+args.metric+"; requires approved backup")
