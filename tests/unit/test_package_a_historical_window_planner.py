@@ -308,5 +308,24 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
         self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(3,)])
 
 
+
+    def test_window_plan_hash_binds_native_query_unit_and_scale(self):
+        baseline=plan_offline_historical_windows(BITVIEW,SEPT,OCT)
+        unit=SeriesSpec("bitview","mvrv","BTC","d1","index")
+        scale=SeriesSpec("bitview","mvrv","BTC","d1","ratio","native_ratio")
+        other=plan_offline_historical_windows(unit,SEPT,OCT)
+        another=plan_offline_historical_windows(scale,SEPT,OCT)
+        self.assertNotEqual(baseline["window_plan_sha256"],
+                            other["window_plan_sha256"])
+        self.assertNotEqual(baseline["window_plan_sha256"],
+                            another["window_plan_sha256"])
+        self.assertEqual([x["request_contract_sha256"] for x in baseline["windows"]],
+                         [x["request_contract_sha256"] for x in other["windows"]])
+        for row in baseline["windows"]:
+            self.assertEqual(len(row["request_contract_sha256"]),64)
+            self.assertNotIn("api_key",str(row))
+        self.assertFalse(baseline["provider_entitlement_verified"])
+
+
 if __name__=="__main__":
     unittest.main()
