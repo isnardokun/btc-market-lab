@@ -239,3 +239,44 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         stored=self.rows("SELECT raw_payload FROM package_a_receipts")[0][0]
         self.assertNotIn(FAKE_KEY.encode(),stored)
         self.assertNotIn(b'api_key',stored)
+
+
+    def test_binance_429_opaque_html_body_preserves_byte_exact_raw(self):
+        scenario=scenarios()[4]
+        opaque=b'<html><body>rate limit / request denied</body></html>'
+        report=self.apply(scenario,status=429,source_raw=opaque)
+        self.assertEqual(report["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(report["frozen_http_requests"],1)
+        self.assertEqual(report["page_provenance_gate"],"RAW_SQL_LINEAGE_PASS")
+        self.assertEqual(self.rows("SELECT raw_payload,raw_sha256 FROM package_a_receipts"),
+                         [(opaque,hashlib.sha256(opaque).hexdigest())])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_rbn_503_plain_text_body_is_not_falsely_interpreted_as_empty(self):
+        scenario=scenarios()[0]
+        opaque=b"temporarily unavailable"
+        outcome=self.apply(scenario,status=503,source_raw=opaque)
+        self.assertEqual(outcome["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(self.rows("SELECT status,http_status,raw_payload FROM package_a_receipts"),
+                         [("failed",503,opaque)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_successful_http_200_invalid_json_blocks_without_sql_mutation(self):
+        with self.assertRaises(json.JSONDecodeError):
+            self.apply(scenarios()[4],source_raw=b'{"broken":}')
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_failed_opaque_replay_does_not_fake_availability_or_cursor(self):
+        scenario=scenarios()[7]
+        opaque=b"503 Service Unavailable"
+        first=self.apply(scenario,status=503,source_raw=opaque)
+        second=self.apply(scenario,status=503,source_raw=opaque)
+        self.assertEqual(first["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(second["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["historical_completeness"],
+                         "NOT_VERIFIED")
