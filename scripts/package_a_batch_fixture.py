@@ -18,6 +18,8 @@ from scripts.package_a_ingest_fixture import (
 from scripts.package_a_frozen_legacy_transport import run_mocked_legacy_page
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 from scripts.package_a_ingest_fixture import LOCK_NAMESPACE
+from scripts.package_a_parent_lock import (hold_offline_parent_lease,
+    verify_offline_parent_lease)
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,8 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32,
     _fixture_guard(db_path, lock_dir)
     if type(_parent_lock_held) is not bool:
         raise ValueError("Invalid offline parent-lock marker")
+    if _parent_lock_held:
+        verify_offline_parent_lease(lock_dir)
     for page in pages:
         if not isinstance(page, (FixturePage, FrozenLegacyPage)) or not isinstance(page.source, SeriesSpec):
             raise ValueError("Typed synthetic fixture pages required")
@@ -241,7 +245,7 @@ def recover_synthetic_batch(db_path, lock_dir, pages, *, prior_run_id,
     if type(max_pages) is not int or not 1 <= max_pages <= 32:
         raise ValueError("Bounded recovery budget required")
     try:
-        with hold_writer_lock(lock_dir,namespace=LOCK_NAMESPACE):
+        with hold_offline_parent_lease(lock_dir):
             preflight=plan_synthetic_resume(db_path,lock_dir,pages,
                                              prior_run_id=prior_run_id)
             if preflight["remaining_pages"]==0:
