@@ -84,13 +84,15 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                     error = type(exc).__name__
             with sqlite3.connect(path) as db:
                 db.execute("PRAGMA foreign_keys=ON")
-                # Start a real OUTER transaction before schema savepoints,
-                # receipts, observations and cursor writes. Without BEGIN,
-                # RELEASE SAVEPOINT may COMMIT before the precommit audit.
-                # All HTTP-like fixtures and normalization ran before BEGIN;
-                # only short local SQLite work is inside this transaction.
-                db.execute("BEGIN IMMEDIATE")
+                # Keep the additive, self-contained SCHEMA migration outside
+                # the page transaction: an aborted FIRST page must preserve
+                # installed tables so crash/replay contracts remain valid.
                 ledger.initialize(db, now=now)
+                # A real OUTER transaction encloses ALL page writes and the
+                # precommit integrity gate. SAVEPOINT release cannot make a
+                # partial receipt/cursor durable before quality verification.
+                # All synthetic fetch/parse work happened before BEGIN.
+                db.execute("BEGIN IMMEDIATE")
                 if response.status_code != 200 or error:
                     category = "failed" if response.status_code != 200 else "rejected"
                     receipt = ledger.record_failure(
