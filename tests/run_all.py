@@ -69,6 +69,7 @@ TESTS = [
     ("Unit: Package A Daily Report and News Library Shared Lock", "python3 -m unittest -v tests.unit.test_package_a_report_library_lock"),
     ("Unit: Package A Source-Aware Offline Gap Candidates", "python3 -m unittest -v tests.unit.test_package_a_local_gap_candidates"),
     ("Unit: Package A Frozen Legacy HTTP Request Integration", "python3 -m unittest -v tests.unit.test_package_a_frozen_legacy_transport"),
+    ("Unit: Package A Source-Native Historical Pagination E2E", "python3 -m unittest -v tests.unit.test_package_a_historical_window_planner"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
