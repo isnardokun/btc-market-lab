@@ -8,6 +8,10 @@ import argparse
 import datetime as dt
 import json
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from scripts.market_r10e_plan_only import PAGE_LIMITS, SLOT_MS, UTC
 
