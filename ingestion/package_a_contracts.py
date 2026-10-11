@@ -90,8 +90,16 @@ class SeriesSpec:
             )
             if self.symbol != "BTCUSDT" or not supported or self.raw_scale != "native":
                 raise ValueError("Only BTCUSDT OI 5m or native funding settlement accepted")
-        if self.provider == "yahoo" and self.frequency != "d1":
-            raise ValueError("Only Yahoo daily fixture is supported")
+        if self.provider == "yahoo":
+            yahoo_metrics = {"open", "high", "low", "close", "volume"}
+            # Explicit fixture-only scope, not an entitlement claim. Shares
+            # volumes have no assumed currency conversion; BTC native volume
+            # may vary by Yahoo instrument/data contract.
+            expected_unit = "native_volume" if self.metric == "volume" else "USD"
+            if (self.frequency != "d1" or self.metric not in yahoo_metrics
+                    or self.symbol not in ("BTC-USD", "SPY", "GLD")
+                    or self.unit != expected_unit or self.raw_scale != "native"):
+                raise ValueError("Yahoo supported offline OHLCV scope mismatch")
         if self.provider == "fred" and self.frequency not in ("d1", "monthly", "weekly"):
             raise ValueError("Unsupported FRED cadence")
 
@@ -148,15 +156,49 @@ def parse_fixture(spec, payload, *, start, end):
             out.append(_point(daystamp(row["date"]), row["value"], vintage))
     elif spec.provider == "yahoo":
         try:
-            candle = payload["chart"]["result"][0]
+            chart = payload["chart"]
+            candle = chart["result"][0]
             ticks = candle["timestamp"]
-            quotes = candle["indicators"]["quote"][0]["close"]
-            if not isinstance(ticks, list) or not isinstance(quotes, list) or len(ticks) != len(quotes):
-                raise ValueError("Mismatched Yahoo chart arrays")
-            for tick, value in zip(ticks, quotes):
-                if value is not None:
-                    out.append(_point(epoch(tick, millis=False), value))
-        except (KeyError, IndexError, TypeError) as exc:
+            quote = candle["indicators"]["quote"][0]
+            values = quote[spec.metric]
+            if (not isinstance(ticks, list) or not isinstance(values, list)
+                    or len(ticks) != len(values) or not ticks):
+                raise ValueError("Mismatched Yahoo OHLCV quote arrays")
+            # Same bar data supports close-only legacy payloads. But if OHLC
+            # fields are present, their lengths and price range must be sane,
+            # even when the requested series is a different field.
+            fields = ("open", "high", "low", "close", "volume")
+            for field in fields:
+                part = quote.get(field)
+                if part is not None and (
+                        not isinstance(part, list) or len(part) != len(ticks)):
+                    raise ValueError("Malformed Yahoo quote length: " + field)
+            if chart.get("error") is not None:
+                raise ValueError("Yahoo chart error response")
+            seen_days = set()
+            for i, (tick, value) in enumerate(zip(ticks, values)):
+                moment = epoch(tick, millis=False)
+                # SPY/GLD regular sessions have nonmidnight UTC timestamps;
+                # store the UTC trading date, not an invented 00:00 exchange
+                # calendar grid. This does NOT certify NYSE holidays.
+                when = dt.datetime.combine(moment.date(), dt.time(), UTC)
+                if when in seen_days:
+                    raise ValueError("Duplicate Yahoo daily session date")
+                seen_days.add(when)
+                lo = quote.get("low")
+                hi = quote.get("high")
+                if lo is not None and hi is not None and (
+                        lo[i] is not None and hi[i] is not None and
+                        scalar(lo[i]) > scalar(hi[i])):
+                    raise ValueError("Yahoo low exceeds high")
+                if value is None:
+                    continue
+                if spec.metric == "volume" and scalar(value) < 0:
+                    raise ValueError("Negative Yahoo native volume")
+                if spec.metric != "volume" and scalar(value) <= 0:
+                    raise ValueError("Nonpositive Yahoo price")
+                out.append(_point(when, value))
+        except (KeyError, IndexError, TypeError, AttributeError) as exc:
             raise ValueError("Malformed Yahoo fixture") from exc
     elif spec.provider == "binance":
         if not isinstance(payload, list):
