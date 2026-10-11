@@ -22,7 +22,7 @@ from ingestion.market_context_sources import download, SOURCE_URLS
 from ingestion.package_a_contracts import SeriesSpec, utc
 from ingestion.researchbitcoin_catalog import BASE_URL, CATALOG
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
-from scripts.package_a_parent_lock import verify_offline_parent_lease
+from scripts.package_a_parent_lock import verify_offline_parent_lease, hold_offline_parent_lease
 from scripts.package_a_ingest_fixture import (
     FixtureResponse, _fixture_guard, run_fixture_page, LOCK_NAMESPACE,
 )
@@ -216,7 +216,7 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
         if _parent_lock_held:
             verify_offline_parent_lease(lock_directory)
         lock_context = (nullcontext() if _parent_lock_held else
-                        hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE))
+                        hold_offline_parent_lease(lock_directory))
         with lock_context:
             try:
                 parsed = _legacy_fake_fetch(spec, start, end, frozen)
