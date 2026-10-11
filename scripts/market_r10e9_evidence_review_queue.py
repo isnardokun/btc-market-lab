@@ -6,6 +6,10 @@ Two independently generated snapshots cannot prove atomic consistency.
 """
 import datetime as dt
 
+from ingestion.config import FRED_SERIES
+
+FRED_FREQUENCIES = {series_id: frequency for series_id, _, frequency, _ in FRED_SERIES}
+
 PROVIDERS = ("researchbitcoin", "bitview", "fred", "yahoo")
 REVIEW_MODES = frozenset(("UTC_CALENDAR_DAY", "MONTHLY_OBSERVATION"))
 NON_CALENDAR = "EXTERNAL_PUBLICATION_CALENDAR_REQUIRED"
@@ -136,6 +140,14 @@ def reconcile_review_queue(manifest, gaps, *, max_items=40):
             totals["archived_series"] += 1
 
             mode = row.get("gap_method")
+            if provider in ("researchbitcoin", "bitview"):
+                expected_mode = "UTC_CALENDAR_DAY"
+            elif provider == "fred" and FRED_FREQUENCIES.get(metric) == "monthly":
+                expected_mode = "MONTHLY_OBSERVATION"
+            else:
+                expected_mode = NON_CALENDAR
+            if mode != expected_mode:
+                raise ValueError("Source frequency forbids supplied gap calendar")
             missing_count = row.get("internal_gap_candidates")
             samples = row.get("sample_missing_slots")
             truncated = row.get("sample_truncated")
