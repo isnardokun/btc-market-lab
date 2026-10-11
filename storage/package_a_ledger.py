@@ -16,7 +16,7 @@ class SimulatedCrash(RuntimeError):
     """Fixture-only crash-injection signal; rollback the full page."""
 
 
-MIGRATION_VERSION = 2
+MIGRATION_VERSION = 3
 DDL = (
     """CREATE TABLE IF NOT EXISTS package_a_schema_migrations (
        version INTEGER PRIMARY KEY, applied_utc TEXT NOT NULL)""",
@@ -78,6 +78,24 @@ DDL = (
        captured_utc TEXT NOT NULL,
        FOREIGN KEY(receipt_id) REFERENCES package_a_receipts(receipt_id)
        )""",
+    """CREATE TABLE IF NOT EXISTS package_a_source_runs (
+       run_id TEXT PRIMARY KEY,
+       planned_pages INTEGER NOT NULL CHECK(planned_pages BETWEEN 1 AND 32),
+       created_utc TEXT NOT NULL,
+       updated_utc TEXT NOT NULL,
+       status TEXT NOT NULL CHECK(status IN ('running','complete','blocked')),
+       mode TEXT NOT NULL CHECK(mode='OFFLINE_SYNTHETIC_BATCH')
+       )""",
+    """CREATE TABLE IF NOT EXISTS package_a_run_pages (
+       run_id TEXT NOT NULL,
+       ordinal INTEGER NOT NULL CHECK(ordinal BETWEEN 0 AND 31),
+       receipt_id TEXT NOT NULL UNIQUE,
+       receipt_status TEXT NOT NULL
+          CHECK(receipt_status IN ('ok','failed','rejected','empty')),
+       PRIMARY KEY(run_id,ordinal),
+       FOREIGN KEY(run_id) REFERENCES package_a_source_runs(run_id),
+       FOREIGN KEY(receipt_id) REFERENCES package_a_receipts(receipt_id)
+       )""",
 )
 REQUIRED = {
     "package_a_receipts": {"receipt_id","provider","metric","symbol","frequency",
@@ -91,6 +109,9 @@ REQUIRED = {
     "package_a_request_provenance": {"receipt_id","endpoint_origin","endpoint_path",
                                      "request_params_json","request_sha256","transport",
                                      "method","captured_utc"},
+    "package_a_source_runs": {"run_id","planned_pages","created_utc","updated_utc",
+                              "status","mode"},
+    "package_a_run_pages": {"run_id","ordinal","receipt_id","receipt_status"},
 }
 
 
@@ -102,11 +123,15 @@ SCHEMA_PRIMARY_KEYS = {
     "package_a_cursors": ("provider", "metric", "symbol", "frequency"),
     "package_a_coverage": ("provider", "metric", "symbol", "frequency"),
     "package_a_request_provenance": ("receipt_id",),
+    "package_a_source_runs": ("run_id",),
+    "package_a_run_pages": ("run_id","ordinal"),
 }
 SCHEMA_FOREIGN_KEYS = {
     "package_a_observations": {("receipt_id", "package_a_receipts", "receipt_id")},
     "package_a_cursors": {("advanced_by_receipt", "package_a_receipts", "receipt_id")},
     "package_a_request_provenance": {("receipt_id", "package_a_receipts", "receipt_id")},
+    "package_a_run_pages": {("run_id","package_a_source_runs","run_id"),
+                            ("receipt_id","package_a_receipts","receipt_id")},
 }
 
 
@@ -146,12 +171,12 @@ def initialize(conn, *, now):
         for statement in DDL:
             conn.execute(statement)
         validate_schema(conn)
-        # Upgrade the exact previously shipped fixture v1 marker atomically.
-        # Do NOT synthesize request provenance for existing/legacy receipts.
+        # Upgrade exact older fixture v1/v2 markers in the same savepoint.
+        # Existing receipts get NO fabricated request or source-run identity.
         installed = {v for (v,) in conn.execute(
             "SELECT version FROM package_a_schema_migrations")}
-        if installed == {1}:
-            conn.execute("DELETE FROM package_a_schema_migrations WHERE version=1")
+        if installed in ({1},{2}):
+            conn.execute("DELETE FROM package_a_schema_migrations")
             installed = set()
         if not installed:
             conn.execute("INSERT INTO package_a_schema_migrations(version,applied_utc) "
@@ -444,4 +469,94 @@ def audit_frozen_request_provenance(conn):
         "receipts_without_frozen_request_metadata": missing,
         "legacy_metadata_retroactively_fabricated": False,
         "upstream_requests_verified": False,
+    }
+
+
+def record_batch_run_page(conn, *, run_id, ordinal, planned_pages,
+                          receipt_id, receipt_status, now):
+    """Link ONE persisted receipt to its owning synthetic batch atomically.
+
+    Never link failed/rolled-back pages, never backfill missing legacy IDs.
+    Creation, FK page link and terminal state transition share the exact
+    source page SQLite transaction; crashes cannot commit phantom runs.
+    """
+    if (type(run_id) is not str or len(run_id) != 32 or
+            any(c not in "0123456789abcdef" for c in run_id) or
+            type(ordinal) is not int or type(planned_pages) is not int or
+            not 1 <= planned_pages <= 32 or not 0 <= ordinal < planned_pages or
+            receipt_status not in ("ok","failed","rejected","empty")):
+        raise ValueError("Invalid synthetic batch source run identity")
+    stamp=utc(now).isoformat().replace("+00:00","Z")
+    existing=conn.execute(
+        "SELECT planned_pages,status FROM package_a_source_runs WHERE run_id=?",
+        (run_id,)).fetchone()
+    if existing is None:
+        if ordinal != 0:
+            raise ValueError("Cannot create source run at nonzero page")
+        conn.execute(
+            "INSERT INTO package_a_source_runs "
+            "(run_id,planned_pages,created_utc,updated_utc,status,mode) "
+            "VALUES (?,?,?,?,'running','OFFLINE_SYNTHETIC_BATCH')",
+            (run_id,planned_pages,stamp,stamp))
+    elif existing != (planned_pages,"running"):
+        raise ValueError("Source run closed or planned window changed")
+    count=conn.execute(
+        "SELECT COUNT(*) FROM package_a_run_pages WHERE run_id=?", (run_id,)
+    ).fetchone()[0]
+    if count != ordinal:
+        raise ValueError("Skipped/duplicate source run page ordinal")
+    conn.execute(
+        "INSERT INTO package_a_run_pages "
+        "(run_id,ordinal,receipt_id,receipt_status) VALUES (?,?,?,?)",
+        (run_id,ordinal,receipt_id,receipt_status))
+    status = ("blocked" if receipt_status != "ok" else
+              "complete" if ordinal + 1 == planned_pages else "running")
+    conn.execute(
+        "UPDATE package_a_source_runs SET status=?,updated_utc=? WHERE run_id=?",
+        (status,stamp,run_id))
+    return status
+
+
+def audit_batch_source_runs(conn):
+    """Read-only independent run→ordinal→receipt reconciliation.
+
+    Incomplete running runs are NOT incorrectly asserted complete; they are
+    valid recoverable artifacts after crash between successful pages.
+    """
+    audited=complete=blocked=interrupted=errors=0
+    for run_id,total,status,mode in conn.execute(
+        "SELECT run_id,planned_pages,status,mode FROM package_a_source_runs"
+    ):
+        audited+=1
+        pages=list(conn.execute(
+            "SELECT p.ordinal,p.receipt_status,r.status FROM package_a_run_pages p "
+            "LEFT JOIN package_a_receipts r ON r.receipt_id=p.receipt_id "
+            "WHERE p.run_id=? ORDER BY p.ordinal",(run_id,)))
+        valid=(mode=="OFFLINE_SYNTHETIC_BATCH" and 1 <= total <= 32 and
+               0 < len(pages) <= total and
+               [p[0] for p in pages] == list(range(len(pages))) and
+               all(p[1] == p[2] for p in pages) and
+               all(p[1] == "ok" for p in pages[:-1]))
+        expected=("blocked" if pages and pages[-1][1] != "ok" else
+                  "complete" if len(pages) == total else "running")
+        if not valid or expected != status:
+            errors+=1
+        elif status == "complete":
+            complete+=1
+        elif status == "blocked":
+            blocked+=1
+        else:
+            interrupted+=1
+    unlinked=conn.execute(
+        "SELECT COUNT(*) FROM package_a_receipts r "
+        "LEFT JOIN package_a_run_pages p ON r.receipt_id=p.receipt_id "
+        "WHERE p.receipt_id IS NULL").fetchone()[0]
+    return {
+        "state":"BATCH_SOURCE_RUN_LINEAGE_PASS" if not errors else
+                "BATCH_SOURCE_RUN_LINEAGE_FAIL",
+        "runs":audited, "complete_runs":complete,
+        "blocked_runs":blocked, "interrupted_or_running_runs":interrupted,
+        "run_integrity_errors":errors, "receipts_without_batch_run":unlinked,
+        "retrospective_run_ids_fabricated":False,
+        "external_history_verified":False,
     }
