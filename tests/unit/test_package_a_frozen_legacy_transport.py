@@ -1326,3 +1326,45 @@ class FrozenLegacyTransportTests(unittest.TestCase):
             self.assertFalse(plan["request_ready"])
         self.assertEqual(self.rows(
             "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+
+    def test_yahoo_close_rejects_negative_volume_from_same_full_quote(self):
+        spec=SeriesSpec("yahoo","close","SPY","d1","USD")
+        result=run_mocked_legacy_page(self.path,self.locks,spec,DAY,
+            "2026-10-13T00:00:00Z",
+            raw_bytes=raw(self._yahoo_daily_body(bad="negative_volume")),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["failure_class"],"ValueError")
+        self.assertEqual(self.rows("SELECT status FROM package_a_receipts"),
+                         [("rejected",)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_yahoo_open_rejects_close_outside_high_low_even_when_open_is_valid(self):
+        spec=SeriesSpec("yahoo","open","SPY","d1","USD")
+        quote=self._yahoo_daily_body()
+        quote["chart"]["result"][0]["indicators"]["quote"][0]["close"][0]=599
+        result=run_mocked_legacy_page(self.path,self.locks,spec,DAY,
+            "2026-10-13T00:00:00Z",raw_bytes=raw(quote),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["failure_class"],"ValueError")
+        self.assertFalse(result["cursor_advanced"])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+
+    def test_yahoo_volume_rejects_invalid_high_even_if_selected_volume_is_finite(self):
+        spec=SeriesSpec("yahoo","volume","SPY","d1","native_volume")
+        data=self._yahoo_daily_body()
+        data["chart"]["result"][0]["indicators"]["quote"][0]["high"][0]=-2
+        result=run_mocked_legacy_page(self.path,self.locks,spec,DAY,
+            "2026-10-13T00:00:00Z",raw_bytes=raw(data),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["failure_class"],"ValueError")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
