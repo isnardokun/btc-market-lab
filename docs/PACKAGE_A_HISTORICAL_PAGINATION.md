@@ -36,7 +36,7 @@ cursor cuando falla una página 429/503/timeout.
 | Binance BTCUSDT, OI `5m` | 500 muestras | Coincide con parámetro del constructor simulado; límites efectivos no verificados |
 | Bybit BTCUSDT, OI `5m` | 200 muestras | Coincide con parámetro del constructor simulado; límites efectivos no verificados |
 | FRED, series catalogadas `d1/weekly/monthly` | 90 días calendario | Solo dividir solicitudes; **NO** exigir 90 observaciones; conservar vintages y releases sin inferir calendario |
-| Binance/Bybit, `funding_settled event` | **Bloqueado** | No dividir eventos por tiempo suponiendo límites de filas/retenibilidad |
+| Binance/Bybit, `funding_settled event` | **7 días calendario** por página sintética | **Solo ventanas de consulta**; no se infieren observaciones cada 8 horas; respuesta de 1000/200 filas se bloquea por posible truncamiento |
 
 | Yahoo BTC-USD `range=max` | **Bloqueado** | El cliente legado solicita `range=max`; no adjudicarle ventanas parciales inexistentes |
 | Acciones Yahoo / símbolos no reconocidos | **Bloqueado** | Requieren contratos fuente y calendario de sesiones comprobados |
@@ -64,7 +64,7 @@ Suite `tests/unit/test_package_a_historical_window_planner.py`:
 - FRED mensual 122 días calendario, 90+32 → observaciones *sparse* y múltiples `realtime_start` del mismo día preservados en SQLite;
 - FRED diario con días ausentes → ningún hueco inferido de fines de semana, releases o feriados;
 - FRED 503 en segunda ventana → source_run bloqueado y reanudación precisa sin alterar vintage ni RAW anterior;
-- Yahoo legado `range=max` y funding `event` permanecen bloqueados para paginación automática;
+- Yahoo legado `range=max` permanece bloqueado para paginación automática; funding `event` solo acepta ventanas sintéticas, sin garantizar retención real;
 - 429 en la segunda ventana RBN: 14 registros persistidos, otras páginas
   sin ejecutar; tras recuperación, 30 registros sin duplicar los primeros 14;
 - Tampering de primer RAW, respuestas insuficientes o tamaño/status inválido
