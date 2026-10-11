@@ -189,6 +189,9 @@ def parse_fixture(spec, payload, *, start, end):
         ordered = sorted(out, key=lambda p:p.timestamp)
         if ordered[0].timestamp != begin.isoformat().replace("+00:00", "Z"):
             raise ValueError("OI page begins with an unacknowledged gap")
+        expected_final = (stop - dt.timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+        if (stop - begin).total_seconds() % 300 != 0 or ordered[-1].timestamp != expected_final:
+            raise ValueError("Incomplete OI final bar; cannot advance cursor")
         if any(utc(y.timestamp) - utc(x.timestamp) != dt.timedelta(minutes=5)
                for x,y in zip(ordered, ordered[1:])):
             raise ValueError("Discontinuous OI five-minute page")
