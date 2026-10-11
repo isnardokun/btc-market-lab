@@ -55,6 +55,7 @@ TESTS = [
     ("Unit: R10-E.10 Atomic Read-Only SQLite Evidence", "python3 -m unittest -v tests.unit.test_market_r10e10_atomic_ro_evidence"),
     ("Unit: R10-E.11 Cross-Process Writer Lock Offline", "python3 -m unittest -v tests.unit.test_market_r10e11_writer_exclusion"),
     ("Unit: R10-E.12 Locked Real Forward Mock Offline", "python3 -m unittest -v tests.unit.test_market_r10e12_locked_mock_forward"),
+    ("Unit: R10-E.13 Global Writer Adoption Inventory", "python3 -m unittest -v tests.unit.test_market_r10e13_writer_adoption_inventory"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
