@@ -18,7 +18,6 @@ from scripts.package_a_batch_fixture import (
     FrozenLegacyPage, run_synthetic_batch, recover_synthetic_batch,
 )
 
-UTC = dt.timezone.utc
 MAX_PAGES = 32
 
 
@@ -60,7 +59,6 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
     if first>=last:
         raise ValueError("Half-open window must be nonempty")
     if (type(start) is not str or type(end) is not str or
-            ". " in start or ". " in end or
             _iso(first) != start.replace("+00:00","Z") or
             _iso(last) != end.replace("+00:00","Z")):
         raise ValueError("Source planning forbids fractional/noncanonical timestamps")
@@ -93,10 +91,7 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
     # Require the actual mock request-builder to recognize the provider,
     # specific BTC symbol, supported series, frequency, unit and scale.
     # This never issues HTTP.
-    if spec.provider in ("researchbitcoin","bitview"):
-        _request_for(spec,_iso(first),_iso(first+step))
-    else:
-        _request_for(spec,_iso(first),_iso(first+step))
+    _request_for(spec,_iso(first),_iso(first+step))
     total_slots=(last-first)//step
     count=(total_slots+page_slots-1)//page_slots
     if count>max_pages:
@@ -110,7 +105,15 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         endpoint,params=_request_for(spec,_iso(pos),_iso(nxt))
         if pos>=nxt:
             raise ValueError("Nonadvancing historical page")
+        # Bind the plan to the exact source request path/query, not only
+        # provider name and time bounds. Never persist query text in the
+        # planner result; sensitive params could be added by future clients.
+        request_identity=json.dumps(
+            [endpoint, sorted(params.items())],
+            separators=(",",":"),ensure_ascii=True)
+        contract_sha=hashlib.sha256(request_identity.encode()).hexdigest()
         spans.append({
+            "request_contract_sha256":contract_sha,
             "ordinal":idx,"start_utc":_iso(pos),"end_exclusive_utc":_iso(nxt),
             "native_slots":(nxt-pos)//step,
             "request_origin":endpoint.split("/")[2],
@@ -123,8 +126,10 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
     if pos!=last or not spans or spans[0]["start_utc"]!=_iso(first) or spans[-1]["end_exclusive_utc"]!=_iso(last):
         raise ValueError("Internal planner violated exact half-open coverage")
     digest=hashlib.sha256(json.dumps(
-        [(spec.provider,spec.metric,spec.symbol,spec.frequency,
-          w["start_utc"],w["end_exclusive_utc"]) for w in spans],
+        [spec.provider,spec.metric,spec.symbol,spec.frequency,
+         spec.unit,spec.raw_scale,policy,
+         [(w["start_utc"],w["end_exclusive_utc"],
+           w["request_contract_sha256"]) for w in spans]],
         separators=(",",":")).encode()).hexdigest()
     return {
         "state":"OFFLINE_SOURCE_WINDOWS_PLANNED",
