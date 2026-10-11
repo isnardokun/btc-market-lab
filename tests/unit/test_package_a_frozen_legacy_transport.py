@@ -853,3 +853,32 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                                  self.rows("SELECT COUNT(*) FROM package_a_receipts")))
         self.assertFalse(p["upstream_availability_verified"])
         self.assertFalse(p["production_authorized"])
+
+
+    def test_recovery_rejects_successful_prefix_unit_scale_change_before_http(self):
+        rbn=self.as_frozen_page(scenarios()[0])
+        yahoo=self.as_frozen_page(scenarios()[3])
+        failure=self.as_frozen_page(scenarios()[4],status=503,body=b"503")
+        prior=run_synthetic_batch(self.path,self.locks,[rbn,yahoo,failure],now=NOW)
+        spec,start,end,payload=scenarios()[3]
+        from ingestion.package_a_contracts import SeriesSpec
+        fake_unit=SeriesSpec(spec.provider,spec.metric,spec.symbol,spec.frequency,
+                             "EUR",spec.raw_scale)
+        changed=FrozenLegacyPage(fake_unit,start,end,raw(payload),200)
+        before=self.rows("SELECT COUNT(*) FROM package_a_receipts")
+        with self.assertRaisesRegex(ValueError,"UNIT_SCALE_DRIFT"):
+            recover_synthetic_batch(self.path,self.locks,[rbn,changed,failure],
+                                    prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),before)
+
+    def test_recovery_accepts_equivalent_explicit_plus_zero_timezone_windows(self):
+        one=self.as_frozen_page(scenarios()[0])
+        two=self.as_frozen_page(scenarios()[4],status=429,body=b"429")
+        prior=run_synthetic_batch(self.path,self.locks,[one,two],now=NOW)
+        spec,start,end,payload=scenarios()[0]
+        offset=FrozenLegacyPage(spec,start.replace("Z","+00:00"),
+                                end.replace("Z","+00:00"),raw(payload),200)
+        plan=plan_synthetic_resume(self.path,self.locks,[offset,two],
+                                   prior_run_id=prior["run_id"])
+        self.assertEqual(plan["resume_index"],1)
+        self.assertEqual(plan["state"],"RESUME_PLANNED_OFFLINE")
