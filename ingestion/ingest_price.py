@@ -9,17 +9,20 @@ import urllib.request
 import json
 import sqlite3
 import datetime
+import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from ingestion.daily_cutoff import previous_completed_utc_day
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 
 URL = "https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?interval=1d&range=2y"
+GLOBAL_LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 
-def ingest():
+def _ingest_unlocked():
     now = datetime.datetime.now(datetime.timezone.utc)
     today = now.date()
     cutoff = previous_completed_utc_day(now)
@@ -66,5 +69,29 @@ def ingest():
     )
 
 
+def ingest(*, lock_directory=None):
+    """Ingest BTC closes; optional guard MUST precede HTTP and SQL.
+
+    Default behavior remains unchanged for daily.sh. Adding an opt-in
+    DOES NOT protect other SQLite writers or enable production.
+    """
+    if lock_directory is None:
+        return _ingest_unlocked()
+    with hold_writer_lock(lock_directory, namespace=GLOBAL_LOCK_NAMESPACE):
+        return _ingest_unlocked()
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="BTC UTC daily Yahoo price ingestion")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Existing cooperative writer-lock directory; explicit opt-in")
+    args = parser.parse_args(argv)
+    try:
+        return ingest(lock_directory=args.global_lock_dir) or 0
+    except WriterLockBusy:
+        print("BLOCKED_WRITER_BUSY: price ingest skipped before HTTP/SQL", file=sys.stderr)
+        return 3
+
+
 if __name__ == "__main__":
-    ingest()
+    raise SystemExit(main())
