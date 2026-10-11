@@ -102,7 +102,7 @@ def fetch_tip_height() -> int:
     """Get current blockchain tip height."""
     return int(api_fetch("/blocks/tip/height"))
 
-def fetch_series(series_name: str, index: str, start: str = None, end: str = None, block_start: int = None, block_end: int = None):
+def fetch_series(series_name: str, index: str, start: str = None, end: str = None, block_start: int = None, block_end: int = None, *, client=None):
     """Fetch a series from bitview API. Returns list of [ts_or_height, value] pairs."""
     params = []
     if start:
@@ -118,7 +118,10 @@ def fetch_series(series_name: str, index: str, start: str = None, end: str = Non
     if query:
         path += f"?{query}"
 
-    data = api_fetch(path)
+    # Optional explicitly supplied callable is for offline transport contract
+    # tests. The legacy API remains the default; no API call is made when a
+    # fixture-only client is supplied.
+    data = client(path) if client is not None else api_fetch(path)
     return data  # dict with 'data' key
 
 def get_series_id(db, name: str, description: str = "") -> int:
