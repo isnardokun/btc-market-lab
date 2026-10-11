@@ -10,13 +10,13 @@ import argparse
 import json
 import os
 from pathlib import Path
-from scripts.package_a_writer_guard import run_with_optional_writer_lock
 import sqlite3
 import sys
 import time
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from ingestion.config import DB_PATH
 from scripts.market_history_pilot import execute
 from scripts.market_raw_reconcile import audit as reconcile
