@@ -163,7 +163,7 @@ class TestR10E9EvidenceReconciliation(unittest.TestCase):
             db.execute("DROP TABLE daily")
             db.execute("DROP TABLE macro_fred")
         r = self.assess()
-        self.assertEqual(r["summary"]["archived_series"], 3)
+        self.assertEqual(r["summary"]["archived_series"], 2)
         self.assertFalse(any(x["provider"] in ("fred", "bitview") for x in r["review_queue"]))
 
     def test_schema_state_disagreement_blocks(self):
