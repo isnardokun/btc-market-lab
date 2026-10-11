@@ -67,6 +67,23 @@ def sources():
     ]
 
 
+def funding_sources():
+    """Funding is an EVENT, not a 5-minute OI candle. UTC timestamps may vary."""
+    return [
+        (SeriesSpec("binance", "funding_settled", "BTCUSDT", "event", "fraction"),
+         DAY, NEXT, [
+             {"symbol":"BTCUSDT", "fundingTime":unix(DAY,millis=True), "fundingRate":"-0.00012"},
+             {"symbol":"BTCUSDT", "fundingTime":unix("2026-10-08T08:00:00Z",millis=True),
+              "fundingRate":"0.00008"}]),
+        (SeriesSpec("bybit", "funding_settled", "BTCUSDT", "event", "fraction"),
+         DAY, NEXT, {"retCode":0, "result":{"category":"linear","symbol":"BTCUSDT",
+             "list":[{"fundingRateTimestamp":str(unix("2026-10-08T01:00:00Z",millis=True)),
+                      "fundingRate":"-0.00009"},
+                     {"fundingRateTimestamp":str(unix("2026-10-08T09:00:00Z",millis=True)),
+                      "fundingRate":"0.00015"}]}}),
+    ]
+
+
 class TestPackageAIntegratedSlice(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory(prefix="package-a-fixture-")
@@ -402,6 +419,87 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
             report=self.apply(spec,start,end,payload)
         self.assertEqual(report["status"],"rejected")
         self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0],0)
+
+    def test_binance_and_bybit_funding_settlement_events_append(self):
+        for spec,start,end,payload in funding_sources():
+            with self.subTest(provider=spec.provider):
+                outcome=self.apply(spec,start,end,payload)
+                self.assertEqual(outcome["state"],"PAGE_COMMITTED_OFFLINE",outcome)
+                self.assertEqual(outcome["new_rows"],2)
+                self.assertTrue(outcome["cursor_advanced"])
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations"),[(4,)])
+        rates=self.read("SELECT value FROM package_a_observations ORDER BY value")
+        self.assertEqual([x[0] for x in rates],[-0.00012,-0.00009,0.00008,0.00015])
+        self.assertEqual(inspect_fixture(self.path,self.lockdir)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_funding_is_not_forced_to_5min_or_8h_bar_continuity(self):
+        spec,start,end,payload=funding_sources()[0]
+        payload=[dict(payload[0]),dict(payload[1])]
+        payload[1]["fundingTime"]=unix("2026-10-08T10:23:00Z",millis=True)
+        self.assertEqual(self.apply(spec,start,end,payload)["new_rows"],2)
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors"),[(1,)])
+
+    def test_funding_replay_is_idempotent_preserving_original_receipt_link(self):
+        spec,start,end,payload=funding_sources()[1]
+        first=self.apply(spec,start,end,payload)
+        before=self.read("SELECT row_sha256,receipt_id FROM package_a_observations")
+        second=self.apply(spec,start,end,payload)
+        self.assertEqual(second["new_rows"],0)
+        self.assertFalse(second["cursor_advanced"])
+        self.assertEqual(self.read("SELECT row_sha256,receipt_id FROM package_a_observations"),before)
+        self.assertEqual(first["receipt_id"],before[0][1])
+
+    def test_funding_error_scope_fails_closed_and_keeps_cursor_unadvanced(self):
+        spec,start,end,payload=funding_sources()[0]
+        wrong=[dict(payload[0]),dict(payload[1])]
+        wrong[1]["symbol"]="ETHUSDT"
+        result=self.apply(spec,start,end,wrong)
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_bybit_retcodes_must_be_success_for_funding(self):
+        spec,start,end,payload=funding_sources()[1]
+        wrong={**payload,"retCode":10001}
+        result=self.apply(spec,start,end,wrong)
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_funding_unit_frequency_and_symbol_contract_are_strict(self):
+        for kwargs in (
+            ("binance","funding_settled","BTCUSDT","5m","fraction"),
+            ("bybit","funding_settled","BTCUSDT","event","BTC"),
+            ("binance","funding_settled","ETHUSDT","event","fraction"),
+            ("binance","open_interest","BTCUSDT","5m","USD"),
+        ):
+            with self.subTest(kwargs=kwargs),self.assertRaises(ValueError):
+                SeriesSpec(*kwargs)
+
+    def test_duplicate_funding_event_rejected_before_any_cursor(self):
+        spec,start,end,payload=funding_sources()[0]
+        duplicate=[dict(payload[0]),dict(payload[0])]
+        self.assertEqual(self.apply(spec,start,end,duplicate)["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_provider_funding_event_out_of_bounds_rejected(self):
+        spec,start,end,payload=funding_sources()[1]
+        wrong={"retCode":0,"result":{"list":[
+            {"fundingRateTimestamp":str(unix(NEXT,millis=True)),"fundingRate":"0.0001"}]}}
+        result=self.apply(spec,start,end,wrong)
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_eight_stream_batch_integrates_oi_and_funding_without_fake_history(self):
+        records=[*sources(),*funding_sources()]
+        pages=[FixturePage(s,a,b,FixtureResponse(200,p)) for s,a,b,p in records]
+        result=run_synthetic_batch(self.path,self.lockdir,pages,now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED",result)
+        self.assertEqual((result["requests_attempted"],result["new_observations"]),(8,16))
+        self.assertEqual(len(result["audit"]["source_coverage"]),8)
+        self.assertTrue(all(x["entitlement_status"]=="NOT_VERIFIED"
+                            for x in result["audit"]["source_coverage"]))
+        self.assertFalse(result["real_provider_windows_verified"])
 
     def test_runner_registers_package_suite_without_hardcoded_old_count(self):
         path=Path(__file__).resolve().parents[1]/"run_all.py"
