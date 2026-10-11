@@ -107,8 +107,18 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                     recorded = ledger.store_ok_page(
                         db, spec, start, end, raw=raw, points=points, now=now, fault=fault)
                     result = {"state": "PAGE_COMMITTED_OFFLINE", "status": "ok", **recorded}
+                # A page is not accepted until independent RAW -> SQL lineage
+                # reconstruction passes inside the SAME uncommitted transaction.
+                # A failed gate automatically rolls back this page/attempt;
+                # legacy observations remain untouched rather than "fixed".
+                proof = audit_receipt_reconstruction(db)
+                if (proof["state"] != "RAW_SQL_LINEAGE_PASS"
+                        or db.execute("PRAGMA foreign_key_check").fetchone()
+                        or db.execute("PRAGMA quick_check").fetchone()[0] != "ok"):
+                    raise ValueError("BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE")
             return {
                 **result, "provider": spec.provider, "metric": spec.metric,
+                "page_provenance_gate": "RAW_SQL_LINEAGE_PASS",
                 "http_real_requests": 0, "sqlite_productive_writes": 0,
                 "production_authorized": False,
                 "global_writer_exclusion_operationally_verified": False,
