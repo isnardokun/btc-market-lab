@@ -47,9 +47,9 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
     """Partition one exact interval or FAIL CLOSED without a partial plan.
 
     The plan covers [start,end) completely with contiguous source-native
-    windows. Funding events, FRED release/vintage calendars, and Yahoo's
-    legacy 'range=max' endpoint require provider-specific pagination
-    verification; they are intentionally not silently window-sliced.
+    request windows. Funding settlements and FRED vintages are SPARSE events;
+    dividing request time does NOT infer any expected event or full upstream
+    archive. Yahoo's legacy 'range=max' cannot be silently window-sliced.
     """
     if not isinstance(spec, SeriesSpec):
         raise ValueError("Typed provider source required")
@@ -79,6 +79,16 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         step=dt.timedelta(days=1)
         page_slots=90
         policy="FRED_SYNTHETIC_90_CALENDAR_DAYS_NOT_RELEASE_VERIFIED"
+    elif (spec.provider in ("binance","bybit")
+          and spec.metric=="funding_settled"):
+        # Seven-day calendar partitions are a conservative OFFLINE policy.
+        # Funding settlement frequency can change by instrument/exchange:
+        # never assume 8-hour spacing or one event per day. Native source
+        # request construction already accepts exact UTC half-open windows.
+        step=dt.timedelta(days=1)
+        page_slots=7
+        policy=(spec.provider.upper()
+                + "_FUNDING_SYNTHETIC_7_CALENDAR_DAYS_NOT_UPSTREAM_VERIFIED")
     elif spec.provider in ("binance","bybit") and spec.metric=="open_interest":
         step=dt.timedelta(minutes=5)
         # Bound by parameter values already constructed by our mock builder.
@@ -123,10 +133,12 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         spans.append({
             "request_contract_sha256":contract_sha,
             "ordinal":idx,"start_utc":_iso(pos),"end_exclusive_utc":_iso(nxt),
-            # FRED request calendar days are NOT expected daily samples:
-            # a monthly series can have 1 or 3 revisions within 90 days.
-            "native_slots":None if spec.provider=="fred" else (nxt-pos)//step,
-            "request_calendar_days":(nxt-pos).days if spec.provider=="fred" else None,
+            # Funding events and FRED observations are sparse source-native
+            # events, not filled UTC grids.
+            "native_slots":None if spec.provider=="fred" or
+                           spec.metric=="funding_settled" else (nxt-pos)//step,
+            "request_calendar_days":(nxt-pos).days if (
+                spec.provider=="fred" or spec.metric=="funding_settled") else None,
             "request_origin":endpoint.split("/")[2],
             "endpoint_path":"/"+"/".join(endpoint.split("/")[3:]),
             "source_query_params_frozen":True,
@@ -147,12 +159,18 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         "source":spec.provider,"metric":spec.metric,"symbol":spec.symbol,
         "frequency":spec.frequency,"calendar_step_seconds":int(step.total_seconds()),
         "synthetic_max_rows_per_window":(
-            None if spec.provider=="fred" else page_slots),
+            None if spec.provider=="fred" or
+                 spec.metric=="funding_settled" else page_slots),
+        "synthetic_response_saturation_limit":(
+            (1000 if spec.provider=="binance" else 200)
+            if spec.metric=="funding_settled" else None),
         "synthetic_max_calendar_days_per_window":(
-            page_slots if spec.provider=="fred" else None),
+            page_slots if spec.provider=="fred" or
+            spec.metric=="funding_settled" else None),
         "source_calendar_observation_expectation":(
             "NOT_INFERRED_FRED_RELEASE_VINTAGE" if spec.provider=="fred"
-            else "LOCAL_FIXED_GRID_ONLY"),
+            else "NOT_INFERRED_FUNDING_SETTLEMENT_EVENTS"
+            if spec.metric=="funding_settled" else "LOCAL_FIXED_GRID_ONLY"),
         "page_limit_policy":policy,
         "requested_start_utc":_iso(first),
         "requested_end_exclusive_utc":_iso(last),
