@@ -25,15 +25,15 @@ jobs:
             exit 1
           fi
           echo "No generated portable HTML, manifest, Telegram receipts, or dashboard snapshot tracked."
-      - name: Complete 70-registered-suite OFFLINE regression (1 live blocked)
+      - name: Complete 71-registered-suite OFFLINE regression (1 live blocked)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           BTC_RESEARCH_HOME: ${{ github.workspace }}
         run: |
           set -euo pipefail
           python3 tests/run_all.py | tee "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_EXECUTED=69$' "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_PASSED=69$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_EXECUTED=70$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_PASSED=70$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_SUITES_SKIPPED=1$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_STATUS=NOT_TESTED_NOT_AUTHORIZED$' "$RUNNER_TEMP/package_a_offline_runner.log"
       - name: Isolated worktree runtime retention regression
