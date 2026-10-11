@@ -140,7 +140,7 @@ class TestR10E3MockOnePage(unittest.TestCase):
             test_dir = Path(temp_dir) / "tests"
             test_dir.mkdir()
             synthetic_runner = test_dir / "run_all.py"
-            synthetic_runner.write_text(ast.unparse(tree) + "\\n", encoding="utf-8")
+            synthetic_runner.write_text(ast.unparse(tree) + "\n", encoding="utf-8")
             proc = subprocess.run(
                 [sys.executable, str(synthetic_runner)],
                 cwd=temp_dir, capture_output=True, text=True, timeout=10)
