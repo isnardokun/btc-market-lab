@@ -501,6 +501,55 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
                             for x in result["audit"]["source_coverage"]))
         self.assertFalse(result["real_provider_windows_verified"])
 
+    def test_history_ledger_exposes_requests_even_when_zero_rows_archived(self):
+        spec,start,end,payload=funding_sources()[0]
+        self.apply(spec,start,end,{"synthetic":"429"},status=429)
+        report=inspect_fixture(self.path,self.lockdir)
+        evidence=report["historical_request_evidence"]
+        self.assertEqual(len(evidence),1)
+        self.assertEqual(evidence[0]["archived_rows"],0)
+        self.assertEqual(evidence[0]["attempted_requests"],1)
+        self.assertEqual(evidence[0]["attempt_status_counts"]["failed"],1)
+        self.assertEqual(evidence[0]["requested_first_utc"],start)
+        self.assertEqual(evidence[0]["requested_end_exclusive_utc"],end)
+        self.assertEqual(evidence[0]["local_request_history_state"],
+                         "ATTEMPTS_WITH_FAILURE_OR_EMPTY")
+        self.assertEqual(evidence[0]["historical_completeness"],"NOT_VERIFIED")
+
+    def test_history_ledger_disambiguates_empty_and_successful_windows(self):
+        spec,start,end,payload=sources()[0]
+        self.apply(spec,start,end,{"data":[]})
+        self.apply(spec,start,end,payload)
+        evidence=inspect_fixture(self.path,self.lockdir)["historical_request_evidence"][0]
+        self.assertEqual(evidence["attempt_status_counts"]["empty"],1)
+        self.assertEqual(evidence["attempt_status_counts"]["ok"],1)
+        self.assertEqual(evidence["archived_rows"],2)
+        self.assertEqual(evidence["reported_rows_by_success_receipts"],2)
+        self.assertEqual(evidence["successful_requests_with_raw_receipt"],1)
+        self.assertEqual(evidence["local_receipt_completeness"],"LOCAL_RAW_RECEIPTS_PRESENT")
+        self.assertEqual(evidence["provider_window_status"],"NOT_CHECKED")
+
+    def test_history_ledger_records_requested_vs_observed_different_windows(self):
+        spec,start,end,payload=sources()[0]
+        self.apply(spec,start,end,{"data":[{"date":"2026-10-08","value":0.997}]})
+        evidence=inspect_fixture(self.path,self.lockdir)["historical_request_evidence"][0]
+        self.assertEqual(evidence["requested_end_exclusive_utc"],AFTER)
+        self.assertEqual(evidence["archived_last_utc"],DAY)
+        self.assertNotEqual(evidence["requested_end_exclusive_utc"],
+                            evidence["archived_last_utc"])
+        self.assertEqual(evidence["historical_completeness"],"NOT_VERIFIED")
+
+    def test_history_ledger_eight_streams_retains_entitlement_unverified(self):
+        for spec,start,end,payload in [*sources(),*funding_sources()]:
+            self.apply(spec,start,end,payload)
+        report=inspect_fixture(self.path,self.lockdir)
+        self.assertEqual(len(report["historical_request_evidence"]),8)
+        for entry in report["historical_request_evidence"]:
+            self.assertEqual(entry["attempted_requests"],1)
+            self.assertEqual(entry["archived_rows"],2)
+            self.assertEqual(entry["provider_window_status"],"NOT_CHECKED")
+            self.assertEqual(entry["entitlement_status"],"NOT_VERIFIED")
+
     def test_runner_registers_package_suite_without_hardcoded_old_count(self):
         path=Path(__file__).resolve().parents[1]/"run_all.py"
         t=ast.parse(path.read_text(encoding="utf-8"))
