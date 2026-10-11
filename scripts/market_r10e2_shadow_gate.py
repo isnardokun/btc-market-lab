@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.market_r10e_plan_only import PAGE_LIMITS, SLOT_MS, UTC
+from scripts.market_r10e_plan_only import PAGE_LIMITS, SLOT_MS, UTC, cutoff_ms
 
 MAX_PLAN_AGE_SECONDS = 300
 
@@ -123,7 +123,8 @@ def evaluate_shadow_gate(dispatch, runtime, *, now):
     if ((end - start).total_seconds() * 1000 != (count - 1) * SLOT_MS
             or int(start.timestamp() * 1000) % SLOT_MS
             or int(end.timestamp() * 1000) % SLOT_MS
-            or end > cutoff or cutoff > planned):
+            or end > cutoff or cutoff > planned
+            or int(cutoff.timestamp() * 1000) != cutoff_ms(planned)):
         raise ValueError("Unsafe time boundaries")
 
     extra = {"selected_provider": provider}
