@@ -61,6 +61,34 @@ def _fixture_guard(path, lock_directory):
     return dbfile
 
 
+def require_offline_precommit_integrity(db):
+    """One shared all-stream PRECOMMIT gate, reusable by atomic fan-out.
+
+    The caller owns the open SQLite transaction. An exception rolls back its
+    entire transaction, not just one metric/receipt.
+    """
+    proof = audit_receipt_reconstruction(db)
+    request_proof = ledger.audit_frozen_request_provenance(db)
+    native_request_proof = audit_native_frozen_request_lineage(db)
+    run_proof = ledger.audit_batch_source_runs(db)
+    source_manifest = source_aware_manifest(db)
+    if (proof["state"] != "RAW_SQL_LINEAGE_PASS"
+            or request_proof["state"] != "FROZEN_REQUEST_METADATA_PASS"
+            or native_request_proof["state"] != "NATIVE_FROZEN_REQUEST_LINEAGE_PASS"
+            or run_proof["state"] != "BATCH_SOURCE_RUN_LINEAGE_PASS"
+            or source_manifest["state"] != "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
+            or db.execute("PRAGMA foreign_key_check").fetchone()
+            or db.execute("PRAGMA quick_check").fetchone()[0] != "ok"):
+        raise ValueError("BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE")
+    return {
+        "raw_sql": proof["state"],
+        "request_metadata": request_proof["state"],
+        "native_request_lineage": native_request_proof["state"],
+        "source_run": run_proof["state"],
+        "source_manifest": source_manifest["state"],
+    }
+
+
 def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                      now, fault=None, _parent_lock_held=False,
                      _frozen_request=None, _batch_run=None):
@@ -161,19 +189,7 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                         db,run_id=run_id,ordinal=ordinal,planned_pages=planned,
                         receipt_id=result["receipt_id"],receipt_status=result["status"],
                         now=now)
-                proof = audit_receipt_reconstruction(db)
-                request_proof = ledger.audit_frozen_request_provenance(db)
-                native_request_proof = audit_native_frozen_request_lineage(db)
-                run_proof = ledger.audit_batch_source_runs(db)
-                source_manifest = source_aware_manifest(db)
-                if (proof["state"] != "RAW_SQL_LINEAGE_PASS"
-                        or request_proof["state"] != "FROZEN_REQUEST_METADATA_PASS"
-                        or native_request_proof["state"] != "NATIVE_FROZEN_REQUEST_LINEAGE_PASS"
-                        or run_proof["state"] != "BATCH_SOURCE_RUN_LINEAGE_PASS"
-                        or source_manifest["state"] != "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
-                        or db.execute("PRAGMA foreign_key_check").fetchone()
-                        or db.execute("PRAGMA quick_check").fetchone()[0] != "ok"):
-                    raise ValueError("BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE")
+                require_offline_precommit_integrity(db)
             return {
                 **result, "provider": spec.provider, "metric": spec.metric,
                 "page_provenance_gate": "RAW_SQL_LINEAGE_PASS",
