@@ -218,7 +218,7 @@ class TestPackageALegacyMigration(unittest.TestCase):
                 "http_status INTEGER,raw_payload BLOB,raw_sha256 TEXT,"
                 "parsed_count INTEGER,captured_utc TEXT)")
         existing=self.tables()
-        with self.assertRaisesRegex(ValueError,"primary key incompatible"):
+        with self.assertRaisesRegex(ValueError,"Incompatible Package A primary key"):
             self.run_migration()
         self.assertEqual(self.tables(),existing)
         self.assertEqual(self.legacy(),before)
@@ -234,7 +234,7 @@ class TestPackageALegacyMigration(unittest.TestCase):
                 "row_sha256 TEXT NOT NULL,receipt_id TEXT NOT NULL,"
                 "PRIMARY KEY(provider,metric,symbol,frequency,observed_utc,dimension_key))")
         original=self.tables()
-        with self.assertRaisesRegex(ValueError,"foreign key incompatible"):
+        with self.assertRaisesRegex(ValueError,"Incompatible Package A foreign key"):
             self.run_migration()
         self.assertEqual(self.tables(),original)
 
@@ -248,7 +248,7 @@ class TestPackageALegacyMigration(unittest.TestCase):
                 "CREATE TABLE package_a_cursors("
                 "provider TEXT,metric TEXT,symbol TEXT,frequency TEXT,"
                 "end_exclusive_utc TEXT,advanced_by_receipt TEXT)")
-        with self.assertRaisesRegex(ValueError,"primary key incompatible"):
+        with self.assertRaisesRegex(ValueError,"Incompatible Package A primary key"):
             self.run_migration()
 
     def test_runner_includes_synthetic_migration_rehearsal_once(self):
