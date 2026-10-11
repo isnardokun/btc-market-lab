@@ -310,3 +310,93 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
         self.assertEqual(audit["historical_request_evidence"][0]["attempted_requests"],2)
         self.assertEqual(audit["historical_request_evidence"][0]["historical_completeness"],"NOT_VERIFIED")
+
+
+    def test_all_eight_mock_requests_have_exact_sanitized_v2_provenance(self):
+        for scenario in scenarios():
+            self.apply(scenario)
+        report=inspect_fixture(self.path,self.locks)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        evidence=report["request_provenance"]
+        self.assertEqual(evidence["state"],"FROZEN_REQUEST_METADATA_PASS")
+        self.assertEqual(evidence["frozen_requests_with_metadata"],8)
+        self.assertEqual(evidence["receipts_without_frozen_request_metadata"],0)
+        self.assertFalse(evidence["upstream_requests_verified"])
+        with sqlite3.connect(self.path) as db:
+            self.assertEqual(db.execute(
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+            fred=db.execute(
+                "SELECT request_params_json FROM package_a_request_provenance "
+                "WHERE endpoint_origin='api.stlouisfed.org'").fetchone()[0]
+        self.assertEqual(json.loads(fred)["api_key"],"[REDACTED]")
+        self.assertNotIn(FAKE_KEY,fred)
+        self.assertNotIn("FRED_API_KEY",fred)
+
+    def test_direct_legacy_fixture_v1_upgrades_without_fabricating_old_requests(self):
+        from storage import package_a_ledger as ledger
+        # Build a faithful old version-1 Package A schema in disposable SQLite.
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            for statement in ledger.DDL[:-1]:
+                db.execute(statement)
+            db.execute(
+                "INSERT INTO package_a_schema_migrations VALUES(1,?)", (NOW,))
+            db.execute(
+                "INSERT INTO package_a_receipts "
+                "(receipt_id,provider,metric,symbol,frequency,start_utc,"
+                "end_exclusive_utc,status,captured_utc) VALUES "
+                "('old','binance','open_interest','BTCUSDT','5m',?,?, 'failed',?)",
+                (DAY,OI_END,NOW))
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            ledger.initialize(db,now=NOW)
+            self.assertEqual(db.execute(
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM package_a_request_provenance").fetchone()[0],0)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM package_a_receipts").fetchone()[0],1)
+            self.assertEqual(ledger.audit_frozen_request_provenance(db)[
+                "receipts_without_frozen_request_metadata"],1)
+            ledger.initialize(db,now=NOW)
+            self.assertEqual(db.execute(
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(2,)])
+
+    def test_tampered_request_metadata_blocks_new_atomic_page_write(self):
+        first=scenarios()[0]
+        second=scenarios()[4]
+        self.apply(first)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_request_provenance "
+                       "SET request_params_json='{}'")
+        audit=inspect_fixture(self.path,self.locks)
+        self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(audit["request_provenance"]["metadata_digest_errors"],1)
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(second)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(1,)])
+
+    def test_fake_v2_metadata_table_without_primary_key_is_rejected(self):
+        with sqlite3.connect(self.path) as db:
+            db.execute("CREATE TABLE package_a_request_provenance("
+                "receipt_id TEXT,endpoint_origin TEXT,endpoint_path TEXT,"
+                "request_params_json TEXT,request_sha256 TEXT,"
+                "transport TEXT,method TEXT,captured_utc TEXT)")
+        with self.assertRaisesRegex(ValueError,"primary key"):
+            self.apply(scenarios()[0])
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+            "AND name='package_a_receipts'"),[(0,)])
+
+    def test_opaque_rate_limit_still_keeps_sanitized_query_lineage(self):
+        scenario=scenarios()[0]
+        self.apply(scenario,status=429,source_raw=b"<html>429</html>")
+        with sqlite3.connect(self.path) as db:
+            details=db.execute(
+                "SELECT request_params_json,request_sha256,transport FROM "
+                "package_a_request_provenance").fetchone()
+        self.assertTrue(len(details[1])==64)
+        self.assertEqual(details[2],"FROZEN_OFFLINE")
+        self.assertEqual(json.loads(details[0])["from_time"],"2026-10-08")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
