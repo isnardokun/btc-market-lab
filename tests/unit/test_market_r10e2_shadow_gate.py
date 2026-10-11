@@ -113,6 +113,8 @@ class TestR10E2ShadowGate(unittest.TestCase):
             lambda d: d["selected"].update(interval="1m"),
             lambda d: d["selected"].update(estimated_slots_this_page=300),
             lambda d: d["selected"].update(direction="backward"),
+            lambda d: d["candidates"][0].update(status="BLOCKED_INTERNAL_GAP"),
+            lambda d: d["candidates"][0].update(closed_intervals_waiting=999),
             lambda d: d["selected"].update(first_page_end_utc=stamp(49)),
             lambda d: d["selected"].update(first_page_end_utc=stamp(55)),
             lambda d: d["selected"].update(next_start_utc="2026-10-10T21:11:00Z"),
@@ -177,6 +179,15 @@ class TestR10E2ShadowGate(unittest.TestCase):
         self.assertEqual(len(suites), 40)
         self.assertEqual(
             sum("tests.unit.test_market_r10e2_shadow_gate" in command for _, command in suites), 1)
+
+    def test_cli_has_no_apply_argument(self):
+        with contextlib.redirect_stderr(StringIO()) as stderr:
+            with self.assertRaises(SystemExit) as raised:
+                main(["--dispatch-json", "synthetic.json",
+                      "--fixture-policy-json", "synthetic_policy.json",
+                      "--now-utc", NOW.isoformat(), "--apply"])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn("unrecognized arguments", stderr.getvalue())
 
     def test_invalid_json_and_naive_utc_fail_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
