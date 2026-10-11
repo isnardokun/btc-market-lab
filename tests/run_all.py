@@ -59,6 +59,7 @@ TESTS = [
     ("Unit: R10-E.14 Opt-in Yahoo Price Writer Lock", "python3 -m unittest -v tests.unit.test_market_r10e14_optin_price_lock"),
     ("Unit: Package A Integrated Multi-Provider Ingestion", "python3 -m unittest -v tests.unit.test_package_a_integrated_ingestion"),
     ("Unit: Package A Global Lock Real Entrypoints Offline", "python3 -m unittest -v tests.unit.test_package_a_entrypoint_locks"),
+    ("Unit: Package A Historical Writer Global Lock Offline", "python3 -m unittest -v tests.unit.test_package_a_historical_writer_locks"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
