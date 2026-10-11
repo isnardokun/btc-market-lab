@@ -16,6 +16,7 @@ from ingestion.package_a_legacy_bridge import reconciled_fixture_points
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 from storage import package_a_ledger as ledger
 from scripts.package_a_provenance_audit import audit_receipt_reconstruction
+from scripts.package_a_native_request_audit import audit_native_frozen_request_lineage
 from scripts.package_a_source_coverage_manifest import source_aware_manifest
 from scripts.package_a_parent_lock import verify_offline_parent_lease
 
@@ -162,10 +163,12 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                         now=now)
                 proof = audit_receipt_reconstruction(db)
                 request_proof = ledger.audit_frozen_request_provenance(db)
+                native_request_proof = audit_native_frozen_request_lineage(db)
                 run_proof = ledger.audit_batch_source_runs(db)
                 source_manifest = source_aware_manifest(db)
                 if (proof["state"] != "RAW_SQL_LINEAGE_PASS"
                         or request_proof["state"] != "FROZEN_REQUEST_METADATA_PASS"
+                        or native_request_proof["state"] != "NATIVE_FROZEN_REQUEST_LINEAGE_PASS"
                         or run_proof["state"] != "BATCH_SOURCE_RUN_LINEAGE_PASS"
                         or source_manifest["state"] != "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
                         or db.execute("PRAGMA foreign_key_check").fetchone()
@@ -250,17 +253,19 @@ def inspect_fixture(db_path, lock_directory):
         rows = ledger.read_coverage(db)
         evidence = ledger.read_history_evidence(db)
         request_meta = ledger.audit_frozen_request_provenance(db)
+        native_request_meta = audit_native_frozen_request_lineage(db)
         source_runs = ledger.audit_batch_source_runs(db)
         source_manifest = source_aware_manifest(db)
         integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
         reconstruction = audit_receipt_reconstruction(db)
-    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS" and request_meta["state"] == "FROZEN_REQUEST_METADATA_PASS" and source_runs["state"] == "BATCH_SOURCE_RUN_LINEAGE_PASS" and source_manifest["state"] == "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
+    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS" and request_meta["state"] == "FROZEN_REQUEST_METADATA_PASS" and native_request_meta["state"] == "NATIVE_FROZEN_REQUEST_LINEAGE_PASS" and source_runs["state"] == "BATCH_SOURCE_RUN_LINEAGE_PASS" and source_manifest["state"] == "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
     return {
         "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",
         "rows": observations, "receipts": receipts, "source_coverage": rows,
         "historical_request_evidence": evidence,
         "receipt_reconstruction": reconstruction,
         "request_provenance": request_meta,
+        "native_request_lineage": native_request_meta,
         "source_runs": source_runs,
         "source_manifest": source_manifest,
         "raw_digest_errors": bad_raw, "normalized_digest_errors": bad_points,
