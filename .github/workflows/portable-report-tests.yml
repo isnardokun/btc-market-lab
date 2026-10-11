@@ -39,6 +39,10 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest -v tests.unit.test_package_a_historical_writer_locks
+      - name: Package A legacy SQLite WAL migration and rollback rehearsal
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest -v tests.unit.test_package_a_legacy_migration
       - name: Isolated worktree runtime retention regression
         env:
           BTC_RESEARCH_HOME: ${{ github.workspace }}
