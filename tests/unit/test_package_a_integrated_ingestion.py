@@ -764,5 +764,77 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
         self.assertFalse(report["production_authorized"])
 
 
+    def test_precommit_provenance_gate_accepts_success_and_replay(self):
+        spec, start, end, payload = sources()[0]
+        first = self.apply(spec, start, end, payload)
+        second = self.apply(spec, start, end, payload)
+        self.assertEqual(first["page_provenance_gate"], "RAW_SQL_LINEAGE_PASS")
+        self.assertEqual(second["page_provenance_gate"], "RAW_SQL_LINEAGE_PASS")
+        self.assertEqual(second["new_rows"], 0)
+        self.assertEqual(inspect_fixture(self.path,self.lockdir)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_precommit_rejects_corrupted_history_and_keeps_cursor_at_prior_end(self):
+        from ingestion.package_a_contracts import Point
+        spec = sources()[0][0]
+        self.apply(spec, DAY, NEXT, {"data":[{"date":"2026-10-08","value":1.0}]})
+        sha = ledger._point_hash(spec, Point(DAY, "", 99.0))
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE package_a_observations SET value=?,row_sha256=? "
+                "WHERE observed_utc=?", (99.0,sha,DAY))
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(spec, NEXT, AFTER, {"data":[{"date":"2026-10-09","value":1.01}]})
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations"),[(1,)])
+        self.assertEqual(self.read("SELECT end_exclusive_utc FROM package_a_cursors"),[(NEXT,)])
+        self.assertEqual(self.read("SELECT value FROM package_a_observations"),[(99.0,)])
+
+    def test_precommit_denies_failed_attempt_on_corrupted_prior_sql(self):
+        spec,start,end,payload=sources()[0]
+        self.apply(spec,start,end,payload)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET http_status=503")
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(spec,start,end,{"error":"fake 429"},status=429)
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+        self.assertEqual(self.read("SELECT http_status FROM package_a_receipts"),[(503,)])
+
+    def test_precommit_catches_broken_foreign_key_without_mutating_old_records(self):
+        spec = sources()[0][0]
+        self.apply(spec, DAY, NEXT, {"data":[{"date":"2026-10-08","value":1.0}]})
+        with sqlite3.connect(self.path) as db:
+            # Deliberately simulate an external NON-cooperative writer.
+            db.execute("PRAGMA foreign_keys=OFF")
+            db.execute("UPDATE package_a_observations SET receipt_id='missing'")
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(spec, NEXT, AFTER, {"data":[{"date":"2026-10-09","value":1.01}]})
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+        self.assertEqual(self.read("SELECT end_exclusive_utc FROM package_a_cursors"),[(NEXT,)])
+
+    def test_precommit_allows_legitimate_failed_and_empty_receipts(self):
+        spec,start,end,payload=sources()[0]
+        empty=self.apply(spec,start,end,{"data":[]})
+        failed=self.apply(spec,start,end,{"error":"fake 503"},status=503)
+        good=self.apply(spec,start,end,payload)
+        for receipt in (empty,failed,good):
+            self.assertEqual(receipt["page_provenance_gate"],"RAW_SQL_LINEAGE_PASS")
+        self.assertEqual(self.read("SELECT status FROM package_a_receipts ORDER BY rowid"),
+                         [("empty",),("failed",),("ok",)])
+        self.assertEqual(inspect_fixture(self.path,self.lockdir)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_precommit_fred_and_derivatives_event_replay_keeps_lineage(self):
+        for spec,start,end,payload in [sources()[2],*funding_sources()]:
+            first=self.apply(spec,start,end,payload)
+            again=self.apply(spec,start,end,payload)
+            self.assertEqual(first["page_provenance_gate"],"RAW_SQL_LINEAGE_PASS")
+            self.assertEqual(again["page_provenance_gate"],"RAW_SQL_LINEAGE_PASS")
+            self.assertFalse(again["cursor_advanced"])
+        report=inspect_fixture(self.path,self.lockdir)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(report["receipt_reconstruction"]["successful_receipts_reparsed"],6)
+
+
 if __name__ == "__main__":
     unittest.main()
