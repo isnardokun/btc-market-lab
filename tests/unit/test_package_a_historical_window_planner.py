@@ -125,12 +125,8 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
         self.assertEqual([w["native_slots"] for w in p["windows"]],[200,1])
         self.assertEqual(p["synthetic_max_rows_per_window"],200)
 
-    def test_yahoo_and_funding_are_explicitly_not_autopaginated(self):
-        cases=(
-            SeriesSpec("yahoo","close","BTC-USD","d1","USD"),
-            SeriesSpec("binance","funding_settled","BTCUSDT","event","fraction"),
-            SeriesSpec("bybit","funding_settled","BTCUSDT","event","fraction"),
-        )
+    def test_yahoo_remains_explicitly_not_autopaginated(self):
+        cases=(SeriesSpec("yahoo","close","BTC-USD","d1","USD"),)
         for spec in cases:
             with self.subTest(provider=spec.provider,metric=spec.metric):
                 r=plan_offline_historical_windows(spec,SEPT,OCT)
@@ -434,6 +430,256 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
             plan_offline_historical_windows(bad,SEPT,OCT)
         self.assertEqual(self.sql(
             "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def funding_bodies(self, plan, spec, *, failed=None, empty=None):
+        responses=[]
+        for w in plan["windows"]:
+            index=w["ordinal"]
+            if index==failed:
+                responses.append(FrozenPageBody(b"429 simulated",429))
+                continue
+            if index==empty:
+                data=[] if spec.provider=="binance" else {
+                    "retCode":0,"result":{"symbol":"BTCUSDT",
+                    "category":"linear","list":[]}}
+                responses.append(FrozenPageBody(json.dumps(data).encode()))
+                continue
+            base=dt.datetime.fromisoformat(
+                w["start_utc"].replace("Z","+00:00"))
+            moments=[base+dt.timedelta(hours=2),
+                     base+dt.timedelta(hours=5)]
+            if spec.provider=="binance":
+                data=[{"symbol":"BTCUSDT","fundingTime":epoch(stamp(moment)),
+                       "fundingRate":str(-0.0001-0.00001*i)}
+                      for i,moment in enumerate(moments)]
+            else:
+                data={"retCode":0,"result":{"category":"linear",
+                      "symbol":"BTCUSDT","list":[
+                      {"fundingRateTimestamp":str(epoch(stamp(moment))),
+                       "fundingRate":str(0.0002+0.00001*i)}
+                      for i,moment in enumerate(moments)]}}
+            responses.append(FrozenPageBody(
+                json.dumps(data,sort_keys=True,separators=(",",":")).encode()))
+        return responses
+
+    def test_funding_native_7day_windows_are_sparse_event_requests_not_fake_8h_bars(self):
+        begin="2026-09-20T00:00:00Z"
+        end="2026-10-05T00:00:00Z"
+        for provider in ("binance","bybit"):
+            spec=SeriesSpec(provider,"funding_settled","BTCUSDT",
+                            "event","fraction")
+            plan=plan_offline_historical_windows(spec,begin,end)
+            self.assertEqual(plan["state"],"OFFLINE_SOURCE_WINDOWS_PLANNED")
+            self.assertEqual(plan["candidate_pages"],3)
+            self.assertEqual([w["request_calendar_days"] for w in plan["windows"]],
+                             [7,7,1])
+            self.assertEqual([w["native_slots"] for w in plan["windows"]],
+                             [None,None,None])
+            self.assertEqual(plan["synthetic_max_calendar_days_per_window"],7)
+            self.assertIsNone(plan["synthetic_max_rows_per_window"])
+            self.assertEqual(plan["source_calendar_observation_expectation"],
+                             "NOT_INFERRED_FUNDING_SETTLEMENT_EVENTS")
+            self.assertEqual(plan["synthetic_response_saturation_limit"],
+                             1000 if provider=="binance" else 200)
+            self.assertEqual(plan["windows"][0]["start_utc"],begin)
+            self.assertEqual(plan["windows"][-1]["end_exclusive_utc"],end)
+            self.assertTrue(all(x["request_ready"] is False for x in
+                                plan["windows"]))
+            self.assertFalse(plan["provider_entitlement_verified"])
+            for w in plan["windows"]:
+                from scripts.package_a_frozen_legacy_transport import _request_for
+                url,query=_request_for(spec,w["start_utc"],
+                                       w["end_exclusive_utc"])
+                self.assertIn("funding",url)
+                self.assertEqual(query["symbol"],"BTCUSDT")
+                self.assertEqual(query["limit"],
+                                 "1000" if provider=="binance" else "200")
+                # Inclusive HTTP endpoint end is one millisecond before
+                # the EXCLUSIVE next window; no duplicate boundary event.
+                self.assertEqual(int(query["endTime"])+1,
+                                 epoch(w["end_exclusive_utc"]))
+
+    def test_funding_two_sources_sparse_end_to_end_into_same_temp_sqlite(self):
+        begin="2026-09-20T00:00:00Z"
+        end="2026-10-05T00:00:00Z"
+        for provider in ("binance","bybit"):
+            spec=SeriesSpec(provider,"funding_settled","BTCUSDT",
+                            "event","fraction")
+            plan=plan_offline_historical_windows(spec,begin,end)
+            result=run_offline_planned_history(self.db,self.locks,spec,begin,end,
+                    self.funding_bodies(plan,spec),now=NOW)
+            self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+            self.assertEqual(result["frozen_http_requests"],3)
+            self.assertEqual(result["new_observations"],6)
+            self.assertFalse(result["real_provider_pagination_verified"])
+        self.assertEqual(self.sql(
+            "SELECT provider,COUNT(*) FROM package_a_observations "
+            "GROUP BY provider ORDER BY provider"),
+            [("binance",6),("bybit",6)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(6,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_source_runs"),[(2,)])
+        self.assertEqual(self.sql("SELECT provider,end_exclusive_utc "
+                                  "FROM package_a_cursors ORDER BY provider"),
+                         [("binance",end),("bybit",end)])
+        audit=inspect_fixture(self.db,self.locks)
+        self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        for stream in audit["source_manifest"]["streams"]:
+            self.assertEqual(stream["source_native_semantics"],
+                             "FUNDING_SETTLEMENT_EVENTS")
+            self.assertEqual(stream["local_grid_state"],
+                             "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+            self.assertIsNone(stream["local_gap_evidence"])
+            self.assertEqual(stream["archived_rows"],6)
+            self.assertEqual(stream["historical_completeness"],"NOT_VERIFIED")
+            self.assertEqual(stream["provider_availability"],"NOT_CHECKED")
+
+    def test_funding_second_page_429_recovery_does_not_refetch_first_receipt(self):
+        begin="2026-09-20T00:00:00Z"
+        end="2026-10-05T00:00:00Z"
+        spec=SeriesSpec("binance","funding_settled","BTCUSDT",
+                        "event","fraction")
+        plan=plan_offline_historical_windows(spec,begin,end)
+        failure=run_offline_planned_history(
+            self.db,self.locks,spec,begin,end,
+            self.funding_bodies(plan,spec,failed=1),now=NOW)
+        self.assertEqual(failure["state"],"BATCH_BLOCKED")
+        self.assertEqual(failure["requests_attempted"],2)
+        self.assertEqual(failure["new_observations"],2)
+        before=self.sql("SELECT raw_payload,raw_sha256 FROM package_a_receipts "
+                        "WHERE status='ok'")
+        self.assertEqual(self.sql("SELECT end_exclusive_utc FROM package_a_cursors"),
+                         [(plan["windows"][0]["end_exclusive_utc"],)])
+        resumed=recover_offline_planned_history(
+            self.db,self.locks,spec,begin,end,self.funding_bodies(plan,spec),
+            prior_run_id=failure["run_id"],now=NOW)
+        self.assertEqual(resumed["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(resumed["recovery_start_index"],1)
+        self.assertEqual(resumed["frozen_http_requests"],2)
+        self.assertEqual(resumed["new_observations"],4)
+        self.assertEqual(self.sql("SELECT raw_payload,raw_sha256 FROM "
+            "package_a_receipts WHERE status='ok' ORDER BY rowid LIMIT 1"),before)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(4,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(6,)])
+        self.assertEqual(self.sql("SELECT status FROM package_a_source_runs "
+                                  "ORDER BY status"),[("blocked",),("complete",)])
+        self.assertEqual(inspect_fixture(self.db,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_funding_bybit_503_then_recover_without_fake_eight_hour_grid(self):
+        begin="2026-09-20T00:00:00Z"
+        end="2026-10-05T00:00:00Z"
+        spec=SeriesSpec("bybit","funding_settled","BTCUSDT","event","fraction")
+        plan=plan_offline_historical_windows(spec,begin,end)
+        original=self.funding_bodies(plan,spec)
+        original[1]=FrozenPageBody(b"<error>503</error>",503)
+        failed=run_offline_planned_history(
+            self.db,self.locks,spec,begin,end,original,now=NOW)
+        self.assertEqual(failed["state"],"BATCH_BLOCKED")
+        success=recover_offline_planned_history(
+            self.db,self.locks,spec,begin,end,self.funding_bodies(plan,spec),
+            prior_run_id=failed["run_id"],now=NOW)
+        self.assertEqual(success["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(success["recovery_start_index"],1)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(6,)])
+        self.assertIsNone(success["audit"]["source_manifest"]["streams"][0][
+            "local_gap_evidence"])
+
+    def test_funding_saturated_binance_1000_fails_closed_with_raw_receipt_no_cursor(self):
+        start="2026-09-20T00:00:00Z"
+        end="2026-09-27T00:00:00Z"
+        spec=SeriesSpec("binance","funding_settled","BTCUSDT",
+                        "event","fraction")
+        # All 1000 events are in the SAME 7-day request window. No claim
+        # that this is ALL provider data, even with HTTP 200.
+        base=dt.datetime(2026,9,20,tzinfo=UTC)
+        records=[{"symbol":"BTCUSDT",
+                  "fundingTime":epoch(stamp(base+dt.timedelta(minutes=10*i))),
+                  "fundingRate":"0.0001"} for i in range(1000)]
+        result=run_offline_planned_history(
+            self.db,self.locks,spec,start,end,
+            [FrozenPageBody(json.dumps(records).encode())],now=NOW)
+        self.assertEqual(result["state"],"BATCH_BLOCKED")
+        self.assertEqual(result["pages"][0]["status"],"rejected")
+        self.assertEqual(result["pages"][0]["failure_class"],"ValueError")
+        self.assertEqual(self.sql("SELECT status,http_status FROM package_a_receipts"),
+                         [("rejected",200)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.db,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_funding_saturated_bybit_200_fails_closed_with_raw_receipt_no_cursor(self):
+        start="2026-09-20T00:00:00Z"
+        end="2026-09-27T00:00:00Z"
+        spec=SeriesSpec("bybit","funding_settled","BTCUSDT",
+                        "event","fraction")
+        base=dt.datetime(2026,9,20,tzinfo=UTC)
+        records=[{"fundingRateTimestamp":str(epoch(
+                     stamp(base+dt.timedelta(minutes=10*i)))),
+                  "fundingRate":"0.0001"} for i in range(200)]
+        payload={"retCode":0,"result":{"category":"linear",
+                 "symbol":"BTCUSDT","list":records}}
+        result=run_offline_planned_history(
+            self.db,self.locks,spec,start,end,
+            [FrozenPageBody(json.dumps(payload).encode())],now=NOW)
+        self.assertEqual(result["state"],"BATCH_BLOCKED")
+        self.assertEqual(result["pages"][0]["status"],"rejected")
+        self.assertEqual(result["pages"][0]["failure_class"],"ValueError")
+        self.assertEqual(self.sql("SELECT status FROM package_a_receipts"),
+                         [("rejected",)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_funding_empty_page_retains_unknown_provider_history_and_no_cursor(self):
+        start="2026-09-20T00:00:00Z"
+        end="2026-10-04T00:00:00Z"
+        spec=SeriesSpec("bybit","funding_settled","BTCUSDT",
+                        "event","fraction")
+        plan=plan_offline_historical_windows(spec,start,end)
+        result=run_offline_planned_history(
+            self.db,self.locks,spec,start,end,
+            self.funding_bodies(plan,spec,empty=0),now=NOW)
+        self.assertEqual(result["state"],"BATCH_BLOCKED")
+        self.assertEqual(result["pages"][0]["state"],"PAGE_EMPTY_UNVERIFIED")
+        self.assertEqual(result["frozen_http_requests"],1)
+        self.assertEqual(result["remaining_requests_not_run"],1)
+        self.assertEqual(self.sql("SELECT status FROM package_a_receipts"),
+                         [("empty",)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.db,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_funding_33_calendar_windows_fail_before_fake_http_or_sql(self):
+        spec=SeriesSpec("binance","funding_settled","BTCUSDT",
+                        "event","fraction")
+        start="2025-01-01T00:00:00Z"
+        end=stamp(dt.datetime(2025,1,1,tzinfo=UTC)+dt.timedelta(days=7*33))
+        plan=plan_offline_historical_windows(spec,start,end)
+        self.assertEqual(plan["state"],"BLOCKED_HISTORICAL_PAGE_BUDGET")
+        self.assertEqual(plan["candidate_pages"],33)
+        self.assertEqual(plan["windows"],[])
+        self.assertFalse(plan["production_authorized"])
+        with self.assertRaisesRegex(ValueError,"PAGE_BUDGET"):
+            run_offline_planned_history(
+                self.db,self.locks,spec,start,end,[],now=NOW)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM sqlite_master "
+                                  "WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_funding_false_eight_hour_gap_never_creates_synthetic_candidate(self):
+        spec=SeriesSpec("binance","funding_settled","BTCUSDT",
+                        "event","fraction")
+        start="2026-09-20T00:00:00Z"
+        end="2026-09-27T00:00:00Z"
+        plan=plan_offline_historical_windows(spec,start,end)
+        result=run_offline_planned_history(
+            self.db,self.locks,spec,start,end,
+            self.funding_bodies(plan,spec),now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        stream=result["audit"]["source_manifest"]["streams"][0]
+        self.assertEqual(stream["distinct_observation_dates"],2)
+        self.assertEqual(stream["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertIsNone(stream["local_gap_evidence"])
+        self.assertEqual(stream["historical_completeness"],"NOT_VERIFIED")
 
 
 if __name__=="__main__":
