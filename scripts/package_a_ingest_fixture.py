@@ -24,12 +24,13 @@ LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 @dataclass(frozen=True)
 class FixtureResponse:
-    status_code: int
+    status_code: int | None
     payload: object
     raw_bytes: bytes | None = None
 
     def __post_init__(self):
-        if type(self.status_code) is not int or self.status_code not in (200, 429, 500, 503):
+        if self.status_code is not None and (type(self.status_code) is not int or
+                self.status_code not in (200, 429, 500, 503)):
             raise ValueError("Only known synthetic HTTP outcomes are permitted")
         if self.raw_bytes is not None and type(self.raw_bytes) is not bytes:
             raise ValueError("Explicit frozen HTTP RAW bytes must be bytes")
@@ -118,7 +119,9 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                         raw=raw, http_status=response.status_code, now=now)
                     result = {"state": "PAGE_NOT_COMMITTED",
                               "receipt_id": receipt, "status": category,
-                              "failure_class": error or "SYNTHETIC_HTTP_" + str(response.status_code),
+                              "failure_class": error or ("SYNTHETIC_TRANSPORT_TIMEOUT"
+                                  if response.status_code is None else
+                                  "SYNTHETIC_HTTP_" + str(response.status_code)),
                               "new_rows": 0, "cursor_advanced": False}
                 elif not points:
                     receipt = ledger.record_failure(
