@@ -27,9 +27,9 @@ class TestPackageAOfflineRunnerSafety(unittest.TestCase):
 
     def test_registry_contains_every_suite_once(self):
         self.assertEqual(len(self.entries),1)
-        self.assertEqual(len(self.entries[0]),61)
-        self.assertEqual(len({n for n,c in self.entries[0]}),61)
-        self.assertEqual(len({c for n,c in self.entries[0]}),61)
+        self.assertEqual(len(self.entries[0]),62)
+        self.assertEqual(len({n for n,c in self.entries[0]}),62)
+        self.assertEqual(len({c for n,c in self.entries[0]}),62)
 
     def test_pipeline_is_explicitly_designated_live_only(self):
         self.assertEqual(len(self.live),1)
