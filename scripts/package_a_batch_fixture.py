@@ -148,8 +148,14 @@ def _request_identity(page):
     if isinstance(page, FrozenLegacyPage):
         raw=page.raw_bytes
         frozen=True
-        if type(raw) is not bytes or not 0 < len(raw) <= 2_000_000:
+        if (type(raw) is not bytes or
+                not (0 < len(raw) <= 2_000_000 or
+                     (page.status_code is None and raw == b""))):
             raise ValueError("Bounded frozen page RAW required")
+        # A timed-out mock carries no HTTP response body by design.
+        # Its empty *fixture* bytes are NOT a stored RAW payload, and the
+        # original failure receipt has raw_sha256=NULL. Successful replay
+        # prefixes still require a byte-exact nonempty RAW digest.
     else:
         frozen=False
         if not isinstance(page.response, FixtureResponse):
