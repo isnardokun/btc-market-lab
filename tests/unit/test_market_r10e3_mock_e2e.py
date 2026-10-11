@@ -121,8 +121,10 @@ class TestR10E3MockOnePage(unittest.TestCase):
                              and n.func.attr == "urlopen" for n in ast.walk(tree)))
 
     def test_runner_propagates_failed_suite_exit_code(self):
-        # Reproduce the runner with ONLY a synthetic failing command.
-        # No test in this fixture calls APIs or opens project databases.
+        # Reproduce the offline runner with a synthetic failing command,
+        # preserving the mandatory live-only registry entry. That live suite
+        # is explicitly skipped, never imported or run by this fixture.
+        # No test here calls APIs or opens project databases.
         runner = Path(__file__).resolve().parents[1] / "run_all.py"
         tree = ast.parse(runner.read_text(encoding="utf-8"))
         declarations = [
@@ -134,7 +136,9 @@ class TestR10E3MockOnePage(unittest.TestCase):
         self.assertEqual(len(declarations), 1)
         declarations[0].value = ast.parse(
             repr([("Synthetic failing suite",
-                   sys.executable + " -c 'import sys;sys.exit(7)'")]),
+                   sys.executable + " -c 'import sys;sys.exit(7)'"),
+                  ("Integration: Pipeline",
+                   "python3 tests/integration/test_pipeline.py")]),
             mode="eval").body
         with tempfile.TemporaryDirectory() as temp_dir:
             test_dir = Path(temp_dir) / "tests"
