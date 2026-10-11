@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import BASE_URL, CATALOG, PROVIDER
 from storage.archive_schema import archive_schema_installed, attach_available_triggers, register_dataset
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "db" / "btc_research.db"
@@ -270,7 +271,7 @@ def inventory(path):
     } for slug, item in CATALOG.items()]
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Complemento on-chain RBN opcional, aislado de bitview")
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument("--catalog", action="store_true", help="Mostrar fuentes priorizadas sin acceder a API/BD")
@@ -280,7 +281,17 @@ def main():
     actions.add_argument("--sync", metavar="SLUG", help="Ingesta explícita de una métrica, NO corre con daily.sh")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--days", type=int, default=7, help="Días diarios a solicitar (1..14)")
-    args = parser.parse_args()
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in shared lock for SQLite mutation")
+    args = parser.parse_args(argv)
+    if args.init_db or args.sync:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda: _run_rbn_v2_args(args),
+            label="researchbitcoin-v2-write")
+    return _run_rbn_v2_args(args)
+
+
+def _run_rbn_v2_args(args):
     if args.catalog:
         print(json.dumps([vars(item) | {"docs": item.docs} for item in CATALOG.values()],
                          ensure_ascii=False, indent=2))
@@ -308,4 +319,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
