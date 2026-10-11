@@ -806,7 +806,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                self.as_frozen_page(scenarios()[4],status=503,body=b"503")]
         prior=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
         with sqlite3.connect(self.path) as db:
-            db.execute("UPDATE package_a_receipts SET raw_sha256='bad' WHERE status='ok'")
+            db.execute("UPDATE package_a_receipts SET raw_sha256=? WHERE status='ok'",("0"*64,))
         with self.assertRaisesRegex(ValueError,"RECOVERY_DB_INTEGRITY"):
             recover_synthetic_batch(self.path,self.locks,pages,
                                     prior_run_id=prior["run_id"],now=NOW)
