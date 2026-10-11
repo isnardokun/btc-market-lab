@@ -693,6 +693,7 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                     ("a"*32,1,NOW,NOW))
                 db.execute("INSERT INTO package_a_run_pages VALUES(?,?,?,'ok')",
                            ("a"*32,0,row))
+            db.rollback()  # the failed UNIQUE statement must not commit its parent row
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(1,)])
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(1,)])
         self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
