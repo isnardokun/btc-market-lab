@@ -166,7 +166,13 @@ def run_offline_onchain_catalog(db_path,lock_dir,plan,responses,*,now):
         selection=[(p["provider"],p["metric"]) for p in plan["source_plans"]],
         max_total_requests=_MAX_TOTAL_REQUESTS,
     )
-    if original["onchain_plan_sha256"]!=plan["onchain_plan_sha256"]:
+    if (original["onchain_plan_sha256"]!=plan["onchain_plan_sha256"] or
+            original["ordered_requests"]!=entries or
+            original["source_plans"]!=plan["source_plans"] or
+            original["requested_streams"]!=plan.get("requested_streams") or
+            original["requested_source_native_pages"]!=
+                plan.get("requested_source_native_pages") or
+            original["shard_count"]!=plan.get("shard_count")):
         raise ValueError("BLOCKED_ONCHAIN_CATALOG_PLAN_DRIFT")
     pages=[]
     staged_bytes=0
