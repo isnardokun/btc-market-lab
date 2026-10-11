@@ -223,6 +223,15 @@ class HistoricalGlobalWriterLockTests(unittest.TestCase):
         self.assertFalse(any(isinstance(node,ast.FunctionDef) and node.name=="main"
                              for node in tree.body))
 
+    def test_yahoo_invalid_db_keeps_argparse_error_not_traceback(self):
+        absent=self.root/"never-create-this.db"
+        with contextlib.redirect_stderr(StringIO()) as err:
+            with self.assertRaises(SystemExit) as raised:
+                yahoo_history.main(["--db",str(absent)])
+        self.assertEqual(raised.exception.code,2)
+        self.assertIn("SQLite existente",err.getvalue())
+        self.assertFalse(absent.exists())
+
     def test_current_repo_test_runner_registers_new_suite_once(self):
         tree=ast.parse((self.repo/"tests"/"run_all.py").read_text(encoding="utf-8"))
         entries=[ast.literal_eval(node.value) for node in tree.body
