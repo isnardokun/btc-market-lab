@@ -51,6 +51,7 @@ TESTS = [
     ("Unit: R10-E.6 ResearchBitcoin Tier 2 Synthetic Entitlement", "python3 -m unittest -v tests.unit.test_market_r10e6_rbn_tier2_shadow"),
     ("Unit: R10-E.7 Read-Only Multi-Provider Archive Manifest", "python3 -m unittest -v tests.unit.test_market_r10e7_ro_archive_manifest"),
     ("Unit: R10-E.8 Source-Aware Internal Gap Audit RO", "python3 -m unittest -v tests.unit.test_market_r10e8_ro_internal_gap_audit"),
+    ("Unit: R10-E.9 Cross-Report Evidence Reconciliation", "python3 -m unittest -v tests.unit.test_market_r10e9_evidence_review_queue"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
