@@ -17,7 +17,8 @@ from scripts.package_a_frozen_legacy_transport import (
     FrozenLegacyHTTP, FAKE_KEY, _request_for, run_mocked_legacy_page,
 )
 from scripts.package_a_ingest_fixture import MARKER, MARKER_VALUE, inspect_fixture
-from scripts.package_a_batch_fixture import FrozenLegacyPage, FixturePage, run_synthetic_batch
+from scripts.package_a_batch_fixture import (FrozenLegacyPage, FixturePage, run_synthetic_batch,
+    plan_synthetic_resume, recover_synthetic_batch)
 from scripts.package_a_ingest_fixture import FixtureResponse
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock
 
@@ -698,3 +699,157 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(1,)])
         self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
                          "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+
+    def test_recovery_skips_verified_successful_prefix_after_429(self):
+        pages=[self.as_frozen_page(s) for s in (scenarios()[0],scenarios()[4],scenarios()[2])]
+        failed=[pages[0],self.as_frozen_page(scenarios()[4],status=429,body=b"429 HTML"),pages[2]]
+        prior=run_synthetic_batch(self.path,self.locks,failed,now=NOW)
+        self.assertEqual(prior["state"],"BATCH_BLOCKED")
+        plan=plan_synthetic_resume(self.path,self.locks,pages,prior_run_id=prior["run_id"])
+        self.assertEqual((plan["resume_index"],plan["remaining_pages"]),(1,2))
+        before=self.rows("SELECT receipt_id FROM package_a_observations ORDER BY observed_utc")
+        result=recover_synthetic_batch(self.path,self.locks,pages,
+                                       prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(result["recovery_start_index"],1)
+        self.assertEqual(result["frozen_http_requests"],2)
+        self.assertNotEqual(result["run_id"],prior["run_id"])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(4,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(2,)])
+        self.assertEqual(self.rows("SELECT status FROM package_a_source_runs ORDER BY status"),
+                         [("blocked",),("complete",)])
+        self.assertEqual(self.rows("SELECT receipt_id FROM package_a_observations "
+                                   "WHERE provider='researchbitcoin' ORDER BY observed_utc"),before)
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_recovery_crash_between_pages_reads_persisted_running_prefix(self):
+        import scripts.package_a_batch_fixture as batch
+        from storage.package_a_ledger import SimulatedCrash
+        from unittest.mock import patch
+        orig=batch.run_mocked_legacy_page
+        seen=[0]
+        def interrupt(*a,**kw):
+            seen[0]+=1
+            if seen[0]==2:
+                raise SimulatedCrash("interrupted_before_next_request")
+            return orig(*a,**kw)
+        pages=[self.as_frozen_page(scenarios()[0]),self.as_frozen_page(scenarios()[4])]
+        with patch.object(batch,"run_mocked_legacy_page",side_effect=interrupt):
+            with self.assertRaisesRegex(SimulatedCrash,"interrupted_before_next_request"):
+                run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        original=self.rows("SELECT run_id FROM package_a_source_runs")[0][0]
+        self.assertEqual(self.rows("SELECT status FROM package_a_source_runs"),[("running",)])
+        preflight=plan_synthetic_resume(self.path,self.locks,pages,
+                                        prior_run_id=original)
+        self.assertEqual(preflight["resume_index"],1)
+        result=recover_synthetic_batch(self.path,self.locks,pages,
+                                       prior_run_id=original,now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(result["requests_attempted"],1)
+        self.assertEqual(self.rows("SELECT status FROM package_a_source_runs ORDER BY status"),
+                         [("complete",),("running",)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_completed_recovery_noop_adds_no_sql_receipts_or_mock_http(self):
+        pages=[self.as_frozen_page(scenarios()[0])]
+        prior=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        before=self.rows("SELECT COUNT(*) FROM package_a_receipts")
+        result=recover_synthetic_batch(self.path,self.locks,pages,
+                                       prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(result["state"],"RESUME_ALREADY_COMPLETE")
+        self.assertEqual(result["requests_attempted"],0)
+        self.assertEqual(result["frozen_http_requests"],0)
+        self.assertIsNone(result["new_run_id"])
+        self.assertEqual(before,self.rows("SELECT COUNT(*) FROM package_a_receipts"))
+
+    def test_resume_rejects_modified_successful_prefix_before_http_and_sql(self):
+        original=[self.as_frozen_page(scenarios()[0]),
+                  self.as_frozen_page(scenarios()[4],status=503,body=b"503")]
+        prior=run_synthetic_batch(self.path,self.locks,original,now=NOW)
+        modified=list(original)
+        sc=scenarios()[0]
+        modified[0]=self.as_frozen_page(sc,body=raw({"data":[
+            {"date":"2026-10-08","value":0.1},
+            {"date":"2026-10-09","value":0.2}]}))
+        with self.assertRaisesRegex(ValueError,"SUCCESS_RAW_DRIFT"):
+            recover_synthetic_batch(self.path,self.locks,modified,
+                                    prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(1,)])
+
+    def test_resume_rejects_changed_provider_time_window_before_http(self):
+        old=[self.as_frozen_page(scenarios()[0]),
+             self.as_frozen_page(scenarios()[4],status=429,body=b"429")]
+        prior=run_synthetic_batch(self.path,self.locks,old,now=NOW)
+        altered=[self.as_frozen_page(scenarios()[0]),
+                 self.as_frozen_page(scenarios()[5])]
+        with self.assertRaisesRegex(ValueError,"REQUEST_IDENTITY_DRIFT"):
+            recover_synthetic_batch(self.path,self.locks,altered,
+                                    prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_resume_rejects_forged_original_page_count_and_unknown_run(self):
+        pages=[self.as_frozen_page(scenarios()[0]),
+               self.as_frozen_page(scenarios()[4],status=429,body=b"429")]
+        prior=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        with self.assertRaisesRegex(ValueError,"PLAN_LENGTH_DRIFT"):
+            plan_synthetic_resume(self.path,self.locks,pages[:1],
+                                  prior_run_id=prior["run_id"])
+        with self.assertRaisesRegex(ValueError,"UNKNOWN_RUN"):
+            plan_synthetic_resume(self.path,self.locks,pages,
+                                  prior_run_id="f"*32)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(1,)])
+
+    def test_resume_refuses_corrupt_prior_receipt_and_row_sha(self):
+        pages=[self.as_frozen_page(scenarios()[0]),
+               self.as_frozen_page(scenarios()[4],status=503,body=b"503")]
+        prior=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET raw_sha256='bad' WHERE status='ok'")
+        with self.assertRaisesRegex(ValueError,"RECOVERY_DB_INTEGRITY"):
+            recover_synthetic_batch(self.path,self.locks,pages,
+                                    prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_recovery_lock_busy_returns_before_sqlite_and_frozen_http(self):
+        original=[self.as_frozen_page(scenarios()[0]),
+                  self.as_frozen_page(scenarios()[4],status=429,body=b"429")]
+        prior=run_synthetic_batch(self.path,self.locks,original,now=NOW)
+        with hold_writer_lock(self.locks,namespace="btc-research-global-writer-v1"):
+            blocked=recover_synthetic_batch(self.path,self.locks,original,
+                                             prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(blocked["state"],"BLOCKED_WRITER_BUSY")
+        self.assertEqual(blocked["frozen_http_requests"],0)
+        self.assertEqual(blocked["requests_attempted"],0)
+        self.assertEqual(blocked["sqlite_connections_started"],0)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_recovery_retries_failed_timeout_as_success_without_fake_old_raw(self):
+        page=self.as_frozen_page(scenarios()[4])
+        attempt=self.as_frozen_page(scenarios()[4],status=None,body=b"")
+        prior=run_synthetic_batch(self.path,self.locks,[attempt],now=NOW)
+        self.assertEqual(prior["state"],"BATCH_BLOCKED")
+        response=recover_synthetic_batch(self.path,self.locks,[page],
+                                         prior_run_id=prior["run_id"],now=NOW)
+        self.assertEqual(response["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(response["recovery_start_index"],0)
+        self.assertEqual(self.rows(
+            "SELECT status,http_status FROM package_a_receipts ORDER BY rowid"),
+            [("failed",None),("ok",200)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(1,)])
+        self.assertFalse(response["real_provider_windows_verified"])
+
+    def test_read_only_recovery_plan_does_not_add_sql_receipts_or_runs(self):
+        pages=[self.as_frozen_page(scenarios()[0]),
+               self.as_frozen_page(scenarios()[4],status=429,body=b"429")]
+        prior=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        before=(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),
+                self.rows("SELECT COUNT(*) FROM package_a_receipts"))
+        p=plan_synthetic_resume(self.path,self.locks,pages,
+                                prior_run_id=prior["run_id"])
+        self.assertEqual(p["state"],"RESUME_PLANNED_OFFLINE")
+        self.assertEqual(before,(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),
+                                 self.rows("SELECT COUNT(*) FROM package_a_receipts")))
+        self.assertFalse(p["upstream_availability_verified"])
+        self.assertFalse(p["production_authorized"])
