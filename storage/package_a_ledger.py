@@ -153,6 +153,20 @@ def validate_schema(conn):
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
                         (index,)).fetchone() is None:
             raise ValueError("Missing Package A index " + index)
+    # Receipt must be owned by AT MOST ONE run page even if a hostile or
+    # partially-created schema has the right table names, primary key, and
+    # foreign keys. A named nonunique index must not satisfy this contract.
+    unique_receipt=False
+    for item in conn.execute("PRAGMA index_list(package_a_run_pages)"):
+        if item[2] != 1:
+            continue
+        columns=[col[2] for col in conn.execute(
+            'PRAGMA index_info("' + item[1] + '")')]
+        if columns == ["receipt_id"]:
+            unique_receipt=True
+    if not unique_receipt:
+        raise ValueError("Missing unique Package A run receipt ownership")
+
 
 
 def initialize(conn, *, now):
