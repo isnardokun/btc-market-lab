@@ -4,7 +4,10 @@ backfill_onchain_metrics.py — Backfill historical BTC on-chain metrics
 from bitview daily table into daily_metrics.
 Uses correct series IDs and date matching via Python datetime.
 """
-import sqlite3, datetime
+import sqlite3, datetime, argparse, sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 DB_PATH = "/home/ignotus/btc-research/db/btc_research.db"
 
 # series_id → (metric_name, unit)
@@ -142,5 +145,14 @@ def backfill_onchain():
     print(f"Total inserted this run: {total_inserted}")
     db.close()
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Backfill daily on-chain metrics")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in shared lock before historical SQLite writes")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, backfill_onchain, label="onchain-indicator-backfill")
+
+
 if __name__ == "__main__":
-    backfill_onchain()
+    raise SystemExit(main())
