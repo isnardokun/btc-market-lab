@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from scripts.backup_db import create_backup
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from storage.archive_schema import ensure_archive_schema, SCHEMA_VERSION
 
 
@@ -53,16 +54,26 @@ def run(db_path, *, apply=False, backup_dir=None):
             "integrity":"ok","after":inspect(db_path)}
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db",type=Path,default=Path(DB_PATH))
     parser.add_argument("--apply",action="store_true",
                         help="AUTORIZAR backup WAL-safe más migración aditiva")
     parser.add_argument("--backup-dir",type=Path,help="Backup fuera del repositorio público")
-    args=parser.parse_args()
+    parser.add_argument("--global-lock-dir",type=Path,default=None,
+                        help="Explicit opt-in shared writer lock BEFORE backup and migration")
+    args=parser.parse_args(argv)
     try:
-        print(json.dumps(run(args.db,apply=args.apply,backup_dir=args.backup_dir),
-                         indent=2,ensure_ascii=False))
+        if args.apply:
+            result=run_with_optional_writer_lock(
+                args.global_lock_dir,
+                lambda:run(args.db,apply=True,backup_dir=args.backup_dir),
+                label="archive-schema-migration")
+            if result == 3:
+                return 3
+        else:
+            result=run(args.db,apply=False,backup_dir=args.backup_dir)
+        print(json.dumps(result,indent=2,ensure_ascii=False))
         return 0
     except (OSError,sqlite3.Error,RuntimeError,ValueError) as exc:
         print("SCHEMA STOP: "+type(exc).__name__,file=sys.stderr)
