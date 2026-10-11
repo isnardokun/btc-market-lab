@@ -4,8 +4,10 @@ backfill_metrics.py — Compute and store historical metrics from existing data.
 Uses price_btc + daily (bitview) + macro_fred to backfill daily_metrics.
 Only backfills past dates; today's snapshot done separately by archive_metrics.py.
 """
-import sqlite3, datetime, sys, os
+import sqlite3, datetime, sys, os, argparse
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 DB_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + "/db/btc_research.db"
 
@@ -129,5 +131,14 @@ def backfill():
     print(f"\nBackfill complete. Total metrics rows: {total}, BTC days covered: {days}")
     db.close()
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Backfill derived financial indicators")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in shared lock before historical SQLite writes")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, backfill, label="financial-indicator-backfill")
+
+
 if __name__ == "__main__":
-    backfill()
+    raise SystemExit(main())
