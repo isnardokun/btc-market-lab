@@ -179,11 +179,13 @@ def inspect_fixture(db_path, lock_directory):
         observations = db.execute("SELECT COUNT(*) FROM package_a_observations").fetchone()[0]
         receipts = db.execute("SELECT COUNT(*) FROM package_a_receipts").fetchone()[0]
         rows = ledger.read_coverage(db)
+        evidence = ledger.read_history_evidence(db)
         integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
     accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok"
     return {
         "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",
         "rows": observations, "receipts": receipts, "source_coverage": rows,
+        "historical_request_evidence": evidence,
         "raw_digest_errors": bad_raw, "normalized_digest_errors": bad_points,
         "coverage_errors": bad_coverage, "cursor_window_errors": bad_cursor_windows,
         "lineage_errors": bad_links,
