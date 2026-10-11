@@ -124,11 +124,18 @@ def _request_for(spec, start, end):
         return (config.API_BASE + "/series/" + item[0] + "/1d",
                 {"start": a, "end": (last - dt.timedelta(days=1)).date().isoformat()})
     if spec.provider == "yahoo":
-        if (spec.symbol != "BTC-USD" or spec.metric != "close"
-                or spec.frequency != "d1" or spec.unit != "USD"):
-            raise ValueError("Yahoo BTC-close legacy fixture only")
-        return ("https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD",
-                {"interval": "1d", "range": "max"})
+        # The installed legacy client is strictly range=max, not period1/
+        # period2 paging. Each supported fixture metric is parsed out of
+        # EXACTLY the same source-native daily quote envelope; no invented
+        # windowed Yahoo HTTP request or equity session calendar.
+        if (spec.symbol not in ("BTC-USD", "SPY", "GLD")
+                or spec.metric not in ("open", "high", "low", "close", "volume")
+                or spec.frequency != "d1"
+                or spec.unit != ("native_volume" if spec.metric == "volume" else "USD")
+                or spec.raw_scale != "native"):
+            raise ValueError("Yahoo offline OHLCV legacy fixture only")
+        return ("https://query1.finance.yahoo.com/v8/finance/chart/"
+                + spec.symbol, {"interval": "1d", "range": "max"})
     if spec.provider == "fred":
         aliases = {"daily": "d1", "monthly": "monthly", "weekly": "weekly"}
         approved = {name: freq for name, _, freq, _ in config.FRED_SERIES}
