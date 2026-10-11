@@ -207,8 +207,12 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
             except (HTTPError, RuntimeError):
                 if status_code == 200 or frozen.calls != 1:
                     raise
-                parsed = json.loads(raw_bytes)
-            if frozen.calls != 1 or parsed != json.loads(raw_bytes):
+                # 429/5xx bodies are frequently HTML/plain text, not JSON.
+                # The upstream client must see the HTTP error, but the page
+                # ledger retains original opaque bytes and does not advance.
+                parsed = None
+            if (frozen.calls != 1 or
+                    (status_code == 200 and parsed != json.loads(raw_bytes))):
                 raise ValueError("BLOCKED_LEGACY_PARSER_RAW_MISMATCH")
             response = FixtureResponse(status_code, parsed, raw_bytes=raw_bytes)
             outcome = run_fixture_page(
