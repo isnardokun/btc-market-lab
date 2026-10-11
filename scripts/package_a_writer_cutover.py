@@ -6,7 +6,9 @@ processes with throwaway marked Python fixtures. A separate operator-approved
 production launcher/cutover is intentionally NOT implemented here.
 """
 from pathlib import Path
+import errno
 import os
+import signal
 import subprocess
 import sys
 
@@ -74,38 +76,102 @@ def _fixture_guard(root, lock_dir):
     return base.resolve(), worker.resolve()
 
 
+def _live_child_process_group(pid):
+    """Check a synthetic child session for descendants after parent exit.
+
+    A POSIX session leader creates its own process group, and grandchildren
+    normally inherit it. This detects *cooperating* descendants, not hostile
+    processes that deliberately call setsid() or move outside this session.
+    """
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Fail closed: unknown processes still exist in the group.
+        return True
+    return True
+
+
+def _terminate_test_process_group(proc):
+    """Stop child AND normal descendants while the parent still holds flock.
+
+    Sending SIGKILL only to the leader (subprocess.run timeout behavior) can
+    release flock while a spawned grandchild continues writing. The local
+    disposable fixture uses its own session and group for cleanup.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.communicate(timeout=2)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("BLOCKED_OFFLINE_CHILD_REAP_UNCERTAIN") from exc
+
+
 def run_offline_parent_locked_child(root, lock_dir, *, timeout=4):
     """Run ONLY an explicit marked Python test child under parent flock.
 
     No arbitrary argv, DB pathname, remote URL, source import or schedule.
-    The child is executable test input controlled by the disposable fixture.
+    Supervisor retains the lock across direct-child and descendant cleanup.
+    This is NOT an operational launcher; it cannot exclude separate-session
+    escapees, noncooperating writers or validate host process topology.
     """
     base, worker = _fixture_guard(root, lock_dir)
     if type(timeout) not in (int, float) or not 0 < timeout <= 10:
         raise ValueError("Strict offline child timeout required")
     try:
         with hold_writer_lock(lock_dir, namespace=NAMESPACE):
-            # Child closes parent's lock FD. The parent's flock is held until
-            # the process exits; child never attempts nested flock acquisition.
-            result = subprocess.run(
+            # A new POSIX session ensures a well-defined process group; no
+            # child inherits the parent lock FD, avoiding nested deadlocks.
+            # Popen gives explicit descendant-tree cleanup on timeout,
+            # unlike subprocess.run's direct-child-only kill.
+            proc = subprocess.Popen(
                 [sys.executable, "-B", str(worker)],
                 cwd=base, env={"PATH": os.environ.get("PATH", ""),
                                "PYTHONDONTWRITEBYTECODE": "1"},
-                close_fds=True, capture_output=True, text=True,
-                timeout=timeout, check=False)
-            return {"state": "OFFLINE_CHILD_COMPLETED" if result.returncode == 0
+                close_fds=True, start_new_session=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                _terminate_test_process_group(proc)
+                return {"state": "OFFLINE_CHILD_TIMEOUT",
+                        "child_killed_by_timeout": True,
+                        "synthetic_process_group_sigkill_requested": True,
+                        "parent_flock_held_through_reap": True,
+                        "grandchild_execution_verified_finished": False,
+                        "productive_sqlite_access": False,
+                        "real_api_requests": 0, "production_authorized": False}
+            except BaseException:
+                # Even a KeyboardInterrupt in the supervising process must
+                # terminate and reap its child while flock is still held.
+                _terminate_test_process_group(proc)
+                raise
+            if _live_child_process_group(proc.pid):
+                # Leader exited but an ordinary descendant still holds the
+                # process group. This is a SECURITY/CONSISTENCY FAILURE, not
+                # a completed job. Kill it before releasing the global lock.
+                _terminate_test_process_group(proc)
+                return {"state": "OFFLINE_CHILD_DESCENDANTS_BLOCKED",
+                        "child_exit_code": proc.returncode,
+                        "synthetic_process_group_sigkill_requested": True,
+                        "parent_flock_held_through_reap": True,
+                        "grandchild_execution_verified_finished": False,
+                        "productive_sqlite_access": False,
+                        "real_api_requests": 0, "production_authorized": False}
+            return {"state": "OFFLINE_CHILD_COMPLETED" if proc.returncode == 0
                     else "OFFLINE_CHILD_FAILED",
-                    "exit_code": result.returncode,
+                    "exit_code": proc.returncode,
                     "parent_held_single_cooperative_flock": True,
+                    "parent_flock_held_through_reap": True,
                     "nested_child_lock_requested": False,
+                    "synthetic_process_group_sigkill_requested": False,
                     "production_authorized": False,
                     "real_api_requests": 0,
                     "productive_sqlite_access": False}
     except WriterLockBusy:
         return {"state": "BLOCKED_WRITER_BUSY", "child_started": False,
-                "productive_sqlite_access": False,
-                "real_api_requests": 0, "production_authorized": False}
-    except subprocess.TimeoutExpired:
-        return {"state": "OFFLINE_CHILD_TIMEOUT", "child_killed_by_timeout": True,
                 "productive_sqlite_access": False,
                 "real_api_requests": 0, "production_authorized": False}
