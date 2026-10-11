@@ -607,5 +607,162 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
                              for _,cmd in items[0]),1)
 
 
+    def test_independent_raw_sql_reconstruction_for_all_eight_sources(self):
+        for spec, start, end, payload in [*sources(), *funding_sources()]:
+            self.apply(spec, start, end, payload)
+        quality = inspect_fixture(self.path, self.lockdir)
+        proof = quality["receipt_reconstruction"]
+        self.assertEqual(quality["state"], "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(proof["state"], "RAW_SQL_LINEAGE_PASS")
+        self.assertEqual(proof["successful_receipts_reparsed"], 8)
+        self.assertEqual(proof["raw_to_sql_missing_points"], 0)
+        self.assertEqual(proof["receipt_origin_errors"], 0)
+        self.assertFalse(proof["real_upstream_coverage_verified"])
+
+    def test_duplicate_successful_replay_is_reparsed_without_misassigned_owner(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        self.apply(spec, start, end, payload)
+        quality = inspect_fixture(self.path, self.lockdir)
+        proof = quality["receipt_reconstruction"]
+        self.assertEqual(quality["state"], "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(proof["successful_receipts_reparsed"], 2)
+        self.assertEqual(proof["raw_to_sql_extra_points"], 0)
+        self.assertEqual(proof["receipt_origin_errors"], 0)
+        self.assertEqual(quality["rows"], 2)
+
+    def test_modified_sql_value_with_recomputed_row_sha_still_fails(self):
+        from ingestion.package_a_contracts import Point
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        changed = ledger._point_hash(spec, Point(DAY, "", 0.12345))
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE package_a_observations SET value=?,row_sha256=? "
+                "WHERE observed_utc=?", (0.12345, changed, DAY))
+        proof = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(proof["normalized_digest_errors"], 0)
+        self.assertEqual(proof["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertGreater(proof["receipt_reconstruction"]["raw_to_sql_missing_points"], 0)
+
+    def test_modified_raw_with_recomputed_raw_sha_still_fails(self):
+        import hashlib
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        changed = {"data": [
+            {"date": "2026-10-08", "value": 0.555},
+            {"date": "2026-10-09", "value": 1.002},
+        ]}
+        raw = json.dumps(changed, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE package_a_receipts SET raw_payload=?,raw_sha256=?",
+                (raw, hashlib.sha256(raw).hexdigest()))
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["raw_digest_errors"], 0)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertGreater(report["receipt_reconstruction"]["raw_to_sql_missing_points"], 0)
+
+    def test_missing_sql_point_is_independently_discovered_from_raw(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        with sqlite3.connect(self.path) as db:
+            db.execute("DELETE FROM package_a_observations WHERE observed_utc=?", (DAY,))
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["raw_to_sql_missing_points"], 1)
+
+    def test_invented_sql_point_not_in_original_raw_is_rejected(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        rid = self.read("SELECT receipt_id FROM package_a_receipts")[0][0]
+        later = "2026-10-10T00:00:00Z"
+        from ingestion.package_a_contracts import Point
+        digest = ledger._point_hash(spec, Point(later, "", 8.0))
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "INSERT INTO package_a_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                ("researchbitcoin", "sopr_sth", "BTC", "d1", later,
+                 "", 8.0, "ratio", "native", digest, rid))
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["raw_to_sql_extra_points"], 1)
+        self.assertEqual(report["receipt_reconstruction"]["receipt_origin_errors"], 1)
+
+    def test_wrong_success_receipt_owner_is_not_accepted_as_lineage(self):
+        spec = sources()[0][0]
+        first = self.apply(spec, DAY, NEXT,
+                           {"data": [{"date": "2026-10-08", "value": 1.0}]})
+        second = self.apply(spec, NEXT, AFTER,
+                            {"data": [{"date": "2026-10-09", "value": 1.01}]})
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "UPDATE package_a_observations SET receipt_id=? "
+                "WHERE observed_utc=?", (second["receipt_id"], DAY))
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["receipt_origin_errors"], 1)
+
+    def test_forged_parsed_count_fails_despite_unchanged_raw_and_rows(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET parsed_count=99")
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["receipt_parsed_count_errors"], 1)
+
+    def test_success_receipt_http_metadata_must_be_200(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET http_status=503")
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertGreater(report["receipt_reconstruction"]["receipt_contract_errors"], 0)
+
+    def test_failed_attempt_cannot_claim_parsed_rows(self):
+        spec, start, end, _ = sources()[4]
+        self.apply(spec, start, end, {"error": "429"}, status=429)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET parsed_count=10")
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["non_success_receipt_errors"], 1)
+
+    def test_success_raw_invalid_json_blocks_even_if_digest_is_recalculated(self):
+        import hashlib
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, payload)
+        corrupt = b'{"data":broken}'
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts SET raw_payload=?,raw_sha256=?",
+                       (corrupt, hashlib.sha256(corrupt).hexdigest()))
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["raw_digest_errors"], 0)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(report["receipt_reconstruction"]["receipt_contract_errors"], 1)
+
+    def test_event_funding_and_fred_vintages_are_parsed_source_natively(self):
+        for spec, start, end, payload in [sources()[2], *funding_sources()]:
+            self.apply(spec, start, end, payload)
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(report["receipt_reconstruction"]["successful_receipts_reparsed"], 3)
+        self.assertEqual(report["receipt_reconstruction"]["receipt_origin_errors"], 0)
+
+    def test_empty_and_failed_attempts_preserve_unverified_history(self):
+        spec, start, end, payload = sources()[0]
+        self.apply(spec, start, end, {"data": []})
+        self.apply(spec, start, end, payload)
+        self.apply(spec, start, end, {"error": "rate limit"}, status=429)
+        report = inspect_fixture(self.path, self.lockdir)
+        self.assertEqual(report["state"], "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(report["receipt_reconstruction"]["successful_receipts_reparsed"], 1)
+        self.assertEqual(report["historical_completeness"], "NOT_VERIFIED")
+        self.assertFalse(report["production_authorized"])
+
+
 if __name__ == "__main__":
     unittest.main()
