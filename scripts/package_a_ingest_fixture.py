@@ -59,7 +59,8 @@ def _fixture_guard(path, lock_directory):
 
 
 def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
-                     now, fault=None, _parent_lock_held=False):
+                     now, fault=None, _parent_lock_held=False,
+                     _frozen_request=None):
     """Commit one provider fixture page under the global writer lock.
 
     The payload is an in-memory synthetic JSON object, never downloaded.
@@ -140,8 +141,17 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                 # reconstruction passes inside the SAME uncommitted transaction.
                 # A failed gate automatically rolls back this page/attempt;
                 # legacy observations remain untouched rather than "fixed".
+                if _frozen_request is not None:
+                    if (not isinstance(_frozen_request, tuple) or
+                            len(_frozen_request) != 2):
+                        raise ValueError("Invalid frozen request provenance")
+                    endpoint, params = _frozen_request
+                    ledger.record_frozen_request_provenance(
+                        db, result["receipt_id"], endpoint, params, now=now)
                 proof = audit_receipt_reconstruction(db)
+                request_proof = ledger.audit_frozen_request_provenance(db)
                 if (proof["state"] != "RAW_SQL_LINEAGE_PASS"
+                        or request_proof["state"] != "FROZEN_REQUEST_METADATA_PASS"
                         or db.execute("PRAGMA foreign_key_check").fetchone()
                         or db.execute("PRAGMA quick_check").fetchone()[0] != "ok"):
                     raise ValueError("BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE")
@@ -223,14 +233,16 @@ def inspect_fixture(db_path, lock_directory):
         receipts = db.execute("SELECT COUNT(*) FROM package_a_receipts").fetchone()[0]
         rows = ledger.read_coverage(db)
         evidence = ledger.read_history_evidence(db)
+        request_meta = ledger.audit_frozen_request_provenance(db)
         integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
         reconstruction = audit_receipt_reconstruction(db)
-    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS"
+    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS" and request_meta["state"] == "FROZEN_REQUEST_METADATA_PASS"
     return {
         "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",
         "rows": observations, "receipts": receipts, "source_coverage": rows,
         "historical_request_evidence": evidence,
         "receipt_reconstruction": reconstruction,
+        "request_provenance": request_meta,
         "raw_digest_errors": bad_raw, "normalized_digest_errors": bad_points,
         "coverage_errors": bad_coverage, "cursor_window_errors": bad_cursor_windows,
         "lineage_errors": bad_links,
