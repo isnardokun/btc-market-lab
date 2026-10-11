@@ -13,9 +13,9 @@ Se guarda en: reports/snapshots/snapshot_YYYY-MM-DD_HHMMSS.json
 """
 import sys, os, datetime, json, hashlib, sqlite3, subprocess, argparse
 from pathlib import Path
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
 from scripts.package_a_writer_guard import run_with_optional_writer_lock
-
-BASE_DIR = Path(__file__).parent.parent
 DB_PATH = BASE_DIR / "db" / "btc_research.db"
 SNAP_DIR = BASE_DIR / "reports" / "snapshots"
 TODAY = datetime.date.today()
