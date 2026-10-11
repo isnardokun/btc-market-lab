@@ -16,6 +16,7 @@ from ingestion.package_a_legacy_bridge import reconciled_fixture_points
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 from storage import package_a_ledger as ledger
 from scripts.package_a_provenance_audit import audit_receipt_reconstruction
+from scripts.package_a_parent_lock import verify_offline_parent_lease
 
 MARKER = ".package-a-offline-fixture"
 MARKER_VALUE = "PACKAGE A OFFLINE SQLITE TEST FIXTURE\n"
@@ -79,6 +80,8 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
         # Its parent owns the same flock for the entire mock request + SQL.
         if type(_parent_lock_held) is not bool:
             raise ValueError("Invalid synthetic parent-lock marker")
+        if _parent_lock_held:
+            verify_offline_parent_lease(lock_directory)
         lock_context = (nullcontext() if _parent_lock_held else
                         hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE))
         with lock_context:
