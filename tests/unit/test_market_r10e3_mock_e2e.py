@@ -125,8 +125,12 @@ class TestR10E3MockOnePage(unittest.TestCase):
                  and any(isinstance(t, ast.Name) and t.id == "TESTS"
                          for t in n.targets)]
         self.assertEqual(len(lists), 1)
-        self.assertEqual(len(lists[0]), 41)
+        # Preserve the E.3 minimum without forbidding future E.4/E.5 suites.
+        self.assertGreaterEqual(len(lists[0]), 41)
+        labels = [name for name, _ in lists[0]]
         commands = [cmd for _, cmd in lists[0]]
+        self.assertEqual(len(labels), len(set(labels)))
+        self.assertEqual(len(commands), len(set(commands)))
         for suite in ("test_market_r10e_plan_only",
                       "test_market_r10e_dispatch_offline",
                       "test_market_r10e2_shadow_gate",
