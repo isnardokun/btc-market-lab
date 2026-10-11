@@ -211,6 +211,11 @@ def parse_fixture(spec, payload, *, start, end):
     elif spec.provider == "binance":
         if not isinstance(payload, list):
             raise ValueError("Binance derivatives history fixture must be a list")
+        if spec.metric=="funding_settled" and len(payload)>=1000:
+            # Native frozen builder requests limit=1000. Hitting that limit
+            # can hide additional events inside this SAME requested window,
+            # so do not advance its cursor or imply event completeness.
+            raise ValueError("BLOCKED_FUNDING_EVENT_RESULT_SATURATED")
         for row in payload:
             if not isinstance(row, dict) or row.get("symbol", "BTCUSDT") != "BTCUSDT":
                 raise ValueError("Malformed Binance BTCUSDT row")
@@ -230,6 +235,8 @@ def parse_fixture(spec, payload, *, start, end):
             rows = part["list"]
             if not isinstance(rows, list):
                 raise ValueError("Malformed Bybit list")
+            if spec.metric=="funding_settled" and len(rows)>=200:
+                raise ValueError("BLOCKED_FUNDING_EVENT_RESULT_SATURATED")
             for row in rows:
                 key = "fundingRateTimestamp" if spec.metric == "funding_settled" else "timestamp"
                 val = "fundingRate" if spec.metric == "funding_settled" else "openInterest"
