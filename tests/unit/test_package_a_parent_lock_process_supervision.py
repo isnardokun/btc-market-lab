@@ -34,9 +34,9 @@ class ParentLockProcessGroupTests(unittest.TestCase):
             "import subprocess,sys,time\n"
             "from pathlib import Path\n"
             "Path('started').write_text('yes')\n"
-            "subprocess.Popen([sys.executable,'-B','-c',"
-            "'import time,pathlib;time.sleep(0.6);'"
-            "'pathlib.Path(\"unsafe_descendant_write\").write_text(\"unsafe\")'],"
+            "code = 'import time,pathlib;time.sleep(0.6);"
+            "pathlib.Path(\"unsafe_descendant_write\").write_text(\"unsafe\")'\n"
+            "subprocess.Popen([sys.executable,'-B','-c',code],"
             "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,"
             "stdin=subprocess.DEVNULL,close_fds=True)\n"
             + ("time.sleep(%s)\n"%pause if pause else "")
