@@ -19,7 +19,7 @@ from scripts.package_a_frozen_legacy_transport import (
 from scripts.package_a_ingest_fixture import MARKER, MARKER_VALUE, inspect_fixture
 from scripts.package_a_batch_fixture import (FrozenLegacyPage, FixturePage, run_synthetic_batch,
     plan_synthetic_resume, recover_synthetic_batch)
-from scripts.package_a_ingest_fixture import FixtureResponse
+from scripts.package_a_ingest_fixture import FixtureResponse, run_fixture_page
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock
 
 DAY = "2026-10-08T00:00:00Z"
@@ -930,3 +930,166 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                     verify_offline_parent_lease(other)
         self.assertEqual(self.rows(
             "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+
+    def test_manifest_eight_streams_exposes_requested_observed_without_external_claim(self):
+        report=run_synthetic_batch(self.path,self.locks,
+                     [self.as_frozen_page(s) for s in scenarios()],now=NOW)
+        self.assertEqual(report["state"],"BATCH_OFFLINE_ACCEPTED")
+        manifest=report["audit"]["source_manifest"]
+        self.assertEqual(manifest["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        self.assertEqual(manifest["stream_count"],8)
+        self.assertEqual(manifest["contract_errors"],0)
+        keys={(r["provider"],r["metric"]) for r in manifest["streams"]}
+        self.assertEqual(len(keys),8)
+        for stream in manifest["streams"]:
+            self.assertEqual(stream["attempted_requests"],1)
+            self.assertEqual(stream["request_status_counts"]["ok"],1)
+            self.assertEqual(stream["successful_raw_receipts"],1)
+            self.assertEqual(stream["successful_request_window_count"],1)
+            self.assertIsNone(stream["earliest_provider_verified_utc"])
+            self.assertEqual(stream["entitlement_status"],"NOT_VERIFIED")
+            self.assertEqual(stream["provider_availability"],"NOT_CHECKED")
+            self.assertEqual(stream["historical_completeness"],"NOT_VERIFIED")
+            self.assertFalse(stream["production_authorized"])
+            self.assertFalse(stream["request_ready"])
+        self.assertFalse(manifest["entitlement_verified"])
+        self.assertEqual(manifest["live_request_count"],0)
+
+    def test_manifest_fred_vintages_and_funding_events_have_no_fabricated_holes(self):
+        report=run_synthetic_batch(self.path,self.locks,[
+                    self.as_frozen_page(scenarios()[2]),
+                    self.as_frozen_page(scenarios()[6]),
+                    self.as_frozen_page(scenarios()[7])],now=NOW)
+        self.assertEqual(report["state"],"BATCH_OFFLINE_ACCEPTED")
+        by_provider={(r["provider"],r["metric"]):r
+                     for r in report["audit"]["source_manifest"]["streams"]}
+        fred=by_provider[("fred","CPIAUCSL")]
+        self.assertEqual(fred["source_native_semantics"],
+                         "FRED_OBSERVATION_WITH_RELEASE_VINTAGES")
+        self.assertEqual(fred["distinct_dimension_keys"],2)
+        self.assertEqual(fred["distinct_observation_dates"],2)
+        self.assertEqual(fred["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        for provider in ("binance","bybit"):
+            funding=by_provider[(provider,"funding_settled")]
+            self.assertEqual(funding["local_grid_state"],
+                             "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+            self.assertIsNone(funding["local_gap_evidence"])
+            self.assertEqual(funding["source_native_semantics"],
+                             "FUNDING_SETTLEMENT_EVENTS")
+
+    def test_manifest_oi_local_grid_can_be_complete_without_provider_verification(self):
+        outcome=self.apply(scenarios()[4])
+        self.assertEqual(outcome["state"],"PAGE_COMMITTED_OFFLINE")
+        streams=inspect_fixture(self.path,self.locks)["source_manifest"]["streams"]
+        self.assertEqual(len(streams),1)
+        oi=streams[0]
+        self.assertEqual(oi["local_grid_state"],"OFFLINE_LOCAL_GAP_CANDIDATES")
+        self.assertEqual(oi["local_gap_evidence"]["local_missing_candidate_slots"],0)
+        self.assertEqual(oi["distinct_observation_dates"],2)
+        self.assertEqual(oi["archived_rows"],2)
+        self.assertFalse(oi["local_gap_evidence"]["provider_verified"])
+        self.assertEqual(oi["historical_completeness"],"NOT_VERIFIED")
+
+    def test_manifest_local_daily_missing_slot_is_only_candidate_not_request(self):
+        spec,start,end,_=scenarios()[0]
+        window_end="2026-10-11T00:00:00Z"
+        result=run_fixture_page(self.path,self.locks,spec,start,window_end,
+                      FixtureResponse(200,{"data":[
+                          {"date":"2026-10-08","value":1.01},
+                          {"date":"2026-10-10","value":1.02}]}),now=NOW)
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        manifest=inspect_fixture(self.path,self.locks)["source_manifest"]
+        self.assertEqual(manifest["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        row=manifest["streams"][0]
+        self.assertEqual(row["local_gap_evidence"]["local_missing_candidate_slots"],1)
+        self.assertEqual(row["local_gap_evidence"]["windows"][0]["start_utc"],NEXT)
+        self.assertFalse(row["local_gap_evidence"]["windows"][0]["request_ready"])
+        self.assertEqual(row["provider_availability"],"NOT_CHECKED")
+
+    def test_manifest_failed_only_stream_remains_visible_without_fabricated_rows(self):
+        failed=self.as_frozen_page(scenarios()[4],status=503,body=b"<html>503</html>")
+        blocked=run_synthetic_batch(self.path,self.locks,[failed],now=NOW)
+        self.assertEqual(blocked["state"],"BATCH_BLOCKED")
+        report=inspect_fixture(self.path,self.locks)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        row=report["source_manifest"]["streams"][0]
+        self.assertEqual(row["attempted_requests"],1)
+        self.assertEqual(row["request_status_counts"]["failed"],1)
+        self.assertEqual(row["http_error_with_raw"],1)
+        self.assertEqual(row["archived_rows"],0)
+        self.assertEqual(row["successful_request_window_count"],0)
+        self.assertEqual(row["local_grid_state"],"NOT_SCANNED_NO_ARCHIVED_CONTRACT")
+        self.assertEqual(row["raw_receipt_coverage"],"NO_SUCCESS_RECEIPTS")
+
+    def test_manifest_timeout_and_empty_are_distinct_from_upstream_unavailable(self):
+        spec,start,end,_=scenarios()[0]
+        run_fixture_page(self.path,self.locks,spec,start,end,
+                         FixtureResponse(None,None),now=NOW)
+        run_fixture_page(self.path,self.locks,spec,start,end,
+                         FixtureResponse(200,{"data":[]}),now=NOW)
+        report=inspect_fixture(self.path,self.locks)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        row=report["source_manifest"]["streams"][0]
+        self.assertEqual(row["request_status_counts"]["failed"],1)
+        self.assertEqual(row["request_status_counts"]["empty"],1)
+        self.assertEqual(row["transport_failures_without_response"],1)
+        self.assertEqual(row["archived_rows"],0)
+        self.assertIsNone(row["earliest_provider_verified_utc"])
+        self.assertEqual(row["historical_completeness"],"NOT_VERIFIED")
+
+    def test_manifest_replay_coalesces_successful_request_windows_but_counts_attempts(self):
+        page=self.as_frozen_page(scenarios()[0])
+        result=run_synthetic_batch(self.path,self.locks,[page,page],now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        row=result["audit"]["source_manifest"]["streams"][0]
+        self.assertEqual(row["attempted_requests"],2)
+        self.assertEqual(row["successful_raw_receipts"],2)
+        self.assertEqual(row["successful_request_window_count"],1)
+        self.assertEqual(row["archived_rows"],2)
+        self.assertEqual(row["distinct_observation_dates"],2)
+
+    def test_manifest_noncanonical_failed_receipt_window_fails_read_only_gate(self):
+        self.apply(scenarios()[4],status=429,source_raw=b"429")
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_receipts "
+                       "SET start_utc='2026-10-08T00:00:00.500Z'")
+        report=inspect_fixture(self.path,self.locks)
+        self.assertEqual(report["source_manifest"]["state"],
+                         "SOURCE_MANIFEST_LOCAL_EVIDENCE_FAIL")
+        self.assertGreaterEqual(report["source_manifest"]["contract_errors"],1)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(scenarios()[0])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+
+    def test_manifest_source_calendar_does_not_scan_fred_daily_business_holidays(self):
+        spec=SeriesSpec("fred","DGS10","USA","d1","percent")
+        result=run_fixture_page(self.path,self.locks,spec,DAY,AFTER,
+                         FixtureResponse(200,{"observations":[
+                            {"date":"2026-10-08","value":"4.2",
+                             "realtime_start":"2026-10-09"}]}),now=NOW)
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        manifest=inspect_fixture(self.path,self.locks)["source_manifest"]
+        self.assertEqual(manifest["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        row=manifest["streams"][0]
+        self.assertEqual(row["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertIsNone(row["local_gap_evidence"])
+        self.assertEqual(row["calendar_assumption"],"EXTERNAL_RELEASE_CALENDAR_NOT_CHECKED")
+
+    def test_manifest_budget_is_fail_closed_and_never_authorizes_requests(self):
+        from scripts.package_a_source_coverage_manifest import source_aware_manifest
+        self.apply(scenarios()[0])
+        with sqlite3.connect(self.path) as db:
+            report=source_aware_manifest(db,max_grid_slots=1)
+        self.assertEqual(report["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        row=report["streams"][0]
+        self.assertEqual(row["local_grid_state"],"NOT_SCANNED_GRID_BUDGET_OR_ALIGNMENT")
+        self.assertFalse(row["request_ready"])
+        self.assertEqual(row["historical_completeness"],"NOT_VERIFIED")
+        with sqlite3.connect(self.path) as db:
+            blocked=source_aware_manifest(db,max_streams=1)
+        self.assertEqual(blocked["stream_count"],1)
+        self.assertEqual(blocked["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
