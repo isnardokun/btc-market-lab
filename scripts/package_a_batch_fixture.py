@@ -10,6 +10,7 @@ from ingestion.package_a_contracts import SeriesSpec, utc
 from scripts.package_a_ingest_fixture import (
     FixtureResponse, run_fixture_page, inspect_fixture, _fixture_guard,
 )
+from scripts.package_a_frozen_legacy_transport import run_mocked_legacy_page
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,16 @@ class FixturePage:
     start: str
     end: str
     response: FixtureResponse
+
+
+@dataclass(frozen=True)
+class FrozenLegacyPage:
+    """A strictly in-memory response to one actual legacy HTTP request builder."""
+    source: SeriesSpec
+    start: str
+    end: str
+    raw_bytes: bytes
+    status_code: int | None = 200
 
 
 def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
@@ -34,23 +45,35 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
     utc(now)
     _fixture_guard(db_path, lock_dir)
     for page in pages:
-        if not isinstance(page, FixturePage) or not isinstance(page.source, SeriesSpec):
+        if not isinstance(page, (FixturePage, FrozenLegacyPage)) or not isinstance(page.source, SeriesSpec):
             raise ValueError("Typed synthetic fixture pages required")
-        if not isinstance(page.response, FixtureResponse):
-            raise ValueError("Explicit synthetic HTTP fixture required")
+        if isinstance(page, FixturePage):
+            if not isinstance(page.response, FixtureResponse):
+                raise ValueError("Explicit synthetic HTTP fixture required")
+        elif (type(page.raw_bytes) is not bytes or
+              page.status_code is not None and (
+                  type(page.status_code) is not int or
+                  page.status_code not in (200,429,500,503))):
+            raise ValueError("Bounded frozen legacy response required")
         if utc(page.start) >= utc(page.end):
             raise ValueError("Invalid requested window")
     outcomes = []
     for index, page in enumerate(pages):
-        result = run_fixture_page(
-            db_path, lock_dir, page.source, page.start, page.end,
-            page.response, now=now)
+        if isinstance(page, FrozenLegacyPage):
+            result = run_mocked_legacy_page(
+                db_path, lock_dir, page.source, page.start, page.end,
+                raw_bytes=page.raw_bytes, status_code=page.status_code, now=now)
+        else:
+            result = run_fixture_page(
+                db_path, lock_dir, page.source, page.start, page.end,
+                page.response, now=now)
         outcomes.append({
             "index": index, "source": page.source.provider,
             "metric": page.source.metric, "state": result["state"],
             "receipt_id": result.get("receipt_id"),
             "new_rows": result.get("new_rows",0),
             "cursor_advanced": result.get("cursor_advanced",False),
+            "frozen_http_requests": result.get("frozen_http_requests",0),
         })
         if result["state"] != "PAGE_COMMITTED_OFFLINE":
             break
@@ -73,6 +96,7 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
         "remaining_requests_not_run": len(pages) - len(outcomes),
         "new_observations": sum(row["new_rows"] for row in outcomes),
         "pages": outcomes,
+        "frozen_http_requests": sum(row["frozen_http_requests"] for row in outcomes),
         "audit": quality,
         "unprocessed_pages_may_be_resumed": not fully_applied,
         "historical_completeness": "NOT_VERIFIED",
