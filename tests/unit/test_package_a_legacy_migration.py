@@ -208,6 +208,49 @@ class TestPackageALegacyMigration(unittest.TestCase):
         self.assertEqual(result["historical_completeness"],"NOT_VERIFIED")
         self.assertEqual(result["real_provider_entitlement"],"NOT_VERIFIED")
 
+    def test_forged_same_column_names_but_missing_receipt_pk_rejected(self):
+        before=self.legacy()
+        with sqlite3.connect(self.db) as db:
+            db.execute(
+                "CREATE TABLE package_a_receipts("
+                "receipt_id TEXT, provider TEXT, metric TEXT, symbol TEXT,"
+                "frequency TEXT,start_utc TEXT,end_exclusive_utc TEXT,status TEXT,"
+                "http_status INTEGER,raw_payload BLOB,raw_sha256 TEXT,"
+                "parsed_count INTEGER,captured_utc TEXT)")
+        existing=self.tables()
+        with self.assertRaisesRegex(ValueError,"primary key incompatible"):
+            self.run_migration()
+        self.assertEqual(self.tables(),existing)
+        self.assertEqual(self.legacy(),before)
+
+    def test_forged_observations_table_with_expected_pk_but_missing_fk_rejected(self):
+        with sqlite3.connect(self.db) as db:
+            db.execute(
+                "CREATE TABLE package_a_observations("
+                "provider TEXT NOT NULL,metric TEXT NOT NULL,symbol TEXT NOT NULL,"
+                "frequency TEXT NOT NULL,observed_utc TEXT NOT NULL,"
+                "dimension_key TEXT NOT NULL,value REAL NOT NULL,"
+                "unit TEXT NOT NULL,raw_scale TEXT NOT NULL,"
+                "row_sha256 TEXT NOT NULL,receipt_id TEXT NOT NULL,"
+                "PRIMARY KEY(provider,metric,symbol,frequency,observed_utc,dimension_key))")
+        original=self.tables()
+        with self.assertRaisesRegex(ValueError,"foreign key incompatible"):
+            self.run_migration()
+        self.assertEqual(self.tables(),original)
+
+    def test_schema_shape_rechecked_on_idempotent_second_run(self):
+        self.run_migration()
+        with sqlite3.connect(self.db) as db:
+            # Replacing a live table is NEVER allowed; make corruption
+            # explicit in the fixture to assert the retry fails closed.
+            db.execute("ALTER TABLE package_a_cursors RENAME TO old_package_a_cursors")
+            db.execute(
+                "CREATE TABLE package_a_cursors("
+                "provider TEXT,metric TEXT,symbol TEXT,frequency TEXT,"
+                "end_exclusive_utc TEXT,advanced_by_receipt TEXT)")
+        with self.assertRaisesRegex(ValueError,"primary key incompatible"):
+            self.run_migration()
+
     def test_runner_includes_synthetic_migration_rehearsal_once(self):
         import ast
         tree=ast.parse(
