@@ -45,6 +45,7 @@ TESTS = [
     ("Unit: R10-E Offline OI Coverage Planner", "python3 -m unittest -v tests.unit.test_market_r10e_plan_only"),
     ("Unit: R10-E.1 Offline OI Dispatch", "python3 -m unittest -v tests.unit.test_market_r10e_dispatch_offline"),
     ("Unit: R10-E.2 Synthetic SHADOW Safety Gate", "python3 -m unittest -v tests.unit.test_market_r10e2_shadow_gate"),
+    ("Unit: R10-E.3 Synthetic v3 Mock E2E", "python3 -m unittest -v tests.unit.test_market_r10e3_mock_e2e"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
