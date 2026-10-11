@@ -222,7 +222,8 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
                 status_code, parsed, raw_bytes=(raw_bytes if status_code is not None else None))
             outcome = run_fixture_page(
                 db_path, lock_directory, spec, start, end, response,
-                now=now, fault=fault, _parent_lock_held=True)
+                now=now, fault=fault, _parent_lock_held=True,
+                _frozen_request=(endpoint, query))
             return {
                 **outcome,
                 "frozen_http_requests": frozen.calls,
