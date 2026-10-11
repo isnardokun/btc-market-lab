@@ -10,11 +10,11 @@
 
 | Workstream | Required deliverable | Objective tests / evidence | State |
 |---|---|---|---|
-| A1 Writer coordination | A **single** global lock file/path for active writers, wrapper/launcher strategy compatible with legacy daily and manual jobs; no double-lock deadlock; uncovered writers visibly blocked | Child-process contention, process crash, HTTP/SQLite untouched on busy, real call-site coverage inventory; fail closed on uncooperative processes | TODO |
-| A2 Schema and history ledger | Versioned schema/indices/PK/units/vintages, migration plan and immutable legacy safety; coverage table/contract distinguishing observed/available/unverified | SQLite ephemeral migration/reconciliation, FK/integrity, duplicate insert, rollback and downgrade/restore plan | TODO |
-| A3 Provider adapters | Binance/Bybit OI+funding, ResearchBitcoin Tier2 catalog, Bitview, Yahoo, FRED with independent unit/frequency/shape/cutoff policies | Contract fixtures per source, fake HTTP failures, endpoint limits, missing/empty/restricted states, no fabricated historical claims | TODO |
-| A4 Historical engine | One integrated backfill/forward engine with RAW+SHA, HTTP receipt, lineage, idempotent upsert/cursors, checkpoint/retry/rate limit and bounded batches | Full synthetic multi-provider forward and backward, 429, crash-before/after-commit, cursor monotonicity, replay idempotence, PK SHA and source audits | TODO |
-| A5 Acceptance | Full offline E2E + migration/regression + design/operational evidence, one final CI and one pinned Hermes QA | 52 original suites + new package suites, all RC0; zero P0/P1; terminal `A_OFFLINE_ACCEPTED` or explicit BLOCKED; do not claim external coverage | TODO |
+| A1 Writer coordination | A **single** global lock file/path for active writers, wrapper/launcher strategy compatible with legacy daily and manual jobs; no double-lock deadlock; uncovered writers visibly blocked | Child-process contention, process crash, HTTP/SQLite untouched on busy, real call-site coverage inventory; fail closed on uncooperative processes | PARTIAL — lock opt-in Bitview/FRED/Market Context + earlier Yahoo; host and daily.sh remain unguarded |
+| A2 Schema and history ledger | Versioned schema/indices/PK/units/vintages, migration plan and immutable legacy safety; coverage table/contract distinguishing observed/available/unverified | SQLite ephemeral migration/reconciliation, FK/integrity, duplicate insert, rollback and downgrade/restore plan | PARTIAL — additive fixture-only RAW/rows/cursors/coverage; legacy migration pending |
+| A3 Provider adapters | Binance/Bybit OI+funding, ResearchBitcoin Tier2 catalog, Bitview, Yahoo, FRED with independent unit/frequency/shape/cutoff policies | Contract fixtures per source, fake HTTP failures, endpoint limits, missing/empty/restricted states, no fabricated historical claims | PARTIAL — 6 source fixture parsers; RBN/Bitview/Yahoo reconciled against original parsers; live shapes unverified |
+| A4 Historical engine | One integrated backfill/forward engine with RAW+SHA, HTTP receipt, lineage, idempotent upsert/cursors, checkpoint/retry/rate limit and bounded batches | Full synthetic multi-provider forward and backward, 429, crash-before/after-commit, cursor monotonicity, replay idempotence, PK SHA and source audits | PARTIAL — synthetic bounded batch, 429 stop, backward/forward replay, crash/rollback, cursor tail validation |
+| A5 Acceptance | Full offline E2E + migration/regression + design/operational evidence, one final CI and one pinned Hermes QA | 52 original suites + new package suites, all RC0; zero P0/P1; terminal `A_OFFLINE_ACCEPTED` or explicit BLOCKED; do not claim external coverage | TODO — runner 54 suites not completed, package E2E final QA not requested |
 
 ## Required interface shape
 
@@ -54,3 +54,18 @@ Migrations should be additive when possible, with explicit `user_version` / comp
 - At final review pin SHA, verify current master, CI, full runner, cross-process and migration tests; Hermes performs independent final QA only and STOP.
 - During development, do **not** read production DB, call live provider APIs, install services, run cron, migrate DB or publish reports.
 - `A_OFFLINE_ACCEPTED` and `A_EXTERNAL_VERIFIED` are different decisions. A can be accepted offline without external credentials/HTTP; report those unmet real-data requirements honestly.
+
+
+## 2026-10-11 — implemented changes, evidence, remaining gates
+
+The SINGLE package PR #79 now includes **real code**, not only the contract:
+
+- A1 (PARTIAL): opt-in `--global-lock-dir` wired to `ingestion/ingest.py` (Bitview daily), `ingestion/ingest_fred.py`, and `scripts/market_context_ingest.py`; Yahoo daily price had the earlier E14 opt-in. Same namespace `btc-research-global-writer-v1`. Default script commands and `daily.sh` are unchanged **and still NOT operationally protected**. The remaining historical/manual/cron writers have not been proven to adopt the global lock.
+- A2 (PARTIAL): `storage/package_a_ledger.py` adds versioned fixture schema for BLOB RAW receipts+SHA256, immutable observations+row digests, FK-linked cursors, observed coverage and fail-closed external `NOT_VERIFIED` states. All writes are performed only on explicitly created synthetic SQLite.
+- A3 (PARTIAL): `ingestion/package_a_contracts.py` validates synthetic source payload shapes for RBN/Bitview/FRED/Yahoo/Binance/Bybit. `package_a_legacy_bridge.py` cross-checks RBN/Bitview/Yahoo values against the existing repo parsers, blocking disagreements and rejecting missing final 5m OI candles. **Real entitlement, historical availability, quota and API response compatibility remain UNVERIFIED.**
+- A4 (PARTIAL): `scripts/package_a_ingest_fixture.py` and `scripts/package_a_batch_fixture.py` integrate lock → parser → RAW receipt → immutable observations → cursor → integrity audit. Synthetic batch stops at 429, resumes, supports backward history without regressing the forward cursor and rolls back atomic failures.
+- A5 (NOT STARTED): no final Hermes QA order. Complete active writer adoption, safe legacy data migration, real adapter/network injection contracts (offline), broader crash/fault modes, full-runner regression and final QA.
+
+**Latest verified CI evidence before this documentation update:** on commit `6ea7e922133fee37c91ad4b3586efe36fbad5387`, GitHub Actions [run 38148242880](https://github.com/isnardokun/btc-market-lab/actions/runs/38148242880/job/114496024820) PASS, including **315 earlier CI tests + 32 integrated package tests + 16 entrypoint lock tests**. CI is not equivalent to the complete `tests/run_all.py` runner, which now lists **54 suites**, or an acceptance verdict. Package remains `A_IN_PROGRESS`.
+
+**No Hermes order, no live APIs, no production DB access, no cron modification or activation.**
