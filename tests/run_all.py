@@ -64,6 +64,7 @@ TESTS = [
     ("Unit: Package A Offline Runner Production Guard", "python3 -m unittest -v tests.unit.test_package_a_runner_offline_gate"),
     ("Unit: Package A Daily Archive Writer Shared Lock", "python3 -m unittest -v tests.unit.test_package_a_daily_archive_locks"),
     ("Unit: Package A Writer Adoption Source-Only Audit", "python3 -m unittest -v tests.unit.test_package_a_writer_adoption_review"),
+    ("Unit: Package A Writer Route SHA Attestation and Drift Gate", "python3 -m unittest -v tests.unit.test_package_a_writer_source_attestation"),
     ("Unit: Package A Parent-Lock Cutover (Synthetic Process Only)", "python3 -m unittest -v tests.unit.test_package_a_writer_cutover"),
     ("Unit: Package A Parent-Lock Descendant Process Supervision", "python3 -m unittest -v tests.unit.test_package_a_parent_lock_process_supervision"),
     ("Unit: Package A RBN and Schema Migration Global Lock", "python3 -m unittest -v tests.unit.test_package_a_migration_and_rbn_locks"),
