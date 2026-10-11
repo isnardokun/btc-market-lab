@@ -25,7 +25,7 @@ No implementa lock real, rate-limit real, request ledger persistente, backoff ni
 
 ## QA exigida a Hermes (SIN tocar producción)
 
-- test_market_r10e2_shadow_gate: **15 tests** esperados de controles simulados, CLI y runner AST.
+- test_market_r10e2_shadow_gate: **16 tests** esperados de controles simulados, CLI y runner AST.
 - Regresión test_market_r10e_dispatch_offline: 9 tests; test_market_r10e_plan_only: 7 tests.
 - Full runner: **40 entradas registradas** en tests/run_all.py según conteo AST. ¡Importante! Las cifras 39/40 reportadas previamente para E.0/E.1 no coinciden con la cantidad real de entradas versionadas (38/39). Registrar ambos valores por separado: **suite registry length** y **suite results actually executed** sin inflar una unidad.
 - El usuario es propietario/aprobador de operaciones productivas; ChatGPT implementa/revisa; Hermes solo prueba SHA congelado y publica informe, STOP.
