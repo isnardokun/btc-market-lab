@@ -79,24 +79,67 @@ REQUIRED = {
 }
 
 
+SCHEMA_PRIMARY_KEYS = {
+    "package_a_schema_migrations": ("version",),
+    "package_a_receipts": ("receipt_id",),
+    "package_a_observations": ("provider", "metric", "symbol", "frequency",
+                               "observed_utc", "dimension_key"),
+    "package_a_cursors": ("provider", "metric", "symbol", "frequency"),
+    "package_a_coverage": ("provider", "metric", "symbol", "frequency"),
+}
+SCHEMA_FOREIGN_KEYS = {
+    "package_a_observations": {("receipt_id", "package_a_receipts", "receipt_id")},
+    "package_a_cursors": {("advanced_by_receipt", "package_a_receipts", "receipt_id")},
+}
+
+
+def validate_schema(conn):
+    """Require actual PK/FK/index shape, not merely a v1 marker/column names."""
+    for table, expected_pk in SCHEMA_PRIMARY_KEYS.items():
+        info = conn.execute("PRAGMA table_info(" + table + ")").fetchall()
+        columns = {r[1] for r in info}
+        if not REQUIRED.get(table, set()).issubset(columns):
+            raise ValueError("Incompatible existing Package A schema " + table)
+        pk = tuple(r[1] for r in sorted(info, key=lambda x:x[5]) if r[5] > 0)
+        if pk != expected_pk:
+            raise ValueError("Incompatible Package A primary key " + table)
+        fks = {(r[3],r[2],r[4]) for r in
+               conn.execute("PRAGMA foreign_key_list(" + table + ")")}
+        if fks != SCHEMA_FOREIGN_KEYS.get(table, set()):
+            raise ValueError("Incompatible Package A foreign key " + table)
+    for index in ("idx_package_a_receipts_window", "idx_package_a_observations_dates"):
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
+                        (index,)).fetchone() is None:
+            raise ValueError("Missing Package A index " + index)
+
+
 def initialize(conn, *, now):
-    """Explicit, additive fixture migration; caller controls COMMIT/rollback."""
+    """Atomic additive fixture DDL with strict shape validation.
+
+    SAVEPOINT ensures failed or forged schema does not persist partial DDL.
+    A preexisting caller transaction remains owned by the caller.
+    """
     if not isinstance(conn, sqlite3.Connection):
         raise ValueError("Explicit SQLite connection required")
     stamp = utc(now).isoformat().replace("+00:00", "Z")
     if conn.execute("PRAGMA foreign_keys").fetchone()[0] != 1:
         raise ValueError("Foreign keys must be enabled before migration")
-    for statement in DDL:
-        conn.execute(statement)
-    for table, needed in REQUIRED.items():
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(" + table + ")")}
-        if not needed.issubset(cols):
-            raise ValueError("Incompatible existing Package A schema " + table)
-    conn.execute("INSERT OR IGNORE INTO package_a_schema_migrations(version,applied_utc) "
-                 "VALUES (?,?)", (MIGRATION_VERSION, stamp))
-    installed = {v for (v,) in conn.execute("SELECT version FROM package_a_schema_migrations")}
-    if installed != {MIGRATION_VERSION}:
-        raise ValueError("Unsupported Package A schema revision")
+    conn.execute("SAVEPOINT package_a_schema")
+    try:
+        for statement in DDL:
+            conn.execute(statement)
+        validate_schema(conn)
+        conn.execute("INSERT OR IGNORE INTO package_a_schema_migrations(version,applied_utc) "
+                     "VALUES (?,?)", (MIGRATION_VERSION, stamp))
+        installed = {v for (v,) in conn.execute(
+            "SELECT version FROM package_a_schema_migrations")}
+        if installed != {MIGRATION_VERSION}:
+            raise ValueError("Unsupported Package A schema revision")
+        conn.execute("RELEASE SAVEPOINT package_a_schema")
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT package_a_schema")
+        conn.execute("RELEASE SAVEPOINT package_a_schema")
+        raise
 
 
 def _key(spec):
