@@ -1237,45 +1237,61 @@ class FrozenLegacyTransportTests(unittest.TestCase):
 
     def test_yahoo_rejects_invalid_quote_lengths_before_sql_mutation(self):
         spec=SeriesSpec("yahoo","close","SPY","d1","USD")
-        with self.assertRaisesRegex(ValueError,"Mismatched Yahoo OHLCV"):
-            run_mocked_legacy_page(
-                self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
-                raw_bytes=raw(self._yahoo_daily_body(bad="short_close")),
-                now="2026-10-14T00:00:00Z")
+        result=run_mocked_legacy_page(
+            self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
+            raw_bytes=raw(self._yahoo_daily_body(bad="short_close")),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["failure_class"],"ValueError")
+        self.assertFalse(result["cursor_advanced"])
         self.assertEqual(self.rows(
             "SELECT COUNT(*) FROM package_a_observations"),[(0,)])
-        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+        self.assertEqual(self.rows("SELECT status FROM package_a_receipts"),[("rejected",)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
 
     def test_yahoo_rejects_malformed_ohlc_even_when_requested_metric_is_close(self):
         spec=SeriesSpec("yahoo","close","SPY","d1","USD")
         for issue in ("high_below_low","nonfinite"):
             with self.subTest(issue=issue):
-                with self.assertRaises(ValueError):
-                    run_mocked_legacy_page(
-                        self.path,self.locks,spec,DAY,
-                        "2026-10-13T00:00:00Z",
-                        raw_bytes=raw(self._yahoo_daily_body(bad=issue)),
-                        now="2026-10-14T00:00:00Z")
-        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+                result=run_mocked_legacy_page(
+                    self.path,self.locks,spec,DAY,
+                    "2026-10-13T00:00:00Z",
+                    raw_bytes=raw(self._yahoo_daily_body(bad=issue)),
+                    now="2026-10-14T00:00:00Z")
+                self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+                self.assertEqual(result["status"],"rejected")
+                self.assertEqual(result["failure_class"],"ValueError")
+                self.assertFalse(result["cursor_advanced"])
+        self.assertEqual(self.rows("SELECT status FROM package_a_receipts"),
+                         [("rejected",),("rejected",)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
 
     def test_yahoo_negative_volume_rejected_without_cursor_or_receipt(self):
         spec=SeriesSpec("yahoo","volume","SPY","d1","native_volume")
-        with self.assertRaisesRegex(ValueError,"Negative Yahoo"):
-            run_mocked_legacy_page(self.path,self.locks,spec,DAY,
-                "2026-10-13T00:00:00Z",
-                raw_bytes=raw(self._yahoo_daily_body(bad="negative_volume")),
-                now="2026-10-14T00:00:00Z")
-        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+        result=run_mocked_legacy_page(self.path,self.locks,spec,DAY,
+            "2026-10-13T00:00:00Z",
+            raw_bytes=raw(self._yahoo_daily_body(bad="negative_volume")),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["failure_class"],"ValueError")
+        self.assertEqual(self.rows("SELECT status FROM package_a_receipts"),[("rejected",)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
 
     def test_yahoo_session_normalization_denies_two_timestamps_same_utc_date(self):
         spec=SeriesSpec("yahoo","open","SPY","d1","USD")
-        with self.assertRaisesRegex(ValueError,"Duplicate Yahoo daily session"):
-            run_mocked_legacy_page(
-                self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
-                raw_bytes=raw(self._yahoo_daily_body(duplicate_day=True)),
-                now="2026-10-14T00:00:00Z")
-        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+        result=run_mocked_legacy_page(
+            self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
+            raw_bytes=raw(self._yahoo_daily_body(duplicate_day=True)),
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"],"rejected")
+        self.assertFalse(result["cursor_advanced"])
+        self.assertEqual(self.rows("SELECT status FROM package_a_receipts"),[("rejected",)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(0,)])
 
     def test_yahoo_market_symbol_metric_unit_scale_scope_is_preflight_blocked(self):
         for metric,symbol,unit,scale in (
