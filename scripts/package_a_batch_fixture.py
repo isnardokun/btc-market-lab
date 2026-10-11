@@ -5,6 +5,7 @@ and quota/retention have NOT been verified by this offline test harness.
 """
 from dataclasses import dataclass
 from pathlib import Path
+import uuid
 
 from ingestion.package_a_contracts import SeriesSpec, utc
 from scripts.package_a_ingest_fixture import (
@@ -57,16 +58,21 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
             raise ValueError("Bounded frozen legacy response required")
         if utc(page.start) >= utc(page.end):
             raise ValueError("Invalid requested window")
+    # Fresh run ID each invocation. Failed runs retain durable page evidence;
+    # restarted batches are separate attempts, never rewritten histories.
+    run_id=uuid.uuid4().hex
     outcomes = []
     for index, page in enumerate(pages):
         if isinstance(page, FrozenLegacyPage):
             result = run_mocked_legacy_page(
                 db_path, lock_dir, page.source, page.start, page.end,
-                raw_bytes=page.raw_bytes, status_code=page.status_code, now=now)
+                raw_bytes=page.raw_bytes, status_code=page.status_code, now=now,
+                _batch_run=(run_id,index,len(pages)))
         else:
             result = run_fixture_page(
                 db_path, lock_dir, page.source, page.start, page.end,
-                page.response, now=now)
+                page.response, now=now,
+                _batch_run=(run_id,index,len(pages)))
         outcomes.append({
             "index": index, "source": page.source.provider,
             "metric": page.source.metric, "state": result["state"],
@@ -92,6 +98,7 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
     )
     return {
         "state": "BATCH_OFFLINE_ACCEPTED" if fully_applied else "BATCH_BLOCKED",
+        "run_id":run_id,
         "requests_planned": len(pages), "requests_attempted": len(outcomes),
         "remaining_requests_not_run": len(pages) - len(outcomes),
         "new_observations": sum(row["new_rows"] for row in outcomes),
