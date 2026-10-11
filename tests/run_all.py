@@ -69,8 +69,27 @@ TESTS = [
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
+# The historical pipeline integration suite reads a hard-coded
+# /home/ignotus/btc-research/db/btc_research.db at import time. It is NOT an
+# offline unittest, and must NEVER be run by the generic CI/Hermes runner.
+# Running that test requires a separately scoped owner-authorized action.
+LIVE_ONLY_SUITES = {"Integration: Pipeline"}
+
+live_rows = [(name, cmd) for name, cmd in TESTS if name in LIVE_ONLY_SUITES]
+if len(live_rows) != 1 or live_rows[0][1] != "python3 tests/integration/test_pipeline.py":
+    raise SystemExit("BLOCKED: unsafe pipeline suite registry drift")
+if len({name for name, _ in TESTS}) != len(TESTS):
+    raise SystemExit("BLOCKED: duplicate test suite labels")
+if len({cmd for _, cmd in TESTS}) != len(TESTS):
+    raise SystemExit("BLOCKED: duplicate suite commands")
+
 results = []
+skipped_live = []
 for name, cmd in TESTS:
+    if name in LIVE_ONLY_SUITES:
+        skipped_live.append(name)
+        print("SKIPPED_LIVE_NOT_AUTHORIZED: " + name)
+        continue
     print(f"\n{'='*60}")
     print(f"  {name}")
     print('='*60)
@@ -94,6 +113,11 @@ for name, ok in results:
     status = "✅ PASS" if ok else "❌ FAIL"
     print(f"  {status}  {name}")
 
-all_ok = all(ok for _, ok in results)
-print(f"\n{'✅ All tests passed' if all_ok else '❌ Some tests failed'}")
+all_ok = bool(results) and all(ok for _, ok in results)
+print(f"\nOFFLINE_SUITES_EXECUTED={len(results)}")
+print(f"OFFLINE_SUITES_PASSED={sum(1 for _,ok in results if ok)}")
+print(f"LIVE_SUITES_SKIPPED={len(skipped_live)}")
+print(f"REGISTERED_SUITES={len(TESTS)}")
+print("LIVE_STATUS=NOT_TESTED_NOT_AUTHORIZED")
+print(f"\n{'✅ Offline suites passed; live suite NOT TESTED' if all_ok else '❌ Offline suites failed'}")
 sys.exit(0 if all_ok else 1)
