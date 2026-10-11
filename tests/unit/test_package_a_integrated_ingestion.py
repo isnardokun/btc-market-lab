@@ -17,6 +17,7 @@ from scripts.package_a_ingest_fixture import (
 )
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock
 from storage import package_a_ledger as ledger
+from scripts.package_a_batch_fixture import FixturePage, run_synthetic_batch
 
 DAY = "2026-10-08T00:00:00Z"
 NEXT = "2026-10-09T00:00:00Z"
@@ -285,6 +286,79 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
         (self.root/MARKER).unlink()
         with self.assertRaises(ValueError):
             self.apply(spec,start,end,payload)
+
+    def test_batch_six_providers_one_integrated_offline_run(self):
+        pages = [FixturePage(spec, start, end, FixtureResponse(200, payload))
+                 for spec,start,end,payload in sources()]
+        report = run_synthetic_batch(self.path,self.lockdir,pages,now=NOW)
+        self.assertEqual(report["state"],"BATCH_OFFLINE_ACCEPTED",report)
+        self.assertEqual(report["requests_attempted"],6)
+        self.assertEqual(report["new_observations"],12)
+        self.assertEqual(report["audit"]["rows"],12)
+        self.assertFalse(report["real_provider_windows_verified"])
+        self.assertFalse(report["production_authorized"])
+
+    def test_batch_fails_on_429_and_resumes_from_safe_checkpoint(self):
+        a,b,c = sources()[0], sources()[4], sources()[2]
+        first = [FixturePage(a[0],a[1],a[2],FixtureResponse(200,a[3])),
+                 FixturePage(b[0],b[1],b[2],FixtureResponse(429,{"rate_limit":"synthetic"})),
+                 FixturePage(c[0],c[1],c[2],FixtureResponse(200,c[3]))]
+        r = run_synthetic_batch(self.path,self.lockdir,first,now=NOW)
+        self.assertEqual(r["state"],"BATCH_BLOCKED")
+        self.assertEqual((r["requests_attempted"],r["remaining_requests_not_run"]),(2,1))
+        self.assertEqual(r["audit"]["rows"],2)
+        self.assertEqual(self.read("SELECT status FROM package_a_receipts ORDER BY rowid"),
+                         [("ok",),("failed",)])
+        resumed = [FixturePage(b[0],b[1],b[2],FixtureResponse(200,b[3])),
+                   FixturePage(c[0],c[1],c[2],FixtureResponse(200,c[3]))]
+        retry=run_synthetic_batch(self.path,self.lockdir,resumed,now=NOW)
+        self.assertEqual(retry["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(retry["audit"]["rows"],6)
+        self.assertEqual(self.read("SELECT status,COUNT(*) FROM package_a_receipts GROUP BY status"),
+                         [("failed",1),("ok",3)])
+
+    def test_backward_historical_page_adds_older_data_without_regressing_cursor(self):
+        spec=sources()[0][0]
+        first=self.apply(spec,NEXT,AFTER,{"data":[{"date":"2026-10-09","value":1.002}]})
+        self.assertTrue(first["cursor_advanced"])
+        back=self.apply(spec,DAY,NEXT,{"data":[{"date":"2026-10-08","value":0.997}]})
+        self.assertEqual(back["new_rows"],1)
+        self.assertFalse(back["cursor_advanced"])
+        self.assertEqual(self.read("SELECT end_exclusive_utc FROM package_a_cursors"),[(AFTER,)])
+        self.assertEqual(self.read("SELECT archived_rows FROM package_a_coverage"),[(2,)])
+
+    def test_batch_budget_blocks_without_initializing_schema(self):
+        page=sources()[0]
+        fixtures=[FixturePage(page[0],page[1],page[2],FixtureResponse(200,page[3]))]
+        for limit in (0,-1,33,True):
+            with self.subTest(limit=limit),self.assertRaises(ValueError):
+                run_synthetic_batch(self.path,self.lockdir,fixtures,now=NOW,max_pages=limit)
+        self.assertFalse(self.read("SELECT name FROM sqlite_master "
+                                   "WHERE name='package_a_receipts'"))
+
+    def test_batch_lock_busy_keeps_database_uninitialized(self):
+        spec,start,end,payload=sources()[0]
+        pages=[FixturePage(spec,start,end,FixtureResponse(200,payload))]
+        with hold_writer_lock(self.lockdir,namespace=LOCK_NAMESPACE):
+            r=run_synthetic_batch(self.path,self.lockdir,pages,now=NOW)
+        self.assertEqual(r["state"],"BATCH_BLOCKED")
+        self.assertIsNone(r["audit"])
+        self.assertEqual(r["pages"][0]["state"],"BLOCKED_WRITER_BUSY")
+        self.assertEqual(self.read("SELECT name FROM sqlite_master "
+                                   "WHERE name='package_a_receipts'"),[])
+
+    def test_normalized_hash_and_coverage_tampering_fail_integrity(self):
+        spec,start,end,payload=sources()[0]
+        self.apply(spec,start,end,payload)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_observations SET value=42 "
+                       "WHERE observed_utc=?", (DAY,))
+        self.assertEqual(inspect_fixture(self.path,self.lockdir)["normalized_digest_errors"],1)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_coverage SET archived_rows=99")
+        bad=inspect_fixture(self.path,self.lockdir)
+        self.assertEqual(bad["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(bad["coverage_errors"],1)
 
     def test_runner_registers_package_suite_without_hardcoded_old_count(self):
         path=Path(__file__).resolve().parents[1]/"run_all.py"
