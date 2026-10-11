@@ -134,6 +134,27 @@ class TestR10E9EvidenceReconciliation(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 reconcile_review_queue(a, b)
 
+    def test_tampered_yahoo_trading_calendar_never_becomes_daily_gap(self):
+        a, b = self.reports()
+        row = next(s for s in b["sources"] if s["provider"] == "yahoo")["series"][0]
+        row.update(gap_method="UTC_CALENDAR_DAY",
+                   internal_gap_candidates=1,
+                   sample_missing_slots=["2026-10-08"],
+                   sample_truncated=False)
+        with self.assertRaisesRegex(ValueError, "Source frequency"):
+            reconcile_review_queue(a, b)
+
+    def test_tampered_fred_daily_cannot_become_monthly_gap(self):
+        a, b = self.reports()
+        row = next(s for s in b["sources"] if s["provider"] == "fred")
+        target = next(s for s in row["series"] if s["metric"] == "DGS10")
+        target.update(gap_method="MONTHLY_OBSERVATION",
+                      internal_gap_candidates=1,
+                      sample_missing_slots=["2026-08"],
+                      sample_truncated=False)
+        with self.assertRaisesRegex(ValueError, "Source frequency"):
+            reconcile_review_queue(a, b)
+
     def test_untrusted_mutation_execution_or_completeness_claims_fail(self):
         for which, update in (
             (0, {"execution_authorized": True}),
