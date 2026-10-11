@@ -15,7 +15,9 @@ def reconciled_fixture_points(spec, payload, *, start, end, now):
 
     RBN: preserves scalar and fraction scale (never multiplies percentages).
     Bitview: preserves 2009 epoch day-index mapping.
-    Yahoo: validates close prices against existing OHLCV parser.
+    Yahoo: compares every supported OHLCV field with existing legacy
+    extract_daily, normalizing US-equity session timestamps to UTC dates
+    before matching the per-stream daily PK. Never assumes weekends/holidays.
 
     FRED/Binance/Bybit have no identical pure parser shape shared by
     independent legacy modules, so their new strict contracts remain
@@ -49,12 +51,20 @@ def reconciled_fixture_points(spec, payload, *, start, end, now):
         }
     elif spec.provider == "yahoo":
         candles = yahoo_history.extract_daily(payload,now=current)
-        existing = {
-            dt.datetime.fromtimestamp(ts,dt.timezone.utc).isoformat().replace(
-                "+00:00","Z"):float(close)
-            for ts,open_,high,low,close,volume in candles
-            if begin <= dt.datetime.fromtimestamp(ts,dt.timezone.utc) < stop
-        }
+        keys={"open":1,"high":2,"low":3,"close":4,"volume":5}
+        pos=keys[spec.metric]
+        existing={}
+        for candle in candles:
+            rawts=candle[0]
+            session=dt.datetime.combine(
+                dt.datetime.fromtimestamp(rawts,dt.timezone.utc).date(),
+                dt.time(),dt.timezone.utc)
+            value=candle[pos]
+            if begin <= session < stop and value is not None:
+                key=session.isoformat().replace("+00:00","Z")
+                if key in existing:
+                    raise ValueError("Duplicate Yahoo session from legacy parser")
+                existing[key]=float(value)
     if existing is not None:
         fresh = {point.timestamp:point.value for point in points}
         if existing != fresh or len(existing) != len(points):
