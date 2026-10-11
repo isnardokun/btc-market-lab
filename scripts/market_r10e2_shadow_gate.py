@@ -86,6 +86,21 @@ def evaluate_shadow_gate(dispatch, runtime, *, now):
     provider = selected.get("provider")
     if provider not in PAGE_LIMITS:
         raise ValueError("Unknown provider")
+    for item in candidates:
+        status = item.get("status")
+        pending_slots = item.get("closed_intervals_waiting")
+        if status == "PLAN_ONLY":
+            if type(pending_slots) is not int or pending_slots < 1:
+                raise ValueError("Malformed eligible candidate")
+        elif status == "NO_CLOSED_BAR":
+            if pending_slots != 0:
+                raise ValueError("Malformed caught-up candidate")
+        else:
+            raise ValueError("Blocked candidate cannot yield a proposal")
+    ranked = sorted((x for x in candidates if x["status"] == "PLAN_ONLY"),
+                    key=lambda x: (-x["closed_intervals_waiting"], x["provider"]))
+    if not ranked or ranked[0]["provider"] != provider:
+        raise ValueError("Selection does not match deterministic priority")
     candidate = next(x for x in candidates if x["provider"] == provider)
     if (candidate.get("status") != "PLAN_ONLY"
             or selected.get("direction") != "forward"
