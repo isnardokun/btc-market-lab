@@ -71,6 +71,14 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         step=dt.timedelta(days=1)
         page_slots=14  # conservative local policy, not upstream assertion
         policy="BITVIEW_CONSERVATIVE_14D_NOT_UPSTREAM_VERIFIED"
+    elif spec.provider == "fred":
+        # Observation/release calendars are sparse. Partition the *request
+        # dates* only; NEVER require 90 daily observations or manufacture
+        # monthly/weekly data. Both legacy FRED query builder and its
+        # metric-specific frequency catalog must validate this series.
+        step=dt.timedelta(days=1)
+        page_slots=90
+        policy="FRED_SYNTHETIC_90_CALENDAR_DAYS_NOT_RELEASE_VERIFIED"
     elif spec.provider in ("binance","bybit") and spec.metric=="open_interest":
         step=dt.timedelta(minutes=5)
         # Bound by parameter values already constructed by our mock builder.
@@ -115,7 +123,10 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         spans.append({
             "request_contract_sha256":contract_sha,
             "ordinal":idx,"start_utc":_iso(pos),"end_exclusive_utc":_iso(nxt),
-            "native_slots":(nxt-pos)//step,
+            # FRED request calendar days are NOT expected daily samples:
+            # a monthly series can have 1 or 3 revisions within 90 days.
+            "native_slots":None if spec.provider=="fred" else (nxt-pos)//step,
+            "request_calendar_days":(nxt-pos).days if spec.provider=="fred" else None,
             "request_origin":endpoint.split("/")[2],
             "endpoint_path":"/"+"/".join(endpoint.split("/")[3:]),
             "source_query_params_frozen":True,
@@ -135,7 +146,13 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         "state":"OFFLINE_SOURCE_WINDOWS_PLANNED",
         "source":spec.provider,"metric":spec.metric,"symbol":spec.symbol,
         "frequency":spec.frequency,"calendar_step_seconds":int(step.total_seconds()),
-        "synthetic_max_rows_per_window":page_slots,
+        "synthetic_max_rows_per_window":(
+            None if spec.provider=="fred" else page_slots),
+        "synthetic_max_calendar_days_per_window":(
+            page_slots if spec.provider=="fred" else None),
+        "source_calendar_observation_expectation":(
+            "NOT_INFERRED_FRED_RELEASE_VINTAGE" if spec.provider=="fred"
+            else "LOCAL_FIXED_GRID_ONLY"),
         "page_limit_policy":policy,
         "requested_start_utc":_iso(first),
         "requested_end_exclusive_utc":_iso(last),
