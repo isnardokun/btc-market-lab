@@ -9,7 +9,6 @@ The caller owns the connection and read transaction. NO path, network,
 credential, scheduler, SQLite mutation, or live API capability exists here.
 """
 from collections import defaultdict
-from dataclasses import dataclass
 import datetime as dt
 
 from ingestion.package_a_contracts import SeriesSpec, utc
@@ -68,7 +67,7 @@ def source_aware_manifest(conn, *, max_streams=128, max_grid_slots=4000,
         raise ValueError("Bounded manifest budget required")
     all_receipts = list(conn.execute(
         "SELECT provider,metric,symbol,frequency,start_utc,end_exclusive_utc,"
-        "status,http_status,raw_payload,raw_sha256 "
+        "status,http_status,(raw_payload IS NOT NULL),raw_sha256 "
         "FROM package_a_receipts ORDER BY rowid"))
     all_points = list(conn.execute(
         "SELECT provider,metric,symbol,frequency,observed_utc,dimension_key,"
@@ -132,7 +131,7 @@ def source_aware_manifest(conn, *, max_streams=128, max_grid_slots=4000,
         key=(p,m,s,f)
         point_rows[key].append((observed,dimension,unit,scale))
 
-    for p,m,s,f,start,end,status,http,raw,sha in all_receipts:
+    for p,m,s,f,start,end,status,http,has_raw,sha in all_receipts:
         key=(p,m,s,f)
         bucket=buckets[key]
         bucket["attempted_requests"]+=1
@@ -154,7 +153,7 @@ def source_aware_manifest(conn, *, max_streams=128, max_grid_slots=4000,
             max(end,bucket["requested_end_exclusive_utc"])
             if bucket["requested_end_exclusive_utc"] else end)
         if status=="ok":
-            if raw is None or sha is None:
+            if not has_raw or sha is None:
                 bucket["successful_missing_raw_receipts"]+=1
                 bucket["local_integrity_errors"]+=1
             else:
@@ -163,7 +162,7 @@ def source_aware_manifest(conn, *, max_streams=128, max_grid_slots=4000,
         elif status=="failed":
             if http is None:
                 bucket["transport_failures_without_response"]+=1
-            elif raw is not None:
+            elif has_raw:
                 bucket["http_error_with_raw"]+=1
 
     errors=0
@@ -234,8 +233,10 @@ def source_aware_manifest(conn, *, max_streams=128, max_grid_slots=4000,
                         "local_missing_candidate_slots":scan.get("missing_candidate_slots"),
                         "windows":scan.get("candidates",[]),
                         "request_ready":False,"provider_verified":False}
-                    if scan["state"].startswith("BLOCKED"):
+                    if scan["state"]=="BLOCKED_SOURCE_OBSERVATION_DRIFT":
                         bucket["local_integrity_errors"]+=1
+                    # Too many candidate windows is a planning budget
+                    # limitation, NOT evidence that archived rows are corrupt.
         else:
             bucket["local_grid_state"]="NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS"
         errors+=bucket["local_integrity_errors"]
