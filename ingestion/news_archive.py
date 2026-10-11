@@ -8,6 +8,9 @@ import datetime as dt
 from pathlib import Path
 import sqlite3
 from urllib.parse import urlsplit
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock
+
+GLOBAL_LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS research_news_archive (
@@ -26,7 +29,20 @@ ON research_news_archive(asset, report_date);
 """
 
 
-def archive_news(db_path, report_date, grouped_news, *, at=None):
+def archive_news(db_path, report_date, grouped_news, *, at=None, lock_directory=None):
+    """Archive discovery URLs; optionally hold the shared cooperative lock.
+
+    Lock contention raises WriterLockBusy BEFORE checking SQLite existence.
+    Do not convert that exception into a numeric count or silently fall back
+    to writing unlocked. Library callers without the opt-in remain legacy.
+    """
+    if lock_directory is None:
+        return _archive_news_unlocked(db_path, report_date, grouped_news, at=at)
+    with hold_writer_lock(lock_directory, namespace=GLOBAL_LOCK_NAMESPACE):
+        return _archive_news_unlocked(db_path, report_date, grouped_news, at=at)
+
+
+def _archive_news_unlocked(db_path, report_date, grouped_news, *, at=None):
     if not Path(db_path).is_file():
         raise FileNotFoundError("No SQLite local disponible")
     stamp = (at or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc).isoformat()
