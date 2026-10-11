@@ -188,7 +188,8 @@ def _legacy_fake_fetch(spec, start, end, frozen):
 
 
 def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
-                           *, raw_bytes, status_code=200, now, fault=None):
+                           *, raw_bytes, status_code=200, now, fault=None,
+                           _batch_run=None):
     """Full lock -> real legacy builder -> frozen HTTP -> RAW/SQL on temp DB.
 
     Not a network client. Never accepts an HTTP callable or arbitrary URL.
@@ -223,7 +224,7 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
             outcome = run_fixture_page(
                 db_path, lock_directory, spec, start, end, response,
                 now=now, fault=fault, _parent_lock_held=True,
-                _frozen_request=(endpoint, query))
+                _frozen_request=(endpoint, query), _batch_run=_batch_run)
             return {
                 **outcome,
                 "frozen_http_requests": frozen.calls,
