@@ -84,9 +84,12 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                    json.dumps(response.payload, sort_keys=True,
                               separators=(",",":"), allow_nan=False).encode("utf-8")
                    if response.payload is not None else None)
-            if response.raw_bytes is not None:
+            if response.raw_bytes is not None and response.status_code == 200:
                 if json.loads(response.raw_bytes) != response.payload:
                     raise ValueError("Frozen HTTP payload differs from actual RAW bytes")
+            # Error pages can be opaque bytes (HTML/plaintext 429/5xx).
+            # Preserve actual RAW+SHA without trying to interpret a failure
+            # response as a successful provider payload.
             # Parsing occurs before opening the DB, but after acquiring the
             # cooperative writer lock. No write transaction spans HTTP.
             error = None
