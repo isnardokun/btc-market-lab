@@ -14,7 +14,7 @@ transacciones individuales.
 
 El nuevo módulo **scripts/package_a_yahoo_fanout.py** utiliza exactamente
 una petición HTTP **falsa** del constructor legado
-GET /v8/finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=max,
+GET /v8/finance/chart/{symbol}?interval=1d&range=max,
 sin paginación inventada ni red. Los cinco conjuntos se interpretan
 con el parser estricto y se reconcilian independientemente con
 ingestion/yahoo_history.extract_daily.
