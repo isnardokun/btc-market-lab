@@ -174,7 +174,13 @@ def plan_offline_historical_windows(spec, start, end, *, max_pages=MAX_PAGES):
         "page_limit_policy":policy,
         "requested_start_utc":_iso(first),
         "requested_end_exclusive_utc":_iso(last),
-        "requested_native_slots":total_slots,
+        # Calendar days are NOT observation counts for FRED/funding.
+        "requested_native_slots":(
+            None if spec.provider=="fred" or
+            spec.metric=="funding_settled" else total_slots),
+        "requested_calendar_days":(
+            total_slots if spec.provider=="fred" or
+            spec.metric=="funding_settled" else None),
         "candidate_pages":count,
         "windows":spans,
         "window_plan_sha256":digest,
