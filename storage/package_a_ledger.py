@@ -11,6 +11,10 @@ import uuid
 
 from ingestion.package_a_contracts import SeriesSpec, Point, utc
 
+class SimulatedCrash(RuntimeError):
+    """Fixture-only crash-injection signal; rollback the full page."""
+
+
 MIGRATION_VERSION = 1
 DDL = (
     """CREATE TABLE IF NOT EXISTS package_a_schema_migrations (
@@ -143,7 +147,7 @@ def _bounds(start, end):
             right.isoformat().replace("+00:00", "Z"))
 
 
-def store_ok_page(conn, spec, start, end, *, raw, points, now):
+def store_ok_page(conn, spec, start, end, *, raw, points, now, fault=None):
     """Atomically persist request RAW + append-only observations + cursor.
 
     Exact replays are accepted without mutating old observations/cursor.
@@ -154,6 +158,10 @@ def store_ok_page(conn, spec, start, end, *, raw, points, now):
     if not isinstance(points, tuple) or not points or not all(isinstance(x, Point) for x in points):
         raise ValueError("Nonempty parsed fixture points required")
     begin, stop = _bounds(start, end)
+    if fault not in (None, "after_receipt", "after_rows", "after_cursor"):
+        raise ValueError("Unknown crash injection")
+    if any(not begin <= p.timestamp < stop for p in points):
+        raise ValueError("Parsed observation outside receipt window")
     timestamp = utc(now).isoformat().replace("+00:00","Z")
     conn.execute("SAVEPOINT package_a_page")
     try:
@@ -169,6 +177,8 @@ def store_ok_page(conn, spec, start, end, *, raw, points, now):
 
         receipt = _receipt(conn, spec, begin, stop, status="ok", payload=raw,
                            http_status=200, count=len(points), now=timestamp)
+        if fault == "after_receipt":
+            raise SimulatedCrash("after_receipt")
         inserted = 0
         for p in points:
             digest = _point_hash(spec, p)
@@ -185,6 +195,8 @@ def store_ok_page(conn, spec, start, end, *, raw, points, now):
                 "INSERT INTO package_a_observations VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (*key, p.value, spec.unit, spec.raw_scale, digest, receipt))
             inserted += 1
+        if fault == "after_rows":
+            raise SimulatedCrash("after_rows")
         if not prior or prior[0] == begin:
             conn.execute(
                 "INSERT INTO package_a_cursors VALUES (?,?,?,?,?,?) "
@@ -192,6 +204,8 @@ def store_ok_page(conn, spec, start, end, *, raw, points, now):
                 "end_exclusive_utc=excluded.end_exclusive_utc,"
                 "advanced_by_receipt=excluded.advanced_by_receipt",
                 (*_key(spec), stop, receipt))
+        if fault == "after_cursor":
+            raise SimulatedCrash("after_cursor")
         aggregate = conn.execute(
             "SELECT MIN(observed_utc),MAX(observed_utc),COUNT(*) "
             "FROM package_a_observations WHERE provider=? AND metric=? AND symbol=? AND frequency=?",
