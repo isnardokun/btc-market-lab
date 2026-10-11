@@ -11,8 +11,9 @@ Contiene:
 
 Se guarda en: reports/snapshots/snapshot_YYYY-MM-DD_HHMMSS.json
 """
-import sys, os, datetime, json, hashlib, sqlite3, subprocess
+import sys, os, datetime, json, hashlib, sqlite3, subprocess, argparse
 from pathlib import Path
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH = BASE_DIR / "db" / "btc_research.db"
@@ -141,5 +142,14 @@ def create_snapshot():
     return snapshot
 
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Write post-publication data snapshot")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in lock for consistent SQLite reads and snapshot writes")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, create_snapshot, label="post-publication-snapshot")
+
+
 if __name__ == "__main__":
-    create_snapshot()
+    raise SystemExit(main())
