@@ -25,7 +25,7 @@ AFTER = "2026-10-10T00:00:00Z"
 NOW = "2026-10-11T00:00:00Z"
 OI1 = "2026-10-08T00:05:00Z"
 OI2 = "2026-10-08T00:10:00Z"
-OI_END = "2026-10-08T00:15:00Z"
+OI_END = "2026-10-08T00:10:00Z"
 
 
 def unix(value, *, millis=False):
@@ -196,6 +196,20 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
         bad = [dict(payload[0]),dict(payload[1])]
         bad[1]["timestamp"] = unix(OI2,millis=True)
         result = self.apply(spec,start,end,bad)
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0], 0)
+
+    def test_oi_truncated_final_five_minute_bar_rejected_no_cursor(self):
+        spec, start, end, payload = sources()[4]
+        result = self.apply(spec, start, "2026-10-08T00:15:00Z", payload)
+        self.assertEqual(result["state"], "PAGE_NOT_COMMITTED")
+        self.assertEqual(result["status"], "rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0], 0)
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations")[0][0], 0)
+
+    def test_oi_window_requires_exact_five_minute_alignment(self):
+        spec, start, end, payload = sources()[5]
+        result = self.apply(spec, start, "2026-10-08T00:11:00Z", payload)
         self.assertEqual(result["status"], "rejected")
         self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0], 0)
 
