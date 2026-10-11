@@ -882,3 +882,51 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                                    prior_run_id=prior["run_id"])
         self.assertEqual(plan["resume_index"],1)
         self.assertEqual(plan["state"],"RESUME_PLANNED_OFFLINE")
+
+
+    def test_cannot_spoof_parent_flock_with_bare_true_flag(self):
+        scenario=scenarios()[0]
+        original=self.as_frozen_page(scenario)
+        with self.assertRaisesRegex(ValueError,"PARENT_FLOCK_LEASE_REQUIRED"):
+            run_synthetic_batch(self.path,self.locks,[original],now=NOW,
+                                _parent_lock_held=True)
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_cannot_spoof_parent_held_flag_via_frozen_or_direct_page(self):
+        spec,start,end,payload=scenarios()[0]
+        from scripts.package_a_frozen_legacy_transport import run_mocked_legacy_page
+        from scripts.package_a_ingest_fixture import run_fixture_page
+        with self.assertRaisesRegex(ValueError,"PARENT_FLOCK_LEASE_REQUIRED"):
+            run_mocked_legacy_page(self.path,self.locks,spec,start,end,
+                raw_bytes=raw(payload),now=NOW,_parent_lock_held=True)
+        with self.assertRaisesRegex(ValueError,"PARENT_FLOCK_LEASE_REQUIRED"):
+            run_fixture_page(self.path,self.locks,spec,start,end,
+                FixtureResponse(200,payload),now=NOW,_parent_lock_held=True)
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_real_offline_parent_lease_allows_child_and_revokes_after_release(self):
+        from scripts.package_a_parent_lock import hold_offline_parent_lease
+        page=self.as_frozen_page(scenarios()[0])
+        with hold_offline_parent_lease(self.locks):
+            outcome=run_synthetic_batch(self.path,self.locks,[page],now=NOW,
+                                         _parent_lock_held=True)
+            self.assertEqual(outcome["state"],"BATCH_OFFLINE_ACCEPTED")
+        with self.assertRaisesRegex(ValueError,"PARENT_FLOCK_LEASE_REQUIRED"):
+            run_synthetic_batch(self.path,self.locks,[page],now=NOW,
+                                _parent_lock_held=True)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+
+    def test_wrong_lock_dir_cannot_reuse_other_parent_lease(self):
+        from scripts.package_a_parent_lock import verify_offline_parent_lease
+        from scripts.package_a_parent_lock import hold_offline_parent_lease
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix="package-a-fixture-") as root:
+            other=Path(root)/"locks"
+            other.mkdir()
+            with hold_offline_parent_lease(self.locks):
+                with self.assertRaisesRegex(ValueError,"PARENT_FLOCK_LEASE_REQUIRED"):
+                    verify_offline_parent_lease(other)
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
