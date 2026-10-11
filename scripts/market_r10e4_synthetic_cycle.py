@@ -150,10 +150,14 @@ def simulate_synthetic_cycle(*, scenario="success", policy=None,
 
         state = "MOCK_AUDIT_BLOCKED"
         if gate["decision"] != "SHADOW_ELIGIBLE":
-            if not fetch_calls and immutable and all(x["added"] == 0 for x in delta.values()):
+            if (audit_ok and not fetch_calls and immutable
+                    and result is None
+                    and all(x["added"] == 0 for x in delta.values())):
                 state = ("MOCK_NO_WORK" if gate["decision"] == "NO_WORK"
                          else "MOCK_PRE_GATE_BLOCKED")
-        elif (len(fetch_calls) == 1 and immutable and audit_ok and result is not None):
+        elif (len(fetch_calls) == 1 and immutable and audit_ok
+              and audit["LINEAGE"] == "PASS_REQUEST_LINEAGE"
+              and result is not None):
             expected = ("success" if scenario == "success" else
                         "empty" if scenario == "empty" else "failed")
             actual = result.get("status")
