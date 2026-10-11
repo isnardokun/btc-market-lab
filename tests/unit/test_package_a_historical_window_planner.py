@@ -328,7 +328,8 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
             FRED_MONTHLY,"2026-06-01T00:00:00Z",OCT)
         self.assertEqual(p["state"],"OFFLINE_SOURCE_WINDOWS_PLANNED")
         self.assertEqual(p["candidate_pages"],2)
-        self.assertEqual(p["requested_native_slots"],122)
+        self.assertIsNone(p["requested_native_slots"])
+        self.assertEqual(p["requested_calendar_days"],122)
         self.assertEqual(p["synthetic_max_calendar_days_per_window"],90)
         self.assertIsNone(p["synthetic_max_rows_per_window"])
         self.assertEqual(p["source_calendar_observation_expectation"],
@@ -471,6 +472,8 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
             plan=plan_offline_historical_windows(spec,begin,end)
             self.assertEqual(plan["state"],"OFFLINE_SOURCE_WINDOWS_PLANNED")
             self.assertEqual(plan["candidate_pages"],3)
+            self.assertIsNone(plan["requested_native_slots"])
+            self.assertEqual(plan["requested_calendar_days"],15)
             self.assertEqual([w["request_calendar_days"] for w in plan["windows"]],
                              [7,7,1])
             self.assertEqual([w["native_slots"] for w in plan["windows"]],
