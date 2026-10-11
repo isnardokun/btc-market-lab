@@ -23,7 +23,7 @@ Una ejecución sintética llama **una sola vez** al callback falso y pasa por la
 | http429 | failed | 0 | failed, sin acquisition | No avanza |
 | gap | failed | 0 | failed, sin adquisición de BLOB | No avanza |
 
-Los datos de prueba son estrictamente sintéticos, NO los valores de 27.663 derivados reportados en PR #59. Las 12 pruebas nuevas incluyen ambos proveedores, auditorías, ausencia de efectos externos, controles de línea base y registro runner por AST.
+Los datos de prueba son estrictamente sintéticos, NO los valores de 27.663 derivados reportados en PR #59. Las 13 pruebas nuevas incluyen ambos proveedores, auditorías, ausencia de efectos externos, controles de línea base, registro runner por AST y una prueba sintética que confirma que el runner devuelve RC=1 ante una suite fallida.
 
 ## Límites conocidos
 
@@ -33,6 +33,12 @@ Esta primera integración no implementa: bloqueo de writers entre procesos produ
 
 ## QA de Hermes
 
-Probar exclusivamente el SHA indicado en el comentario de orden de QA de esta PR. Se esperan 12 casos E.3, 16 E.2, 9 E.1 y 7 E.0; runner **41 suites estáticas** y misma cantidad ejecutadas si todo corre. Capturar RC, logs privados, datos de aislamiento/worktree; publicar un único comentario y STOP.
+Probar exclusivamente el SHA indicado en el comentario de orden de QA de esta PR. Se esperan 13 casos E.3, 16 E.2, 9 E.1 y 7 E.0; runner **41 suites estáticas** y misma cantidad ejecutadas si todo corre. Capturar RC, logs privados, datos de aislamiento/worktree; publicar un único comentario y STOP.
 
 Ninguna aprobación derivada de este test permite repetir HTTP live de Bybit/Binance, activar daily.sh, tocar SQLite productiva, modificar cron, borrar worktrees de R10-C/D/E ni realizar merge por Hermes.
+
+## Corrección de QA tras #6103986893
+
+Hermes detectó que la prueba E.2 había fijado `len(TESTS)==40`, aunque R10-E.3 añade la suite 41. ChatGPT sustituyó los conteos exactos de pruebas heredadas por mínimos de contrato (`>=40` E.2, `>=41` E.3) con comprobación de etiquetas/comandos únicos y de presencia exacta de las suites de cada fase. **El registro real de esta PR continúa siendo de 41 suites.**
+
+El primer informe de Hermes indicó que un runner fallido devolvió RC=0, incompatible con el final versionado `sys.exit(0 if all_ok else 1)`. Una nueva prueba sintética ejecuta una COPIA del runner con un comando artificial que termina en código 7 y exige RC=1. No se ejecuta una suite real adicional por esta prueba ni se escribe fuera de `TemporaryDirectory`. La próxima orden a Hermes exigirá registrar explícitamente el RC del runner y el conteo de resultados.
