@@ -67,10 +67,55 @@ cutover real. No se debe inferir un PASS porque el lock existe en fixtures.
 
 Los tests demuestran la semántica local de `flock` para Python sintético;
 **no demuestran cobertura de escritores operativos de la máquina**.
-El proceso padre usa `subprocess.run(...,close_fds=True,timeout=...)` y
-no transfiere credenciales al fixture. Un crash abrupto del **launcher**
-real requeriría además una política de gestión del grupo de procesos hijo,
-no probada por el fixture actual.
+El proceso padre ahora supervisa el grupo de procesos del fixture
+con `Popen(...,start_new_session=True,close_fds=True)`, y cierra nietos
+normalmente heredados en los estados de timeout/orfandad. Un crash
+abrupto del **launcher real** o descendientes que evaden el grupo requieren
+un mecanismo operacional adicional, **no demostrado por estos fixtures**.
+
+## Contención del grupo de procesos hijos: riesgo y corrección offline
+
+El ensayo previo del bloqueo padre solo llamaba a
+`subprocess.run(..., timeout=...)`. Este patrón puede terminar **únicamente
+al proceso inmediato**: si este inicia un nieto que conserva acceso a la
+SQLite, el padre puede liberar `flock` mientras ese descendiente sigue
+escribiendo. Es un riesgo de exclusión real, aun cuando el cron original no
+se haya ejecutado.
+
+La función offline `run_offline_parent_locked_child` fue reforzada:
+
+- Crea una **sesión POSIX exclusiva** del hijo desechable usando
+  `Popen(..., start_new_session=True, close_fds=True)`.
+- El padre mantiene el mismo `btc-research-global-writer-v1.lock` hasta
+  resolver la vida del hijo y el manejo de sus descendientes.
+- En timeout o interrupción del supervisor, solicita
+  `os.killpg(p.pid, SIGKILL)`, reaps al proceso directo con
+  `communicate(timeout=2)` y solo después abandona el contexto del lock.
+- Si el hijo directo termina con `0` **o con error**, pero su grupo aún
+  contiene descendientes, el resultado es
+  `OFFLINE_CHILD_DESCENDANTS_BLOCKED`, **no** `OFFLINE_CHILD_COMPLETED`.
+  Esos descendientes reciben SIGKILL antes de soltar el lock.
+- El hijo recibe un entorno acotado a `PATH` y
+  `PYTHONDONTWRITEBYTECODE`; el test verifica que una variable simulada de
+  secreto del padre no se hereda.
+
+**Evidencia:** `tests/unit/test_package_a_parent_lock_process_supervision.py`
+incorpora **7 casos**: ejecución normal, timeout con descendiente,
+hijo con exit `0` dejando un proceso vivo, hijo fallido dejando proceso,
+fallo sin descendientes, contención `flock` antes de arrancar el worker y
+aislamiento de entorno. En las pruebas de terminación se comprueba que el
+nieto no consigue escribir su marcador tras la liberación del lock.
+La suite se ejecuta en el runner portable completo.
+
+**Límite importante:** esta contención es para procesos **en el mismo
+grupo POSIX** del hijo, usando un worker.py sintético bajo fixture marcado.
+No demuestra aislamiento de un proceso que abra una sesión independiente
+(`setsid`), tareas desacopladas, otros launchers, procesos del cron real,
+otros repositorios, usos de SQLite directos ni programas deliberadamente
+no cooperativos. Un `worker.py` sigue siendo *código de prueba de
+confianza*: el fixture no es una sandbox de OS para ejecutar Python no
+fiable. Debe revisarse antes de usarlo. Por esto `GLOBAL_EXCLUSION_VERIFIED`
+continúa **falso** y no se habilita ningún launcher productivo.
 
 ## Gate para un cutover productivo posterior (requiere permisos separados)
 
