@@ -82,10 +82,14 @@ class SeriesSpec:
                 raise ValueError("RBN catalog/unit/scale mismatch")
         if self.provider == "bitview" and self.frequency != "d1":
             raise ValueError("Only catalogued Bitview daily fixture is supported")
-        if self.provider in ("binance", "bybit") and (
-                self.symbol != "BTCUSDT" or self.metric != "open_interest"
-                or self.frequency != "5m"):
-            raise ValueError("Only synthetic BTCUSDT OI 5m supported in this adapter")
+        if self.provider in ("binance", "bybit"):
+            supported = (
+                (self.metric == "open_interest" and self.frequency == "5m" and self.unit == "BTC")
+                or (self.metric == "funding_settled" and self.frequency == "event"
+                    and self.unit == "fraction")
+            )
+            if self.symbol != "BTCUSDT" or not supported or self.raw_scale != "native":
+                raise ValueError("Only BTCUSDT OI 5m or native funding settlement accepted")
         if self.provider == "yahoo" and self.frequency != "d1":
             raise ValueError("Only Yahoo daily fixture is supported")
         if self.provider == "fred" and self.frequency not in ("d1", "monthly", "weekly"):
@@ -156,21 +160,33 @@ def parse_fixture(spec, payload, *, start, end):
             raise ValueError("Malformed Yahoo fixture") from exc
     elif spec.provider == "binance":
         if not isinstance(payload, list):
-            raise ValueError("Binance OI history fixture must be a list")
+            raise ValueError("Binance derivatives history fixture must be a list")
         for row in payload:
-            if not isinstance(row, dict):
-                raise ValueError("Malformed Binance row")
-            out.append(_point(epoch(row["timestamp"], millis=True), row["sumOpenInterest"]))
+            if not isinstance(row, dict) or row.get("symbol", "BTCUSDT") != "BTCUSDT":
+                raise ValueError("Malformed Binance BTCUSDT row")
+            if spec.metric == "funding_settled":
+                out.append(_point(epoch(row["fundingTime"], millis=True), row["fundingRate"]))
+            else:
+                out.append(_point(epoch(row["timestamp"], millis=True), row["sumOpenInterest"]))
     elif spec.provider == "bybit":
         try:
-            rows = payload["result"]["list"]
+            if spec.metric == "funding_settled" and payload.get("retCode") != 0:
+                raise ValueError("Bybit settlement requires successful response code")
+            part = payload["result"]
+            if (spec.metric == "funding_settled"
+                    and (part.get("category", "linear") != "linear"
+                         or part.get("symbol", "BTCUSDT") != "BTCUSDT")):
+                raise ValueError("Bybit funding result scope mismatch")
+            rows = part["list"]
             if not isinstance(rows, list):
                 raise ValueError("Malformed Bybit list")
             for row in rows:
-                millis = int(row["timestamp"]) if isinstance(row["timestamp"], str) and row["timestamp"].isdigit() else row["timestamp"]
-                out.append(_point(epoch(millis, millis=True), row["openInterest"]))
-        except (KeyError, TypeError) as exc:
-            raise ValueError("Malformed Bybit OI fixture") from exc
+                key = "fundingRateTimestamp" if spec.metric == "funding_settled" else "timestamp"
+                val = "fundingRate" if spec.metric == "funding_settled" else "openInterest"
+                millis = int(row[key]) if isinstance(row[key], str) and row[key].isdigit() else row[key]
+                out.append(_point(epoch(millis, millis=True), row[val]))
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise ValueError("Malformed Bybit derivatives fixture") from exc
 
     seen = set()
     for point in out:
