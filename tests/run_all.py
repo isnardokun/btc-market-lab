@@ -114,7 +114,7 @@ for name, cmd in TESTS:
     if ok:
         print(f"✅ PASS")
     else:
-        print(f"❌ FAIL\n{r.stderr[-500:]}")
+        print(f"❌ FAIL\n{r.stderr[-5000:]}")
         # Print last 20 lines of output
         lines = r.stdout.strip().split('\n')
         print("Output:")
