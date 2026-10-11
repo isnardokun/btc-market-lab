@@ -15,6 +15,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import config
 
+# Direct script entrypoint also needs the repository root to resolve the
+# shared lock module; importing this module must not open SQLite or HTTP.
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
+
 API       = config.API_BASE
 DB_PATH   = config.DB_PATH
 VALID_TXT = "/home/ignotus/btc-research/all_series_valid.txt"
@@ -228,12 +234,25 @@ def run_all(backfill=False, dry_run=False, limit=None):
     print(f"Err: {err_count[0]} series")
     print(f"Log: {LOG_FILE}")
 
-def main():
+def _run_bulk_args(args):
+    """Existing Bitview bulk run; optional lock is held by the outer caller."""
+    db = get_db()
+    try:
+        init_db(db)
+    finally:
+        db.close()
+    print(f"DB: {DB_PATH}")
+    return run_all(backfill=args.backfill, dry_run=args.dry_run, limit=args.limit)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--backfill", action="store_true")
     parser.add_argument("--dry-run",  action="store_true")
     parser.add_argument("--limit",    type=int, default=None)
-    args = parser.parse_args()
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Opt-in shared writer lock BEFORE SQLite and concurrent API workers")
+    args = parser.parse_args(argv)
 
     if args.backfill:
         parser.error("ingest_all.py --backfill legacy no garantiza cobertura y puede "
@@ -243,11 +262,9 @@ def main():
         parser.error("ingest_all.py --dry-run legacy puede escribir estado local. "
                      "Usar ingestion/bitview_history.py sin --apply.")
 
-    db = get_db()
-    init_db(db)
-    print(f"DB: {DB_PATH}")
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, lambda: _run_bulk_args(args), label="bitview-bulk")
 
-    run_all(backfill=args.backfill, dry_run=args.dry_run, limit=args.limit)
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
