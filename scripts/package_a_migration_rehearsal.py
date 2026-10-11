@@ -25,6 +25,7 @@ LEGACY_TABLES = (
 PACKAGE_TABLES = (
     "package_a_schema_migrations", "package_a_receipts",
     "package_a_observations", "package_a_cursors", "package_a_coverage",
+    "package_a_request_provenance",
 )
 
 EXPECTED_KEYS = {
@@ -34,10 +35,12 @@ EXPECTED_KEYS = {
                                "observed_utc", "dimension_key"),
     "package_a_cursors": ("provider", "metric", "symbol", "frequency"),
     "package_a_coverage": ("provider", "metric", "symbol", "frequency"),
+    "package_a_request_provenance": ("receipt_id",),
 }
 EXPECTED_FOREIGN_KEYS = {
     "package_a_observations": {("receipt_id", "package_a_receipts", "receipt_id")},
     "package_a_cursors": {("advanced_by_receipt", "package_a_receipts", "receipt_id")},
+    "package_a_request_provenance": {("receipt_id", "package_a_receipts", "receipt_id")},
 }
 
 
