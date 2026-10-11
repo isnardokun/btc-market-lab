@@ -87,7 +87,7 @@ class TestPackageALegacyMigration(unittest.TestCase):
         self.assertEqual(result["legacy_digest_before"],before)
         self.assertEqual(result["legacy_digest_after"],before)
         self.assertEqual(self.tables(),set(PACKAGE_TABLES))
-        self.assertEqual(result["migrated_schema_version"],2)
+        self.assertEqual(result["migrated_schema_version"],3)
 
     def test_preserves_all_1035_synthetic_funding_without_inventing_receipts(self):
         self.run_migration()
