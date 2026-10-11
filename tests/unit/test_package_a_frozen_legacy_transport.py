@@ -1089,7 +1089,42 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(row["local_grid_state"],"NOT_SCANNED_GRID_BUDGET_OR_ALIGNMENT")
         self.assertFalse(row["request_ready"])
         self.assertEqual(row["historical_completeness"],"NOT_VERIFIED")
+        self.apply(scenarios()[4])
         with sqlite3.connect(self.path) as db:
             blocked=source_aware_manifest(db,max_streams=1)
-        self.assertEqual(blocked["stream_count"],1)
-        self.assertEqual(blocked["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        self.assertEqual(blocked["stream_count"],2)
+        self.assertEqual(blocked["state"],"BLOCKED_SOURCE_MANIFEST_STREAM_BUDGET")
+        self.assertEqual(blocked["streams"],[])
+        self.assertFalse(blocked["production_authorized"])
+
+
+    def test_manifest_fred_multiple_revisions_same_date_are_not_duplicate_bar_gaps(self):
+        spec=SeriesSpec("fred","CPIAUCSL","USA","monthly","index")
+        payload={"observations":[
+            {"date":"2026-08-01","value":"322.0","realtime_start":"2026-09-01"},
+            {"date":"2026-08-01","value":"322.5","realtime_start":"2026-10-01"}]}
+        result=run_fixture_page(self.path,self.locks,spec,
+            "2026-08-01T00:00:00Z","2026-09-01T00:00:00Z",
+            FixtureResponse(200,payload),now=NOW)
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        m=inspect_fixture(self.path,self.locks)["source_manifest"]
+        self.assertEqual(m["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        row=m["streams"][0]
+        self.assertEqual(row["archived_rows"],2)
+        self.assertEqual(row["distinct_observation_dates"],1)
+        self.assertEqual(row["distinct_dimension_keys"],2)
+        self.assertEqual(row["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertEqual(row["provider_availability"],"NOT_CHECKED")
+
+    def test_manifest_successful_gaps_are_not_counted_again_as_absent_funding_events(self):
+        spec,start,end,payload=scenarios()[6]
+        result=run_fixture_page(self.path,self.locks,spec,start,end,
+                                FixtureResponse(200,payload),now=NOW)
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        row=inspect_fixture(self.path,self.locks)["source_manifest"]["streams"][0]
+        self.assertEqual(row["archived_rows"],1)
+        self.assertEqual(row["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertIsNone(row["local_gap_evidence"])
+        self.assertEqual(row["historical_completeness"],"NOT_VERIFIED")
