@@ -72,6 +72,7 @@ TESTS = [
     ("Unit: Package A Source-Aware Offline Gap Candidates", "python3 -m unittest -v tests.unit.test_package_a_local_gap_candidates"),
     ("Unit: Package A Frozen Legacy HTTP Request Integration", "python3 -m unittest -v tests.unit.test_package_a_frozen_legacy_transport"),
     ("Unit: Package A Native Request Receipt Identity Audit", "python3 -m unittest -v tests.unit.test_package_a_native_request_audit"),
+    ("Unit: Package A Yahoo Single-Fetch Five-Metric Fanout", "python3 -m unittest -v tests.unit.test_package_a_yahoo_fanout"),
     ("Unit: Package A Source-Native Historical Pagination E2E", "python3 -m unittest -v tests.unit.test_package_a_historical_window_planner"),
     ("Unit: Package A Bounded Offline Multi-Retry Recovery", "python3 -m unittest -v tests.unit.test_package_a_offline_retry_policy"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
