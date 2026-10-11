@@ -130,20 +130,58 @@ def parse_fixture(spec, payload, *, start, end):
         rows = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
             raise ValueError("RBN fixture requires data list")
+        # RBN's installed legacy parser recognizes a metric-slug value key
+        # OR a generic 'value' key. Require exactly one unambiguous time
+        # and numeric value contract, and never silently select the wrong
+        # metric from an envelope containing several catalogue slugs.
+        from ingestion.researchbitcoin_catalog import CATALOG
         for row in rows:
             if not isinstance(row, dict):
                 raise ValueError("Malformed RBN row")
-            out.append(_point(daystamp(row["date"]), row["value"]))
+            time_keys=[k for k in ("time","timestamp","datetime","date") if k in row]
+            if len(time_keys)!=1:
+                raise ValueError("BLOCKED_RBN_AMBIGUOUS_TIME_FIELD")
+            from ingestion.researchbitcoin_v2 import parse_timestamp
+            stamp=parse_timestamp(row[time_keys[0]])
+            if (stamp.tzinfo is None or stamp.utcoffset()!=dt.timedelta(0)
+                    or stamp.time()!=dt.time()):
+                raise ValueError("BLOCKED_RBN_NONCANONICAL_UTC_DAILY_TIME")
+            if spec.metric not in row and "value" not in row:
+                raise ValueError("BLOCKED_RBN_MISSING_METRIC_VALUE")
+            if any(other in row for other in CATALOG if other!=spec.metric):
+                raise ValueError("BLOCKED_RBN_WRONG_OR_MULTISERIES_METRIC")
+            if (spec.metric in row and "value" in row and
+                    scalar(row[spec.metric])!=scalar(row["value"])):
+                raise ValueError("BLOCKED_RBN_CONFLICTING_METRIC_VALUES")
+            value=row[spec.metric] if spec.metric in row else row["value"]
+            out.append(_point(daystamp(stamp.date().isoformat()),value))
     elif spec.provider == "bitview":
-        if not isinstance(payload, dict) or payload.get("index") != "1d" or type(payload.get("start")) is not int:
+        if (not isinstance(payload, dict) or payload.get("index") != "1d"
+                or type(payload.get("start")) is not int):
             raise ValueError("Bitview requires verified day-index fixture")
         rows = payload.get("data")
-        if not isinstance(rows, list):
+        if not isinstance(rows,list):
             raise ValueError("Bitview array missing")
-        first = EPOCH + dt.timedelta(days=payload["start"])
-        for offset, value in enumerate(rows):
+        # Legacy decoder silently clips indices to the requested window.
+        # A shortened or shifted array can therefore look valid yet cause
+        # advancement of a cursor over unrequested/unseen daily slots.
+        # Exact requested coverage, including explicit null placeholders,
+        # is mandatory for this stricter offline contract.
+        expected_first=(begin.date()-EPOCH).days
+        expected_length=(stop-begin).days
+        if (begin.time()!=dt.time() or stop.time()!=dt.time()
+                or (stop-begin)!=dt.timedelta(days=expected_length)
+                or expected_length<1 or expected_length>14):
+            raise ValueError("BLOCKED_BITVIEW_D1_REQUEST_ALIGNMENT")
+        if (payload["start"]!=expected_first or
+                len(rows)!=expected_length):
+            raise ValueError("BLOCKED_BITVIEW_PARTIAL_OR_SHIFTED_DAY_INDEX")
+        first=EPOCH+dt.timedelta(days=payload["start"])
+        for offset,value in enumerate(rows):
             if value is not None:
-                out.append(_point(dt.datetime.combine(first + dt.timedelta(days=offset), dt.time(), UTC), value))
+                out.append(_point(
+                    dt.datetime.combine(first+dt.timedelta(days=offset),
+                                        dt.time(),UTC),value))
     elif spec.provider == "fred":
         rows = payload.get("observations") if isinstance(payload, dict) else None
         if not isinstance(rows, list):
