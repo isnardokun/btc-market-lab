@@ -49,7 +49,10 @@ def configured_onchain_series():
             "bitview",metric,"BTC","d1",_BITVIEW_UNIT,"native"))
     if len(streams)>_MAX_STREAMS or not streams:
         raise ValueError("BLOCKED_ONCHAIN_CATALOG_SIZE")
-    return tuple(streams)
+    # DEFAULT catalog and an explicit selection of ALL the same metrics
+    # must produce byte-identical plan SHA, otherwise re-derivation falsely
+    # rejects the source manifest before the first frozen request.
+    return tuple(sorted(streams,key=lambda spec:(spec.provider,spec.metric)))
 
 
 def plan_offline_onchain_catalog(start,end,*,selection=None,
