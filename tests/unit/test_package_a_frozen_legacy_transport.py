@@ -1128,3 +1128,25 @@ class FrozenLegacyTransportTests(unittest.TestCase):
                          "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
         self.assertIsNone(row["local_gap_evidence"])
         self.assertEqual(row["historical_completeness"],"NOT_VERIFIED")
+
+
+    def test_manifest_gap_candidate_budget_does_not_invalidate_real_local_rows(self):
+        from scripts.package_a_source_coverage_manifest import source_aware_manifest
+        spec=SeriesSpec("researchbitcoin","sopr_sth","BTC","d1","ratio")
+        start="2026-10-06T00:00:00Z"
+        end="2026-10-11T00:00:00Z"
+        payload={"data":[{"date":"2026-10-06","value":1.01},
+                         {"date":"2026-10-08","value":1.02},
+                         {"date":"2026-10-10","value":1.03}]}
+        outcome=run_fixture_page(self.path,self.locks,spec,start,end,
+                                 FixtureResponse(200,payload),now=NOW)
+        self.assertEqual(outcome["state"],"PAGE_COMMITTED_OFFLINE")
+        with sqlite3.connect(self.path) as db:
+            result=source_aware_manifest(db,max_grid_windows=1)
+        self.assertEqual(result["state"],"SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS")
+        self.assertEqual(result["streams"][0]["local_grid_state"],"BLOCKED_GAP_BUDGET")
+        self.assertEqual(result["streams"][0]["local_gap_evidence"]["windows"],[])
+        self.assertEqual(result["streams"][0]["archived_rows"],3)
+        self.assertEqual(result["historical_completeness"],"NOT_VERIFIED")
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
