@@ -84,6 +84,12 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                     error = type(exc).__name__
             with sqlite3.connect(path) as db:
                 db.execute("PRAGMA foreign_keys=ON")
+                # Start a real OUTER transaction before schema savepoints,
+                # receipts, observations and cursor writes. Without BEGIN,
+                # RELEASE SAVEPOINT may COMMIT before the precommit audit.
+                # All HTTP-like fixtures and normalization ran before BEGIN;
+                # only short local SQLite work is inside this transaction.
+                db.execute("BEGIN IMMEDIATE")
                 ledger.initialize(db, now=now)
                 if response.status_code != 200 or error:
                     category = "failed" if response.status_code != 200 else "rejected"
