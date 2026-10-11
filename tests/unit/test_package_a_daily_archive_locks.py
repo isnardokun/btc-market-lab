@@ -20,6 +20,8 @@ from validation import archive_metrics as metrics
 from rendering import archive_report as reports
 from rendering import export_dashboard as dashboard
 from ingestion import snapshot
+from ingestion import backfill_metrics as derived_backfill
+from ingestion import backfill_onchain_metrics as onchain_backfill
 from scripts.market_r10e11_writer_exclusion import (
     WriterLockBusy, WriterLockUnsafe, hold_writer_lock
 )
@@ -47,6 +49,8 @@ class DailyArchiveWriterLocks(unittest.TestCase):
             ("report-archive",reports,"_archive_report_cli",["--html","/fixture/offline.html"]),
             ("dashboard",dashboard,"_export_dashboard_unlocked",[]),
             ("snapshot",snapshot,"create_snapshot",[]),
+            ("derived-backfill",derived_backfill,"backfill",[]),
+            ("onchain-backfill",onchain_backfill,"backfill_onchain",[]),
         )
 
     def invoke(self, target, *, opt_in=True, callback=None):
@@ -77,7 +81,7 @@ class DailyArchiveWriterLocks(unittest.TestCase):
         self.assertEqual(proc.stdout.readline().strip(),"HELD")
         return proc
 
-    def test_all_four_optin_commands_run_inside_same_lock(self):
+    def test_all_six_optin_commands_run_inside_same_lock(self):
         def worker(*a,**kw):
             with self.assertRaises(WriterLockBusy):
                 with hold_writer_lock(self.locks,namespace=NAMESPACE):
@@ -92,7 +96,7 @@ class DailyArchiveWriterLocks(unittest.TestCase):
         self.assertTrue(p.is_file())
         self.assertEqual(p.stat().st_mode & 0o777,0o600)
 
-    def test_all_four_busy_local_lock_deny_every_worker_before_db_or_files(self):
+    def test_all_six_busy_lock_deny_all_workers_before_db_or_files(self):
         with hold_writer_lock(self.locks,namespace=NAMESPACE):
             for target in self.targets:
                 with self.subTest(target=target[0]):
@@ -102,7 +106,7 @@ class DailyArchiveWriterLocks(unittest.TestCase):
                     worker.assert_not_called()
                     self.assertIn("BLOCKED_WRITER_BUSY",err)
 
-    def test_separate_process_holding_lock_blocks_every_writer(self):
+    def test_separate_process_holding_lock_blocks_all_six_writers(self):
         child=self.holder()
         for target in self.targets:
             rc,worker,_=self.invoke(target)
@@ -110,7 +114,7 @@ class DailyArchiveWriterLocks(unittest.TestCase):
             worker.assert_not_called()
         self.assertIsNone(child.poll())
 
-    def test_lock_release_allows_all_four_writers_again(self):
+    def test_lock_release_allows_all_six_writers_again(self):
         child=self.holder()
         self.assertEqual(self.invoke(self.targets[0])[0],3)
         child.stdin.write("\n")
@@ -170,6 +174,8 @@ class DailyArchiveWriterLocks(unittest.TestCase):
             ("report-archive","rendering/archive_report.py"),
             ("dashboard","rendering/export_dashboard.py"),
             ("snapshot","ingestion/snapshot.py"),
+            ("derived-backfill","ingestion/backfill_metrics.py"),
+            ("onchain-backfill","ingestion/backfill_onchain_metrics.py"),
         ):
             with self.subTest(source=name):
                 content=(self.repo/relpath).read_text(encoding="utf-8")
