@@ -199,8 +199,17 @@ def plan_synthetic_resume(db_path, lock_dir, pages, *, prior_run_id):
                     receipt_status!=stored[7] or
                     bool(stored[8])!=plan[ordinal][2]):
                 raise ValueError("BLOCKED_RECOVERY_REQUEST_IDENTITY_DRIFT")
-            if receipt_status=="ok" and stored[6]!=plan[ordinal][1]:
-                raise ValueError("BLOCKED_RECOVERY_SUCCESS_RAW_DRIFT")
+            if receipt_status=="ok":
+                if stored[6]!=plan[ordinal][1]:
+                    raise ValueError("BLOCKED_RECOVERY_SUCCESS_RAW_DRIFT")
+                spec=pages[ordinal].source
+                units=db.execute(
+                    "SELECT DISTINCT unit,raw_scale FROM package_a_observations "
+                    "WHERE provider=? AND metric=? AND symbol=? AND frequency=?",
+                    (spec.provider,spec.metric,spec.symbol,spec.frequency)
+                ).fetchall()
+                if units != [(spec.unit,spec.raw_scale)]:
+                    raise ValueError("BLOCKED_RECOVERY_UNIT_SCALE_DRIFT")
         resume_at=len(rows) if status=="running" else (
             len(pages) if status=="complete" else len(rows)-1)
         if not 0 <= resume_at <= len(pages):
