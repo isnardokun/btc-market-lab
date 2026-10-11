@@ -35,8 +35,9 @@ cursor cuando falla una página 429/503/timeout.
 | Bitview, series `d1` reconocidas | 14 días | Política conservadora local, **no** límite oficial verificado |
 | Binance BTCUSDT, OI `5m` | 500 muestras | Coincide con parámetro del constructor simulado; límites efectivos no verificados |
 | Bybit BTCUSDT, OI `5m` | 200 muestras | Coincide con parámetro del constructor simulado; límites efectivos no verificados |
+| FRED, series catalogadas `d1/weekly/monthly` | 90 días calendario | Solo dividir solicitudes; **NO** exigir 90 observaciones; conservar vintages y releases sin inferir calendario |
 | Binance/Bybit, `funding_settled event` | **Bloqueado** | No dividir eventos por tiempo suponiendo límites de filas/retenibilidad |
-| FRED d1/weekly/monthly | **Bloqueado** | Asegurar paginación real, release calendars y vintages antes de automatizar |
+
 | Yahoo BTC-USD `range=max` | **Bloqueado** | El cliente legado solicita `range=max`; no adjudicarle ventanas parciales inexistentes |
 | Acciones Yahoo / símbolos no reconocidos | **Bloqueado** | Requieren contratos fuente y calendario de sesiones comprobados |
 
@@ -60,7 +61,10 @@ Suite `tests/unit/test_package_a_historical_window_planner.py`:
 - Binance 501 velas OI, 500+1 → **501 observaciones, 2 receipts**;
 - Bybit 201 velas OI, 200+1 → **201 observaciones, 2 receipts**;
 - Bitview 29 días, 14+14+1 (plan, sin afirmar ventana oficial);
-- FRED, Yahoo y funding permanecen bloqueados para paginación automática;
+- FRED mensual 122 días calendario, 90+32 → observaciones *sparse* y múltiples `realtime_start` del mismo día preservados en SQLite;
+- FRED diario con días ausentes → ningún hueco inferido de fines de semana, releases o feriados;
+- FRED 503 en segunda ventana → source_run bloqueado y reanudación precisa sin alterar vintage ni RAW anterior;
+- Yahoo legado `range=max` y funding `event` permanecen bloqueados para paginación automática;
 - 429 en la segunda ventana RBN: 14 registros persistidos, otras páginas
   sin ejecutar; tras recuperación, 30 registros sin duplicar los primeros 14;
 - Tampering de primer RAW, respuestas insuficientes o tamaño/status inválido
