@@ -496,3 +496,167 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(batch["frozen_http_requests"],2)
         self.assertEqual(batch["audit"]["request_provenance"]["frozen_requests_with_metadata"],2)
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(2,)])
+
+
+    def test_v3_eight_source_run_pages_atomically_linked_to_receipts(self):
+        result=run_synthetic_batch(
+            self.path,self.locks,[self.as_frozen_page(s) for s in scenarios()],now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        audit=inspect_fixture(self.path,self.locks)["source_runs"]
+        self.assertEqual(audit["state"],"BATCH_SOURCE_RUN_LINEAGE_PASS")
+        self.assertEqual(audit["runs"],1)
+        self.assertEqual(audit["complete_runs"],1)
+        self.assertEqual(audit["receipts_without_batch_run"],0)
+        self.assertEqual(self.rows(
+            "SELECT status,planned_pages,mode FROM package_a_source_runs"),
+            [("complete",8,"OFFLINE_SYNTHETIC_BATCH")])
+        self.assertEqual(self.rows(
+            "SELECT ordinal,receipt_status FROM package_a_run_pages ORDER BY ordinal"),
+            [(n,"ok") for n in range(8)])
+        self.assertEqual(len(result["run_id"]),32)
+        self.assertEqual(self.rows(
+            "SELECT COUNT(DISTINCT run_id) FROM package_a_run_pages"),[(1,)])
+
+    def test_v3_failed_batch_and_clean_retry_have_distinct_durable_run_ids(self):
+        first=self.as_frozen_page(scenarios()[0])
+        fault=self.as_frozen_page(scenarios()[4],status=429,body=b"429 html")
+        pending=self.as_frozen_page(scenarios()[2])
+        blocked=run_synthetic_batch(self.path,self.locks,[first,fault,pending],now=NOW)
+        self.assertEqual(blocked["state"],"BATCH_BLOCKED")
+        source=inspect_fixture(self.path,self.locks)["source_runs"]
+        self.assertEqual(source["blocked_runs"],1)
+        self.assertEqual(source["complete_runs"],0)
+        good=run_synthetic_batch(self.path,self.locks,
+                    [self.as_frozen_page(scenarios()[4]),pending],now=NOW)
+        self.assertNotEqual(blocked["run_id"],good["run_id"])
+        source=inspect_fixture(self.path,self.locks)["source_runs"]
+        self.assertEqual(source["runs"],2)
+        self.assertEqual(source["blocked_runs"],1)
+        self.assertEqual(source["complete_runs"],1)
+        self.assertEqual(source["receipts_without_batch_run"],0)
+        self.assertEqual(self.rows(
+            "SELECT status,planned_pages FROM package_a_source_runs ORDER BY status"),
+            [("blocked",3),("complete",2)])
+
+    def test_v3_crash_during_source_run_link_rolls_back_entire_first_page(self):
+        from unittest.mock import patch
+        from storage import package_a_ledger as ledger
+        real=ledger.record_batch_run_page
+        def crash(*args,**kwargs):
+            real(*args,**kwargs)
+            raise ledger.SimulatedCrash("after_run_page_link")
+        with patch.object(ledger,"record_batch_run_page",side_effect=crash):
+            with self.assertRaisesRegex(ledger.SimulatedCrash,"after_run_page_link"):
+                run_synthetic_batch(self.path,self.locks,
+                    [self.as_frozen_page(scenarios()[0])],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        recovered=run_synthetic_batch(self.path,self.locks,
+                        [self.as_frozen_page(scenarios()[0])],now=NOW)
+        self.assertEqual(recovered["state"],"BATCH_OFFLINE_ACCEPTED")
+
+    def test_v3_crash_between_pages_marks_first_run_interrupted_not_complete(self):
+        from unittest.mock import patch
+        import scripts.package_a_batch_fixture as batch
+        from storage import package_a_ledger as ledger
+        original=batch.run_mocked_legacy_page
+        calls=[0]
+        def crash_between(*args,**kwargs):
+            calls[0]+=1
+            if calls[0]==2:
+                raise ledger.SimulatedCrash("between_pages")
+            return original(*args,**kwargs)
+        pages=[self.as_frozen_page(scenarios()[0]),
+               self.as_frozen_page(scenarios()[4])]
+        with patch.object(batch,"run_mocked_legacy_page",side_effect=crash_between):
+            with self.assertRaisesRegex(ledger.SimulatedCrash,"between_pages"):
+                run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        audit=inspect_fixture(self.path,self.locks)
+        self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(audit["source_runs"]["interrupted_or_running_runs"],1)
+        self.assertEqual(self.rows("SELECT status,planned_pages FROM package_a_source_runs"),
+                         [("running",2)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(1,)])
+        resumed=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        self.assertEqual(resumed["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(resumed["new_observations"],2)
+        self.assertEqual(inspect_fixture(self.path,self.locks)["source_runs"]["complete_runs"],1)
+        self.assertEqual(inspect_fixture(self.path,self.locks)["source_runs"]["interrupted_or_running_runs"],1)
+
+    def test_v3_truncated_complete_run_is_detected_before_further_writes(self):
+        page=self.as_frozen_page(scenarios()[0])
+        batch=run_synthetic_batch(self.path,self.locks,[page,page],now=NOW)
+        self.assertEqual(batch["state"],"BATCH_OFFLINE_ACCEPTED")
+        with sqlite3.connect(self.path) as db:
+            db.execute("DELETE FROM package_a_run_pages WHERE ordinal=1")
+        quality=inspect_fixture(self.path,self.locks)
+        self.assertEqual(quality["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
+        self.assertEqual(quality["source_runs"]["run_integrity_errors"],1)
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(scenarios()[4])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_v3_run_receipt_status_forgery_trips_integrity_gate(self):
+        batch=run_synthetic_batch(self.path,self.locks,
+                    [self.as_frozen_page(scenarios()[0])],now=NOW)
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_run_pages SET receipt_status='failed'")
+        quality=inspect_fixture(self.path,self.locks)
+        self.assertEqual(quality["source_runs"]["state"],"BATCH_SOURCE_RUN_LINEAGE_FAIL")
+        self.assertEqual(quality["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            self.apply(scenarios()[4])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(1,)])
+
+    def test_v3_upgrade_from_genuine_version2_retains_receipts_without_fake_run(self):
+        from storage import package_a_ledger as ledger
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            for ddl in ledger.DDL[:-2]:
+                db.execute(ddl)
+            db.execute("INSERT INTO package_a_schema_migrations VALUES(2,?)",(NOW,))
+            db.execute(
+                "INSERT INTO package_a_receipts "
+                "(receipt_id,provider,metric,symbol,frequency,start_utc,"
+                "end_exclusive_utc,status,captured_utc) "
+                "VALUES('legacy','binance','open_interest','BTCUSDT','5m',?,?,'failed',?)",
+                (DAY,OI_END,NOW))
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            ledger.initialize(db,now=NOW)
+            ledger.initialize(db,now=NOW)
+            self.assertEqual(db.execute(
+                "SELECT version FROM package_a_schema_migrations").fetchall(),[(3,)])
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM package_a_receipts").fetchone()[0],1)
+            self.assertEqual(db.execute(
+                "SELECT COUNT(*) FROM package_a_source_runs").fetchone()[0],0)
+            self.assertEqual(ledger.audit_batch_source_runs(db)[
+                "receipts_without_batch_run"],1)
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_v3_source_run_fail_closed_for_duplicate_and_skipped_ordinals(self):
+        from storage import package_a_ledger as ledger
+        first=self.as_frozen_page(scenarios()[0])
+        run=run_synthetic_batch(self.path,self.locks,[first],now=NOW)
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            with self.assertRaisesRegex(ValueError,"closed"):
+                ledger.record_batch_run_page(
+                    db,run_id=run["run_id"],ordinal=0,planned_pages=1,
+                    receipt_id=self.rows("SELECT receipt_id FROM package_a_receipts")[0][0],
+                    receipt_status="ok",now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(1,)])
+
+    def test_v3_batch_timeout_is_blocked_and_never_claimed_complete(self):
+        page=self.as_frozen_page(scenarios()[0],status=None,body=b"")
+        blocked=run_synthetic_batch(self.path,self.locks,[page],now=NOW)
+        self.assertEqual(blocked["state"],"BATCH_BLOCKED")
+        self.assertEqual(self.rows(
+            "SELECT status FROM package_a_source_runs"),[("blocked",)])
+        self.assertEqual(self.rows(
+            "SELECT receipt_status FROM package_a_run_pages"),[("failed",)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["source_runs"]["blocked_runs"],1)
