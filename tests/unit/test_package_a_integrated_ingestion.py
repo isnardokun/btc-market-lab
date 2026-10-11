@@ -550,6 +550,51 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
             self.assertEqual(entry["provider_window_status"],"NOT_CHECKED")
             self.assertEqual(entry["entitlement_status"],"NOT_VERIFIED")
 
+    def test_real_fixture_writer_refuses_fake_schema_even_with_all_columns(self):
+        spec,start,end,payload=sources()[0]
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "CREATE TABLE package_a_receipts("
+                "receipt_id TEXT,provider TEXT,metric TEXT,symbol TEXT,frequency TEXT,"
+                "start_utc TEXT,end_exclusive_utc TEXT,status TEXT,http_status INTEGER,"
+                "raw_payload BLOB,raw_sha256 TEXT,parsed_count INTEGER,captured_utc TEXT)")
+        with self.assertRaisesRegex(ValueError,"primary key"):
+            self.apply(spec,start,end,payload)
+        # The old fraudulent fixture table is left untouched. All other
+        # freshly attempted objects must be rolled back atomically.
+        names=self.read(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'package_a_%'")
+        self.assertEqual(names,[("package_a_receipts",)])
+
+    def test_package_schema_installation_rolls_back_partial_ddl_on_sql_error(self):
+        from unittest.mock import patch
+        spec,start,end,payload=sources()[0]
+        broken=(*ledger.DDL[:2], "CREATE TABLE syntactically invalid(")
+        with patch.object(ledger,"DDL",broken):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.apply(spec,start,end,payload)
+        self.assertEqual(self.read(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'package_a_%'"),[])
+        self.assertEqual(self.read(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_package_a_%'"),[])
+        self.assertEqual(self.apply(spec,start,end,payload)["new_rows"],2)
+
+    def test_fake_schema_migration_version_cannot_claim_validity(self):
+        spec,start,end,payload=sources()[0]
+        with sqlite3.connect(self.path) as db:
+            db.execute(
+                "CREATE TABLE package_a_schema_migrations("
+                "version INTEGER PRIMARY KEY,applied_utc TEXT NOT NULL)")
+            db.execute(
+                "INSERT INTO package_a_schema_migrations(version,applied_utc) VALUES(2,?)",
+                (NOW,))
+        with self.assertRaisesRegex(ValueError,"schema revision"):
+            self.apply(spec,start,end,payload)
+        self.assertEqual(self.read(
+            "SELECT version FROM package_a_schema_migrations"),[(2,)])
+        self.assertEqual(self.read(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
     def test_runner_registers_package_suite_without_hardcoded_old_count(self):
         path=Path(__file__).resolve().parents[1]/"run_all.py"
         t=ast.parse(path.read_text(encoding="utf-8"))
