@@ -175,9 +175,14 @@ def run_offline_retry_rehearsal(db_path, lock_dir, spec, start, end,
         decision=plan_offline_retry_advice(
             outcome,policy=policy,completed_attempts=completed,
             window_plan_sha256=plan["window_plan_sha256"])
+        # A busy global lock can return an in-memory batch UUID without
+        # ever opening SQLite. Never advertise that UUID as a durable run.
+        source_run_id=(
+            outcome.get("new_run_id") or outcome.get("run_id")
+            if any(row.get("receipt_id") for row in rows) else None)
         result_record={
             "attempt_number":completed,
-            "source_run_id":outcome.get("new_run_id") or outcome.get("run_id"),
+            "source_run_id":source_run_id,
             "prior_run_id":previous_run_id,
             "source_window_base_index":new_base,
             "state":outcome["state"],
