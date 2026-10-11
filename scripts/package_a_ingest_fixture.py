@@ -10,7 +10,8 @@ import json
 from pathlib import Path
 import sqlite3
 
-from ingestion.package_a_contracts import SeriesSpec, parse_fixture, utc
+from ingestion.package_a_contracts import SeriesSpec, utc
+from ingestion.package_a_legacy_bridge import reconciled_fixture_points
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 from storage import package_a_ledger as ledger
 
@@ -76,7 +77,8 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
             points = ()
             if response.status_code == 200:
                 try:
-                    points = parse_fixture(spec, response.payload, start=start, end=end)
+                    points = reconciled_fixture_points(spec, response.payload,
+                                                      start=start, end=end, now=now)
                 except (ValueError, KeyError, TypeError, OverflowError) as exc:
                     error = type(exc).__name__
             with sqlite3.connect(path) as db:
