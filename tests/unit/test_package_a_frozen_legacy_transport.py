@@ -280,3 +280,33 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
         self.assertEqual(inspect_fixture(self.path,self.locks)["historical_completeness"],
                          "NOT_VERIFIED")
+
+
+    def test_injected_transport_timeout_records_no_http_code_or_raw_and_no_cursor(self):
+        scenario=scenarios()[4]
+        timeout=self.apply(scenario,status=None,source_raw=b"")
+        self.assertEqual(timeout["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(timeout["failure_class"],"SYNTHETIC_TRANSPORT_TIMEOUT")
+        self.assertEqual(timeout["frozen_http_requests"],1)
+        self.assertFalse(timeout["original_raw_bytes_preserved"])
+        self.assertEqual(self.rows(
+            "SELECT status,http_status,raw_payload,raw_sha256 FROM package_a_receipts"),
+            [("failed",None,None,None)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_timeout_then_exact_recovery_retains_failed_attempt_provenance(self):
+        scenario=scenarios()[0]
+        timeout=self.apply(scenario,status=None,source_raw=b"")
+        recovered=self.apply(scenario)
+        self.assertEqual(timeout["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(recovered["state"],"PAGE_COMMITTED_OFFLINE")
+        self.assertEqual(self.rows(
+            "SELECT status,http_status FROM package_a_receipts ORDER BY rowid"),
+            [("failed",None),("ok",200)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(1,)])
+        audit=inspect_fixture(self.path,self.locks)
+        self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(audit["historical_request_evidence"][0]["attempted_requests"],2)
+        self.assertEqual(audit["historical_request_evidence"][0]["historical_completeness"],"NOT_VERIFIED")
