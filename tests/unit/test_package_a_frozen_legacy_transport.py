@@ -660,3 +660,40 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(self.rows(
             "SELECT receipt_status FROM package_a_run_pages"),[("failed",)])
         self.assertEqual(inspect_fixture(self.path,self.locks)["source_runs"]["blocked_runs"],1)
+
+
+    def test_v3_forged_run_pages_without_unique_receipt_owner_fails_schema(self):
+        # PK and both FKs deliberately match, but one receipt could otherwise
+        # be claimed by multiple distinct batch runs.
+        with sqlite3.connect(self.path) as db:
+            db.execute("CREATE TABLE package_a_run_pages ("
+                "run_id TEXT NOT NULL,ordinal INTEGER NOT NULL,"
+                "receipt_id TEXT NOT NULL,receipt_status TEXT NOT NULL,"
+                "PRIMARY KEY(run_id,ordinal),"
+                "FOREIGN KEY(run_id) REFERENCES package_a_source_runs(run_id),"
+                "FOREIGN KEY(receipt_id) REFERENCES package_a_receipts(receipt_id))")
+        with self.assertRaisesRegex(ValueError,"unique Package A run receipt"):
+            self.apply(scenarios()[0])
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_run_pages'"),[(1,)])
+
+    def test_v3_run_page_one_receipt_cannot_be_reused_across_runs(self):
+        from storage import package_a_ledger as ledger
+        first=run_synthetic_batch(self.path,self.locks,
+                    [self.as_frozen_page(scenarios()[0])],now=NOW)
+        row=self.rows("SELECT receipt_id FROM package_a_run_pages")[0][0]
+        with sqlite3.connect(self.path) as db:
+            db.execute("PRAGMA foreign_keys=ON")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute(
+                    "INSERT INTO package_a_source_runs VALUES(?,?,?,?,'running',"
+                    "'OFFLINE_SYNTHETIC_BATCH')",
+                    ("a"*32,1,NOW,NOW))
+                db.execute("INSERT INTO package_a_run_pages VALUES(?,?,?,'ok')",
+                           ("a"*32,0,row))
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_source_runs"),[(1,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_run_pages"),[(1,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
