@@ -1,0 +1,161 @@
+"""Package A first integrated synthetic ingestion slice.
+
+ONLY explicit TemporaryDirectory fixtures marked by the test harness can be
+modified. Uses existing E11 POSIX flock BEFORE touching the synthetic DB.
+No HTTP client, network, external API, cron, production path or CLI.
+"""
+from dataclasses import dataclass
+import hashlib
+import json
+from pathlib import Path
+import sqlite3
+
+from ingestion.package_a_contracts import SeriesSpec, parse_fixture, utc
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
+from storage import package_a_ledger as ledger
+
+MARKER = ".package-a-offline-fixture"
+MARKER_VALUE = "PACKAGE A OFFLINE SQLITE TEST FIXTURE\n"
+LOCK_NAMESPACE = "btc-research-global-writer-v1"
+
+
+@dataclass(frozen=True)
+class FixtureResponse:
+    status_code: int
+    payload: object
+
+    def __post_init__(self):
+        if type(self.status_code) is not int or self.status_code not in (200, 429, 500, 503):
+            raise ValueError("Only known synthetic HTTP outcomes are permitted")
+
+
+def _fixture_guard(path, lock_directory):
+    if not isinstance(path, (str, Path)) or not isinstance(lock_directory, (str, Path)):
+        raise ValueError("Explicit synthetic SQLite and lock paths required")
+    dbfile = Path(path)
+    parent = dbfile.parent
+    locks = Path(lock_directory)
+    if (dbfile.name != "package_a_synthetic.db"
+            or not parent.name.startswith("package-a-fixture-")
+            or dbfile.is_symlink() or parent.is_symlink()
+            or locks.is_symlink() or not dbfile.is_file() or not locks.is_dir()
+            or locks.resolve() != parent.resolve() / "locks"):
+        raise ValueError("Only an explicitly created Package A fixture is accepted")
+    flag = parent / MARKER
+    if (not flag.is_file() or flag.is_symlink()
+            or flag.read_text(encoding="utf-8") != MARKER_VALUE):
+        raise ValueError("Synthetic fixture marker missing or corrupted")
+    if ((parent / (dbfile.name + "-wal")).exists()
+            or (parent / (dbfile.name + "-shm")).exists()):
+        raise ValueError("Active synthetic WAL not supported by this fixture runner")
+    return dbfile
+
+
+def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
+                     now, fault=None):
+    """Commit one provider fixture page under the global writer lock.
+
+    The payload is an in-memory synthetic JSON object, never downloaded.
+    Callers cannot pass a fetch callback or a production API credential.
+    """
+    if not isinstance(spec, SeriesSpec) or not isinstance(response, FixtureResponse):
+        raise ValueError("Provider spec and synthetic response required")
+    begin, stop = utc(start), utc(end)
+    if not begin < stop:
+        raise ValueError("Invalid half-open time range")
+    utc(now)
+    path = _fixture_guard(db_path, lock_directory)
+    try:
+        with hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE):
+            raw = (json.dumps(response.payload, sort_keys=True,
+                              separators=(",",":"), allow_nan=False).encode("utf-8")
+                   if response.payload is not None else None)
+            # Parsing occurs before opening the DB, but after acquiring the
+            # cooperative writer lock. No write transaction spans HTTP.
+            error = None
+            points = ()
+            if response.status_code == 200:
+                try:
+                    points = parse_fixture(spec, response.payload, start=start, end=end)
+                except (ValueError, KeyError, TypeError, OverflowError) as exc:
+                    error = type(exc).__name__
+            with sqlite3.connect(path) as db:
+                db.execute("PRAGMA foreign_keys=ON")
+                ledger.initialize(db, now=now)
+                if response.status_code != 200 or error:
+                    category = "failed" if response.status_code != 200 else "rejected"
+                    receipt = ledger.record_failure(
+                        db, spec, start, end, status=category,
+                        raw=raw, http_status=response.status_code, now=now)
+                    result = {"state": "PAGE_NOT_COMMITTED",
+                              "receipt_id": receipt, "status": category,
+                              "failure_class": error or "SYNTHETIC_HTTP_" + str(response.status_code),
+                              "new_rows": 0, "cursor_advanced": False}
+                elif not points:
+                    receipt = ledger.record_failure(
+                        db, spec, start, end, status="empty",
+                        raw=raw, http_status=200, now=now)
+                    result = {"state": "PAGE_EMPTY_UNVERIFIED",
+                              "receipt_id": receipt, "status": "empty",
+                              "new_rows": 0, "cursor_advanced": False}
+                else:
+                    # All DB writes in one transaction; simulated crash in
+                    # ledger rolls back the savepoint, then the outer with db.
+                    recorded = ledger.store_ok_page(
+                        db, spec, start, end, raw=raw, points=points, now=now, fault=fault)
+                    result = {"state": "PAGE_COMMITTED_OFFLINE", "status": "ok", **recorded}
+            return {
+                **result, "provider": spec.provider, "metric": spec.metric,
+                "http_real_requests": 0, "sqlite_productive_writes": 0,
+                "production_authorized": False,
+                "global_writer_exclusion_operationally_verified": False,
+                "provider_availability": "NOT_CHECKED",
+                "entitlement": "NOT_VERIFIED",
+                "historical_completeness": "NOT_VERIFIED",
+            }
+    except WriterLockBusy:
+        return {
+            "state": "BLOCKED_WRITER_BUSY", "status": "blocked",
+            "lock_acquired": False, "sqlite_connections_started": 0,
+            "fake_responses_processed": 0, "http_real_requests": 0,
+            "production_authorized": False,
+            "historical_completeness": "NOT_VERIFIED",
+        }
+
+
+def inspect_fixture(db_path, lock_directory):
+    """Read-only in-fixture audit of raw receipts, row hashes and cursor FK."""
+    path = _fixture_guard(db_path, lock_directory)
+    with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+        db.execute("PRAGMA query_only=ON")
+        fk = db.execute("PRAGMA foreign_key_check").fetchall()
+        bad_raw = 0
+        for payload, digest in db.execute(
+                "SELECT raw_payload,raw_sha256 FROM package_a_receipts "
+                "WHERE raw_payload IS NOT NULL"):
+            if hashlib.sha256(payload).hexdigest() != digest:
+                bad_raw += 1
+        bad_links = db.execute(
+            "SELECT COUNT(*) FROM package_a_observations o LEFT JOIN package_a_receipts r "
+            "ON o.receipt_id=r.receipt_id "
+            "WHERE r.receipt_id IS NULL OR r.status <> 'ok'").fetchone()[0]
+        bad_cursors = db.execute(
+            "SELECT COUNT(*) FROM package_a_cursors c LEFT JOIN package_a_receipts r "
+            "ON c.advanced_by_receipt=r.receipt_id WHERE r.receipt_id IS NULL "
+            "OR r.status <> 'ok'").fetchone()[0]
+        observations = db.execute("SELECT COUNT(*) FROM package_a_observations").fetchone()[0]
+        receipts = db.execute("SELECT COUNT(*) FROM package_a_receipts").fetchone()[0]
+        rows = ledger.read_coverage(db)
+        integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
+    accepted = not (fk or bad_raw or bad_links or bad_cursors) and integrity == "ok"
+    return {
+        "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",
+        "rows": observations, "receipts": receipts, "source_coverage": rows,
+        "raw_digest_errors": bad_raw, "lineage_errors": bad_links,
+        "cursor_linkage_errors": bad_cursors, "foreign_key_errors": len(fk),
+        "sqlite_integrity": integrity,
+        "real_provider_window_verified": False,
+        "real_entitlement_verified": False,
+        "historical_completeness": "NOT_VERIFIED",
+        "production_authorized": False,
+    }
