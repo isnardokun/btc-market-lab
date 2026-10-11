@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import patch
 
 from ingestion import ingest as bitview
+from ingestion import ingest_all as bulk
 from ingestion import ingest_fred as fred
 from scripts import market_context_ingest as context
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
@@ -217,6 +218,76 @@ class TestPackageAEntrypointLocks(unittest.TestCase):
             self.assertTrue(any(isinstance(item,ast.If)
                                 and isinstance(item.test,ast.Compare)
                                 for item in tree.body))
+
+    def test_bitview_bulk_optin_executes_only_inside_global_lock(self):
+        def check_locked(*args, **kwargs):
+            with self.assertRaises(WriterLockBusy):
+                with hold_writer_lock(self.lockdir, namespace=GLOBAL):
+                    pass
+            return 27
+        with patch.object(bulk, "_run_bulk_args", side_effect=check_locked) as worker:
+            rc=bulk.main(["--global-lock-dir", str(self.lockdir), "--limit", "5"])
+        self.assertEqual(rc,27)
+        worker.assert_called_once()
+
+    def test_bitview_bulk_busy_lock_never_starts_db_or_api_workers(self):
+        with hold_writer_lock(self.lockdir, namespace=GLOBAL):
+            with patch.object(bulk, "_run_bulk_args",
+                              side_effect=AssertionError("Bulk must not start")) as worker:
+                with contextlib.redirect_stderr(StringIO()) as errors:
+                    rc=bulk.main(["--global-lock-dir", str(self.lockdir)])
+        self.assertEqual(rc,3)
+        worker.assert_not_called()
+        self.assertIn("BLOCKED_WRITER_BUSY",errors.getvalue())
+
+    def test_bitview_bulk_busy_other_process_blocks_before_worker(self):
+        child=self._child()
+        with patch.object(bulk, "_run_bulk_args",
+                          side_effect=AssertionError("Bulk must not start")) as worker:
+            with contextlib.redirect_stderr(StringIO()):
+                rc=bulk.main(["--global-lock-dir", str(self.lockdir)])
+        self.assertEqual(rc,3)
+        worker.assert_not_called()
+        child.stdin.write("\n")
+        child.stdin.flush()
+        self.assertEqual(child.wait(timeout=5),0)
+        with patch.object(bulk, "_run_bulk_args", return_value=0) as worker:
+            self.assertEqual(bulk.main(["--global-lock-dir",str(self.lockdir)]),0)
+        worker.assert_called_once()
+
+    def test_bitview_bulk_legacy_default_stays_explicitly_unprotected(self):
+        with hold_writer_lock(self.lockdir, namespace=GLOBAL):
+            with patch.object(bulk, "_run_bulk_args",return_value=19) as worker:
+                self.assertEqual(bulk.main([]),19)
+            worker.assert_called_once()
+
+    def test_bitview_bulk_disallowed_legacy_backfill_and_dry_run_remain_blocked(self):
+        for command in ("--backfill","--dry-run"):
+            with self.subTest(command=command):
+                with patch.object(bulk, "_run_bulk_args",
+                                  side_effect=AssertionError("not authorized")) as worker:
+                    with contextlib.redirect_stderr(StringIO()):
+                        with self.assertRaises(SystemExit) as error:
+                            bulk.main([command,"--global-lock-dir",str(self.lockdir)])
+                self.assertEqual(error.exception.code,2)
+                worker.assert_not_called()
+
+    def test_bitview_bulk_lock_dir_missing_fails_before_any_worker(self):
+        from scripts.market_r10e11_writer_exclusion import WriterLockUnsafe
+        missing=self.lockdir.parent/"not-created"
+        with patch.object(bulk,"_run_bulk_args",
+                          side_effect=AssertionError("worker must not start")) as worker:
+            with self.assertRaises(WriterLockUnsafe):
+                bulk.main(["--global-lock-dir",str(missing)])
+        worker.assert_not_called()
+        self.assertFalse(missing.exists())
+
+    def test_bulk_import_never_triggers_network_or_db_and_daily_is_unchanged(self):
+        source=(self.repo/"ingestion"/"ingest_all.py").read_text(encoding="utf-8")
+        self.assertIn("run_with_optional_writer_lock(",source)
+        self.assertIn("--global-lock-dir",source)
+        self.assertNotIn("ingestion/ingest_all.py", 
+                         (self.repo/"scripts"/"daily.sh").read_text(encoding="utf-8"))
 
     def test_runner_registry_new_integrated_writer_suite_unique(self):
         tree=ast.parse((self.repo/"tests"/"run_all.py").read_text(encoding="utf-8"))
