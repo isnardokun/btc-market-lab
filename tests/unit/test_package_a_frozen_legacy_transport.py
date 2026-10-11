@@ -17,6 +17,8 @@ from scripts.package_a_frozen_legacy_transport import (
     FrozenLegacyHTTP, FAKE_KEY, _request_for, run_mocked_legacy_page,
 )
 from scripts.package_a_ingest_fixture import MARKER, MARKER_VALUE, inspect_fixture
+from scripts.package_a_batch_fixture import FrozenLegacyPage, FixturePage, run_synthetic_batch
+from scripts.package_a_ingest_fixture import FixtureResponse
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock
 
 DAY = "2026-10-08T00:00:00Z"
@@ -400,3 +402,97 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(details[2],"FROZEN_OFFLINE")
         self.assertEqual(json.loads(details[0])["from_time"],"2026-10-08")
         self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+
+    def as_frozen_page(self, scenario, *, status=200, body=None):
+        spec,start,end,payload=scenario
+        return FrozenLegacyPage(spec,start,end,raw(payload) if body is None else body,status)
+
+    def test_integrated_batch_eight_frozen_providers_reconciles_all_receipts(self):
+        pages=[self.as_frozen_page(s) for s in scenarios()]
+        result=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(result["frozen_http_requests"],8)
+        self.assertEqual(result["new_observations"],14)
+        self.assertEqual(result["requests_attempted"],8)
+        self.assertEqual(result["audit"]["request_provenance"]["frozen_requests_with_metadata"],8)
+        self.assertEqual(result["audit"]["receipt_reconstruction"]["successful_receipts_reparsed"],8)
+        self.assertEqual(result["historical_completeness"],"NOT_VERIFIED")
+        self.assertFalse(result["production_authorized"])
+
+    def test_frozen_multi_provider_batch_stops_on_429_then_resumes(self):
+        first=scenarios()[0]
+        second=scenarios()[4]
+        third=scenarios()[2]
+        failed=run_synthetic_batch(self.path,self.locks,[
+            self.as_frozen_page(first),
+            self.as_frozen_page(second,status=429,body=b"429 HTML"),
+            self.as_frozen_page(third)],now=NOW)
+        self.assertEqual(failed["state"],"BATCH_BLOCKED")
+        self.assertEqual(failed["requests_attempted"],2)
+        self.assertEqual(failed["remaining_requests_not_run"],1)
+        self.assertEqual(failed["frozen_http_requests"],2)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(1,)])
+        resumed=run_synthetic_batch(self.path,self.locks,[
+            self.as_frozen_page(second),self.as_frozen_page(third)],now=NOW)
+        self.assertEqual(resumed["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(resumed["new_observations"],4)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(3,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(4,)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_frozen_batch_timeout_stops_before_later_mock_requests(self):
+        pages=[self.as_frozen_page(scenarios()[4],status=None,body=b""),
+               self.as_frozen_page(scenarios()[0])]
+        result=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        self.assertEqual(result["state"],"BATCH_BLOCKED")
+        self.assertEqual(result["requests_attempted"],1)
+        self.assertEqual(result["frozen_http_requests"],1)
+        self.assertEqual(result["remaining_requests_not_run"],1)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+        retry=run_synthetic_batch(self.path,self.locks,
+                    [self.as_frozen_page(scenarios()[4]),pages[1]],now=NOW)
+        self.assertEqual(retry["state"],"BATCH_OFFLINE_ACCEPTED")
+
+    def test_frozen_batch_lock_is_taken_before_first_provider_mock(self):
+        pages=[self.as_frozen_page(scenarios()[0])]
+        with hold_writer_lock(self.locks,namespace="btc-research-global-writer-v1"):
+            blocked=run_synthetic_batch(self.path,self.locks,pages,now=NOW)
+        self.assertEqual(blocked["state"],"BATCH_BLOCKED")
+        self.assertEqual(blocked["frozen_http_requests"],0)
+        self.assertEqual(blocked["pages"][0]["state"],"BLOCKED_WRITER_BUSY")
+        self.assertIsNone(blocked["audit"])
+
+    def test_mixed_direct_and_frozen_fixture_provenance_is_not_fabricated(self):
+        sc=scenarios()[0]
+        direct=FixturePage(sc[0],sc[1],sc[2],FixtureResponse(200,sc[3]))
+        other=self.as_frozen_page(scenarios()[4])
+        report=run_synthetic_batch(self.path,self.locks,[direct,other],now=NOW)
+        self.assertEqual(report["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(report["audit"]["request_provenance"]["frozen_requests_with_metadata"],1)
+        self.assertEqual(report["audit"]["request_provenance"]["receipts_without_frozen_request_metadata"],1)
+        self.assertFalse(report["audit"]["request_provenance"]["legacy_metadata_retroactively_fabricated"])
+
+    def test_frozen_batch_does_not_commit_when_existing_request_metadata_tampered(self):
+        self.apply(scenarios()[0])
+        with sqlite3.connect(self.path) as db:
+            db.execute("UPDATE package_a_request_provenance SET request_sha256=?",("0"*64,))
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RAW_SQL_PRECOMMIT_QUALITY_GATE"):
+            run_synthetic_batch(self.path,self.locks,[self.as_frozen_page(scenarios()[4])],now=NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(1,)])
+
+    def test_frozen_batch_rejects_over_budget_before_any_sql(self):
+        pages=[self.as_frozen_page(scenarios()[0]) for _ in range(33)]
+        with self.assertRaisesRegex(ValueError,"Synthetic batch budget"):
+            run_synthetic_batch(self.path,self.locks,pages,now=NOW,max_pages=33)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_frozen_batch_replay_is_idempotent_with_original_request_owner(self):
+        page=self.as_frozen_page(scenarios()[0])
+        batch=run_synthetic_batch(self.path,self.locks,[page,page],now=NOW)
+        self.assertEqual(batch["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(batch["new_observations"],2)
+        self.assertEqual(batch["frozen_http_requests"],2)
+        self.assertEqual(batch["audit"]["request_provenance"]["frozen_requests_with_metadata"],2)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"),[(2,)])
