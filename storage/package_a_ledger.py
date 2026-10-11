@@ -8,6 +8,7 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from urllib.parse import urlsplit
 
 from ingestion.package_a_contracts import SeriesSpec, Point, utc
 
@@ -15,7 +16,7 @@ class SimulatedCrash(RuntimeError):
     """Fixture-only crash-injection signal; rollback the full page."""
 
 
-MIGRATION_VERSION = 1
+MIGRATION_VERSION = 2
 DDL = (
     """CREATE TABLE IF NOT EXISTS package_a_schema_migrations (
        version INTEGER PRIMARY KEY, applied_utc TEXT NOT NULL)""",
@@ -66,6 +67,17 @@ DDL = (
           CHECK(historical_completeness='NOT_VERIFIED'),
        PRIMARY KEY(provider,metric,symbol,frequency)
        )""",
+    """CREATE TABLE IF NOT EXISTS package_a_request_provenance (
+       receipt_id TEXT PRIMARY KEY,
+       endpoint_origin TEXT NOT NULL,
+       endpoint_path TEXT NOT NULL,
+       request_params_json TEXT NOT NULL,
+       request_sha256 TEXT NOT NULL,
+       transport TEXT NOT NULL CHECK(transport='FROZEN_OFFLINE'),
+       method TEXT NOT NULL CHECK(method='GET'),
+       captured_utc TEXT NOT NULL,
+       FOREIGN KEY(receipt_id) REFERENCES package_a_receipts(receipt_id)
+       )""",
 )
 REQUIRED = {
     "package_a_receipts": {"receipt_id","provider","metric","symbol","frequency",
@@ -76,6 +88,9 @@ REQUIRED = {
                           "end_exclusive_utc","advanced_by_receipt"},
     "package_a_coverage": {"provider","metric","symbol","frequency",
                             "first_archived_utc","last_archived_utc","archived_rows"},
+    "package_a_request_provenance": {"receipt_id","endpoint_origin","endpoint_path",
+                                     "request_params_json","request_sha256","transport",
+                                     "method","captured_utc"},
 }
 
 
@@ -86,10 +101,12 @@ SCHEMA_PRIMARY_KEYS = {
                                "observed_utc", "dimension_key"),
     "package_a_cursors": ("provider", "metric", "symbol", "frequency"),
     "package_a_coverage": ("provider", "metric", "symbol", "frequency"),
+    "package_a_request_provenance": ("receipt_id",),
 }
 SCHEMA_FOREIGN_KEYS = {
     "package_a_observations": {("receipt_id", "package_a_receipts", "receipt_id")},
     "package_a_cursors": {("advanced_by_receipt", "package_a_receipts", "receipt_id")},
+    "package_a_request_provenance": {("receipt_id", "package_a_receipts", "receipt_id")},
 }
 
 
@@ -129,11 +146,17 @@ def initialize(conn, *, now):
         for statement in DDL:
             conn.execute(statement)
         validate_schema(conn)
-        conn.execute("INSERT OR IGNORE INTO package_a_schema_migrations(version,applied_utc) "
-                     "VALUES (?,?)", (MIGRATION_VERSION, stamp))
+        # Upgrade the exact previously shipped fixture v1 marker atomically.
+        # Do NOT synthesize request provenance for existing/legacy receipts.
         installed = {v for (v,) in conn.execute(
             "SELECT version FROM package_a_schema_migrations")}
-        if installed != {MIGRATION_VERSION}:
+        if installed == {1}:
+            conn.execute("DELETE FROM package_a_schema_migrations WHERE version=1")
+            installed = set()
+        if not installed:
+            conn.execute("INSERT INTO package_a_schema_migrations(version,applied_utc) "
+                         "VALUES (?,?)", (MIGRATION_VERSION, stamp))
+        elif installed != {MIGRATION_VERSION}:
             raise ValueError("Unsupported Package A schema revision")
         conn.execute("RELEASE SAVEPOINT package_a_schema")
     except BaseException:
@@ -346,3 +369,79 @@ def read_history_evidence(conn):
             else "NO_SUCCESS_RECEIPTS"
         )
     return [streams[key] for key in sorted(streams)]
+
+
+def record_frozen_request_provenance(conn, receipt_id, endpoint, params, *, now):
+    """Write sanitized one-shot request evidence inside the caller's transaction.
+
+    No secrets: only method/origin/path and REDACTED query parameters are
+    retained. This is mock-transport lineage, never verification of upstream.
+    """
+    parsed = urlsplit(endpoint)
+    allowed_hosts = {"api.researchbitcoin.net", "bitview.space",
+                     "query1.finance.yahoo.com", "api.stlouisfed.org",
+                     "fapi.binance.com", "api.bybit.com"}
+    if (parsed.scheme != "https" or parsed.hostname not in allowed_hosts
+            or parsed.query or parsed.fragment or parsed.username or parsed.password
+            or not isinstance(params, dict)):
+        raise ValueError("Invalid frozen provenance endpoint")
+    clean = {}
+    for key, value in params.items():
+        if type(key) is not str or type(value) is not str:
+            raise ValueError("Invalid frozen provenance parameter")
+        clean[key] = "[REDACTED]" if any(
+            flag in key.lower() for flag in ("key","token","secret","password")) else value
+    params_json = json.dumps(clean, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(
+        [parsed.netloc, parsed.path, "GET", params_json, "FROZEN_OFFLINE"],
+        separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode()).hexdigest()
+    conn.execute(
+        "INSERT INTO package_a_request_provenance "
+        "(receipt_id,endpoint_origin,endpoint_path,request_params_json,"
+        "request_sha256,transport,method,captured_utc) "
+        "VALUES (?,?,?,?,?,'FROZEN_OFFLINE','GET',?)",
+        (receipt_id, parsed.netloc, parsed.path, params_json, digest,
+         utc(now).isoformat().replace("+00:00","Z")))
+    return digest
+
+
+def audit_frozen_request_provenance(conn):
+    """Read-only evidence integrity; missing legacy metadata is NOT forged."""
+    valid = 0
+    errors = 0
+    for receipt, origin, path, params_json, sha, transport, method in conn.execute(
+        "SELECT receipt_id,endpoint_origin,endpoint_path,request_params_json,"
+        "request_sha256,transport,method FROM package_a_request_provenance"
+    ):
+        try:
+            params = json.loads(params_json)
+            if (not isinstance(params, dict) or
+                    any(type(k) is not str or type(v) is not str or
+                        (any(secret in k.lower() for secret in
+                             ("key","token","secret","password")) and
+                         v != "[REDACTED]")
+                        for k, v in params.items())):
+                raise ValueError("Unredacted or invalid provenance")
+            canonical = json.dumps(
+                [origin, path, method, params_json, transport],
+                separators=(",", ":"))
+            if (transport != "FROZEN_OFFLINE" or method != "GET"
+                    or hashlib.sha256(canonical.encode()).hexdigest() != sha):
+                raise ValueError("Frozen request provenance digest mismatch")
+            valid += 1
+        except (ValueError, TypeError):
+            errors += 1
+    missing = conn.execute(
+        "SELECT COUNT(*) FROM package_a_receipts r "
+        "LEFT JOIN package_a_request_provenance p ON p.receipt_id=r.receipt_id "
+        "WHERE p.receipt_id IS NULL").fetchone()[0]
+    return {
+        "state": "FROZEN_REQUEST_METADATA_PASS" if not errors else
+                 "FROZEN_REQUEST_METADATA_FAIL",
+        "frozen_requests_with_metadata": valid,
+        "metadata_digest_errors": errors,
+        "receipts_without_frozen_request_metadata": missing,
+        "legacy_metadata_retroactively_fabricated": False,
+        "upstream_requests_verified": False,
+    }
