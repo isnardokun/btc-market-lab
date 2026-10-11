@@ -4,6 +4,7 @@ ONLY explicit TemporaryDirectory fixtures marked by the test harness can be
 modified. Uses existing E11 POSIX flock BEFORE touching the synthetic DB.
 No HTTP client, network, external API, cron, production path or CLI.
 """
+from contextlib import nullcontext
 from dataclasses import dataclass
 import hashlib
 import json
@@ -25,10 +26,13 @@ LOCK_NAMESPACE = "btc-research-global-writer-v1"
 class FixtureResponse:
     status_code: int
     payload: object
+    raw_bytes: bytes | None = None
 
     def __post_init__(self):
         if type(self.status_code) is not int or self.status_code not in (200, 429, 500, 503):
             raise ValueError("Only known synthetic HTTP outcomes are permitted")
+        if self.raw_bytes is not None and type(self.raw_bytes) is not bytes:
+            raise ValueError("Explicit frozen HTTP RAW bytes must be bytes")
 
 
 def _fixture_guard(path, lock_directory):
@@ -54,7 +58,7 @@ def _fixture_guard(path, lock_directory):
 
 
 def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
-                     now, fault=None):
+                     now, fault=None, _parent_lock_held=False):
     """Commit one provider fixture page under the global writer lock.
 
     The payload is an in-memory synthetic JSON object, never downloaded.
@@ -68,10 +72,21 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
     utc(now)
     path = _fixture_guard(db_path, lock_directory)
     try:
-        with hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE):
-            raw = (json.dumps(response.payload, sort_keys=True,
+        # _parent_lock_held is strictly internal to the OFFLINE fake-HTTP
+        # bridge and does not permit production paths (fixture guard above).
+        # Its parent owns the same flock for the entire mock request + SQL.
+        if type(_parent_lock_held) is not bool:
+            raise ValueError("Invalid synthetic parent-lock marker")
+        lock_context = (nullcontext() if _parent_lock_held else
+                        hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE))
+        with lock_context:
+            raw = (response.raw_bytes if response.raw_bytes is not None else
+                   json.dumps(response.payload, sort_keys=True,
                               separators=(",",":"), allow_nan=False).encode("utf-8")
                    if response.payload is not None else None)
+            if response.raw_bytes is not None:
+                if json.loads(response.raw_bytes) != response.payload:
+                    raise ValueError("Frozen HTTP payload differs from actual RAW bytes")
             # Parsing occurs before opening the DB, but after acquiring the
             # cooperative writer lock. No write transaction spans HTTP.
             error = None
