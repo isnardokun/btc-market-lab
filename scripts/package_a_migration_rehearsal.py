@@ -27,6 +27,19 @@ PACKAGE_TABLES = (
     "package_a_observations", "package_a_cursors", "package_a_coverage",
 )
 
+EXPECTED_KEYS = {
+    "package_a_schema_migrations": ("version",),
+    "package_a_receipts": ("receipt_id",),
+    "package_a_observations": ("provider", "metric", "symbol", "frequency",
+                               "observed_utc", "dimension_key"),
+    "package_a_cursors": ("provider", "metric", "symbol", "frequency"),
+    "package_a_coverage": ("provider", "metric", "symbol", "frequency"),
+}
+EXPECTED_FOREIGN_KEYS = {
+    "package_a_observations": {("receipt_id", "package_a_receipts", "receipt_id")},
+    "package_a_cursors": {("advanced_by_receipt", "package_a_receipts", "receipt_id")},
+}
+
 
 def _fixture_paths(db_path, lock_dir):
     if not isinstance(db_path, (str, Path)) or not isinstance(lock_dir, (str, Path)):
@@ -76,10 +89,27 @@ def _assert_new_schema(conn):
     present = _layout(conn)
     if present != set(PACKAGE_TABLES):
         raise ValueError("New schema tables missing/unexpected")
-    for table, cols in package_a_ledger.REQUIRED.items():
-        have = {r[1] for r in conn.execute("PRAGMA table_info(" + table + ")")}
-        if not cols.issubset(have):
+    for table in PACKAGE_TABLES:
+        rows = list(conn.execute("PRAGMA table_info(" + table + ")"))
+        have = {r[1] for r in rows}
+        required = package_a_ledger.REQUIRED.get(table, set())
+        if not required.issubset(have):
             raise ValueError("Package schema missing expected columns: " + table)
+        primary_key = tuple(r[1] for r in sorted(rows, key=lambda x:x[5]) if r[5] > 0)
+        if primary_key != EXPECTED_KEYS[table]:
+            raise ValueError("Package schema primary key incompatible: " + table)
+        fks = {(r[3],r[2],r[4]) for r in
+               conn.execute("PRAGMA foreign_key_list(" + table + ")")}
+        if fks != EXPECTED_FOREIGN_KEYS.get(table, set()):
+            raise ValueError("Package schema foreign key incompatible: " + table)
+    # A forged table with all column names but no PK/FK is NOT a valid v1.
+    # Also validate that the expected performance indexes were really created.
+    for index in ("idx_package_a_receipts_window",
+                  "idx_package_a_observations_dates"):
+        if not conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?", (index,)
+        ).fetchone():
+            raise ValueError("Missing Package A index: " + index)
     if conn.execute("PRAGMA foreign_key_check").fetchone():
         raise ValueError("SQLite foreign key integrity check failed")
     if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
