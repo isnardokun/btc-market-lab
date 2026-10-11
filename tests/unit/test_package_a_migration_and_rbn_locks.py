@@ -140,8 +140,14 @@ class PackageAMigrationAndRbnLockTests(unittest.TestCase):
             with self.subTest(case=label):
                 with patch.object(mod,delegate,side_effect=AssertionError("ran")):
                     with contextlib.redirect_stderr(StringIO()):
-                        with self.assertRaises(WriterLockUnsafe):
-                            mod.main([*argv,"--global-lock-dir",str(invalid)])
+                        if label=="archive-migrate":
+                            # Legacy migration catches ValueError and returns
+                            # RC2, still without opening SQLite or backup.
+                            self.assertEqual(
+                                mod.main([*argv,"--global-lock-dir",str(invalid)]),2)
+                        else:
+                            with self.assertRaises(WriterLockUnsafe):
+                                mod.main([*argv,"--global-lock-dir",str(invalid)])
         self.assertFalse(invalid.exists())
 
     def test_market_schema_plan_has_no_lock_and_no_backup(self):
