@@ -169,6 +169,7 @@ class OfflineRetryRehearsalTests(unittest.TestCase):
         self.assertEqual(out["attempts_executed"],1)
         self.assertEqual(out["final_retry_advice"]["state"],
                          "RETRY_DENIED_PERMANENT_OR_LOCK")
+        self.assertIsNone(out["final_source_run_id"])
         self.assertEqual(self.sql("SELECT COUNT(*) FROM sqlite_master "
                                   "WHERE name='package_a_receipts'"),[(0,)])
         self.assertEqual(self.sql("SELECT payload FROM old_protected"),[("preserved",)])
