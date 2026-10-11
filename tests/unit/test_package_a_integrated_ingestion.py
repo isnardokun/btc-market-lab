@@ -586,12 +586,12 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
                 "CREATE TABLE package_a_schema_migrations("
                 "version INTEGER PRIMARY KEY,applied_utc TEXT NOT NULL)")
             db.execute(
-                "INSERT INTO package_a_schema_migrations(version,applied_utc) VALUES(2,?)",
+                "INSERT INTO package_a_schema_migrations(version,applied_utc) VALUES(3,?)",
                 (NOW,))
         with self.assertRaisesRegex(ValueError,"schema revision"):
             self.apply(spec,start,end,payload)
         self.assertEqual(self.read(
-            "SELECT version FROM package_a_schema_migrations"),[(2,)])
+            "SELECT version FROM package_a_schema_migrations"),[(3,)])
         self.assertEqual(self.read(
             "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
 
