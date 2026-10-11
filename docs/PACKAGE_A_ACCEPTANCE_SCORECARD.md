@@ -1,7 +1,7 @@
 # Package A — Cuadro de avance por criterios de aceptación
 
 **Corte:** 2026-10-11 · **PR:** #79 (borrador) · **Estado:** `A_IN_PROGRESS`
-**Avance estimado de ingeniería offline:** **70%** · **Confianza:** orientativa, ±5 puntos porcentuales.
+**Avance estimado de ingeniería offline:** **≈72%** · **Confianza:** orientativa, ±5 puntos porcentuales.
 Este es un juicio técnico de los entregables frente a `docs/INTEGRATED_DELIVERY_PROGRAM_ABC.md`
 y al Issue #76, **NO** un KPI generado automáticamente, un progreso temporal
 lineal, la proporción del histórico de APIs descargado ni una certificación
@@ -13,17 +13,18 @@ idéntico: 20% cada uno.
 |---|---:|---|---|
 | **A1 — Writers y exclusión** | **60%** | Inventario de entradas, opt-in `flock`, demostración de contención real entre procesos, lock padre sostenido y lease protegido, runbook cutover | `daily.sh` real, cron, invocaciones manuales y copias paralelas sin protección global certificada en host; launcher productivo no creado ni autorizado |
 | **A2 — SQLite y linaje** | **85%** | Migración sintética aditiva v1→v3, RAW y SHA byte-exactos, PK/FK/unique, recibos y request provenance, `source_run`, cursors, auditorías independientes y WAL/rollback ensayados en fixtures | Revisión completa de esquema histórico productivo, tabla de dimensiones/provenance detalladas y migración con snapshot WAL-safe autorizada aún pendiente |
-| **A3 — Adaptadores y cobertura** | **70%** | Seis proveedores simulados, ocho streams E2E, catálogo RBN, Bitview, Yahoo BTC close, FRED con vintages y paginación sintética por calendario, Binance/Bybit OI5m/funding events, manifiesto por fuente | Yahoo OHLCV y calendario de acciones, profundidad de series/dimensiones Bitview y RBN, ALFRED y contrato real de FRED, paginación/retención real de funding, límites/cuotas y disponibilidad externos no verificados |
+| **A3 — Adaptadores y cobertura** | **78%** | Seis proveedores simulados, ocho streams base E2E; Yahoo OHLCV BTC-USD/SPY/GLD con reconciliación legacy, sesiones bursátiles sin falsos huecos, RBN, Bitview, FRED vintages+paginación sintética, Binance/Bybit OI5m/funding events y manifiesto por fuente | Yahoo `range=max` sin paginación verificable, ausencia de fan-out de las cinco métricas por único request, más símbolos/calendarios reales, dimensionalidad Bitview/RBN, ALFRED, funding event y cuotas/ventanas reales no verificados |
 | **A4 — Pipeline y recuperación** | **80%** | Plan→legacy fake HTTP→RAW→SQLite→cursors→audits, paginación bounded 14d/90d/500/200, 429/5xx/timeout fail-stop, retries mediante nuevo run, reanudación desde páginas confirmadas, invariante precommit | Política operacional con backoff/jitter acotado, límites reales de requests/costo, fetch real controlado bajo autorización y monitoreo de fallos recuperables |
 | **A5 — Integración y aceptación** | **55%** | 65 suites registradas, 64/64 offline PASS, una live aislada, pruebas crash/race/rollback/migraciones y documentación reproducible | QA único de Hermes **no solicitado aún**; auditoría final de diff/seguridad, aceptación `A_OFFLINE_ACCEPTED`, resolución de issues residuales y merge aún pendientes |
 
-**Cálculo:** (60 + 85 + 70 + 80 + 55) / 5 = **70%**.
+**Cálculo:** (60 + 85 + 78 + 80 + 55) / 5 = **71,6%, redondeado a ≈72%**.
 Cada porcentaje es una estimación explícita, **no** el número de pruebas
 que aprobaron ni un conteo de commits. Solo cambia ante avances materiales
 de criterios, nunca por nuevos tests de una misma capacidad.
 
 ## Validación más reciente de ingeniería
 
+- Yahoo OHLCV integra cinco métricas sobre BTC-USD, SPY y GLD con un parser legado independiente, RAW/SHA, sesiones diarias y verificaciones estrictas de precios y volumen. Yahoo `range=max` permanece sin paginación inventada.
 - FRED mensual `CPIAUCSL` y diario `DGS10` ahora aceptan planificación
   sintética en ventanas consecutivas de hasta **90 días calendario**, separando
   días de consulta de cantidad de observaciones disponibles y preservando
@@ -41,7 +42,7 @@ de criterios, nunca por nuevos tests de una misma capacidad.
 
 ## Tres porcentajes que NO deben confundirse
 
-1. **70% — trabajo de desarrollo offline del Paquete A:** estimación arriba.
+1. **≈72% — trabajo de desarrollo offline del Paquete A:** estimación arriba.
 2. **0 validaciones nuevas de API/histórico real ejecutadas por esta PR:** el
    estado externo es `EXTERNAL_VERIFICATION_PENDING`, no una medición de
    la proporción de datos completos. Puede existir archivo legado fuera de
