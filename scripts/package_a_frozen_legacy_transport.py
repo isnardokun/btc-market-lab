@@ -56,9 +56,11 @@ class FrozenLegacyHTTP:
         if (not isinstance(params, dict) or
                 any(type(k) is not str or type(v) is not str for k, v in params.items())):
             raise ValueError("Frozen transport requires exact scalar query params")
-        if type(body) is not bytes or not 0 < len(body) <= MAX_RAW:
+        if (type(body) is not bytes or
+                (status is None and body != b"") or
+                (status is not None and not 0 < len(body) <= MAX_RAW)):
             raise ValueError("Only bounded in-memory frozen bytes permitted")
-        if type(status) is not int or status not in ALLOWED_STATUS:
+        if status is not None and (type(status) is not int or status not in ALLOWED_STATUS):
             raise ValueError("Unknown mocked HTTP status")
         self._endpoint = (parsed.scheme, parsed.netloc, parsed.path)
         self._params = params
@@ -83,6 +85,8 @@ class FrozenLegacyHTTP:
         if self.calls:
             raise ValueError("BLOCKED_FROZEN_HTTP_MULTI_REQUEST")
         self.calls += 1
+        if self.status is None:
+            raise TimeoutError("INJECTED_OFFLINE_TRANSPORT_TIMEOUT")
         if self.status != 200:
             raise HTTPError(req.full_url, self.status, "INJECTED_OFFLINE_STATUS", None, None)
         return _FrozenResponse(req.full_url, self.body)
@@ -204,7 +208,7 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
         with hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE):
             try:
                 parsed = _legacy_fake_fetch(spec, start, end, frozen)
-            except (HTTPError, RuntimeError):
+            except (HTTPError, RuntimeError, TimeoutError):
                 if status_code == 200 or frozen.calls != 1:
                     raise
                 # 429/5xx bodies are frequently HTML/plain text, not JSON.
@@ -214,7 +218,8 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
             if (frozen.calls != 1 or
                     (status_code == 200 and parsed != json.loads(raw_bytes))):
                 raise ValueError("BLOCKED_LEGACY_PARSER_RAW_MISMATCH")
-            response = FixtureResponse(status_code, parsed, raw_bytes=raw_bytes)
+            response = FixtureResponse(
+                status_code, parsed, raw_bytes=(raw_bytes if status_code is not None else None))
             outcome = run_fixture_page(
                 db_path, lock_directory, spec, start, end, response,
                 now=now, fault=fault, _parent_lock_held=True)
@@ -222,7 +227,7 @@ def run_mocked_legacy_page(db_path, lock_directory, spec, start, end,
                 **outcome,
                 "frozen_http_requests": frozen.calls,
                 "legacy_source_request_builder_used": True,
-                "original_raw_bytes_preserved": True,
+                "original_raw_bytes_preserved": status_code is not None,
                 "upstream_api_verified": False,
                 "provider_entitlement_verified": False,
                 "live_http_requests": 0,
