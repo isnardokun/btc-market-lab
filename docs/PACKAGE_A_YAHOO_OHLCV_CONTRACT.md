@@ -45,12 +45,17 @@ sin socket real, conservando el request legado
 
 Una respuesta sintética bien formada pasa por
 `raw→legacy bridge→strict parser→SQLite temporal→receipt/cursor→auditor`.
-Cada métrica usa **su propio recibo y su propia llamada HTTP simulada**;
-este slice **NO** implementa aún fan-out económico de cinco métricas
-desde un único request. Los fallos de validación bajo HTTP 200 se
-registran como **receipt `rejected` con RAW/SHA preservado**, sin
-observaciones nuevas ni avance del cursor. Esto NO es una solicitud
-completada, ni significa `upstream unavailable`.
+La implementación anterior por métrica sigue disponible para
+compatibilidad, con un recibo por petición falsa. **Ahora existe también
+el flujo `scripts/package_a_yahoo_fanout.py`**, que realiza **una sola
+petición HTTP falsa** y almacena las cinco métricas con cinco recibos
+y cinco cursores dentro de **una misma transacción SQLite**. Los cinco
+recibos conservan el mismo RAW/SHA, se verifican juntos en el
+PRECOMMIT gate y ninguno puede confirmarse de forma aislada si las
+otras métricas están incompletas o son inválidas. Los fallos de
+validación HTTP 200 producen recibos `rejected`, sin puntos ni cursores.
+La nueva funcionalidad no habilita Yahoo real. Contrato y QA detallados
+en `docs/PACKAGE_A_YAHOO_SINGLE_FETCH_FANOUT.md`.
 
 **Importante:** el downloader heredado usa **`range=max`**.
 `plan_offline_historical_windows` lo sigue dejando en
