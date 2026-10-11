@@ -5,6 +5,10 @@ and quota/retention have NOT been verified by this offline test harness.
 """
 from dataclasses import dataclass
 from pathlib import Path
+from contextlib import nullcontext
+import hashlib
+import json
+import sqlite3
 import uuid
 
 from ingestion.package_a_contracts import SeriesSpec, utc
@@ -12,6 +16,8 @@ from scripts.package_a_ingest_fixture import (
     FixtureResponse, run_fixture_page, inspect_fixture, _fixture_guard,
 )
 from scripts.package_a_frozen_legacy_transport import run_mocked_legacy_page
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
+from scripts.package_a_ingest_fixture import LOCK_NAMESPACE
 
 
 @dataclass(frozen=True)
@@ -32,7 +38,8 @@ class FrozenLegacyPage:
     status_code: int | None = 200
 
 
-def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
+def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32,
+                        _parent_lock_held=False):
     """Process bounded fixture pages serially with fail-stop/checkpoint behavior.
 
     Each page is a separate short SQL transaction under the SAME global lock
@@ -45,6 +52,8 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
         raise ValueError("Nonempty bounded fixture page list required")
     utc(now)
     _fixture_guard(db_path, lock_dir)
+    if type(_parent_lock_held) is not bool:
+        raise ValueError("Invalid offline parent-lock marker")
     for page in pages:
         if not isinstance(page, (FixturePage, FrozenLegacyPage)) or not isinstance(page.source, SeriesSpec):
             raise ValueError("Typed synthetic fixture pages required")
@@ -67,12 +76,14 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
             result = run_mocked_legacy_page(
                 db_path, lock_dir, page.source, page.start, page.end,
                 raw_bytes=page.raw_bytes, status_code=page.status_code, now=now,
-                _batch_run=(run_id,index,len(pages)))
+                _batch_run=(run_id,index,len(pages)),
+                _parent_lock_held=_parent_lock_held)
         else:
             result = run_fixture_page(
                 db_path, lock_dir, page.source, page.start, page.end,
                 page.response, now=now,
-                _batch_run=(run_id,index,len(pages)))
+                _batch_run=(run_id,index,len(pages)),
+                _parent_lock_held=_parent_lock_held)
         outcomes.append({
             "index": index, "source": page.source.provider,
             "metric": page.source.metric, "state": result["state"],
@@ -114,3 +125,132 @@ def run_synthetic_batch(db_path, lock_dir, pages, *, now, max_pages=32):
         "sqlite_productive_writes": 0,
         "global_host_writer_exclusion_verified": False,
     }
+
+
+def _request_identity(page):
+    """Canonical original request-window identity and expected successful RAW."""
+    if not isinstance(page, (FixturePage, FrozenLegacyPage)) or not isinstance(page.source, SeriesSpec):
+        raise ValueError("Exact typed original page list required for recovery")
+    begin,end=utc(page.start),utc(page.end)
+    if begin >= end:
+        raise ValueError("Invalid original recovery window")
+    stamp=lambda dt: dt.isoformat().replace("+00:00","Z")
+    if isinstance(page, FrozenLegacyPage):
+        raw=page.raw_bytes
+        frozen=True
+        if type(raw) is not bytes or not 0 < len(raw) <= 2_000_000:
+            raise ValueError("Bounded frozen page RAW required")
+    else:
+        frozen=False
+        if not isinstance(page.response, FixtureResponse):
+            raise ValueError("Synthetic response required")
+        raw=(page.response.raw_bytes if page.response.raw_bytes is not None else
+             json.dumps(page.response.payload,sort_keys=True,separators=(",",":"),
+                        allow_nan=False).encode("utf-8")
+             if page.response.payload is not None else None)
+    return ((*(
+        page.source.provider,page.source.metric,page.source.symbol,page.source.frequency),
+        stamp(begin),stamp(end)),None if raw is None else hashlib.sha256(raw).hexdigest(),frozen)
+
+
+def plan_synthetic_resume(db_path, lock_dir, pages, *, prior_run_id):
+    """Read-only recovery preflight from durable source-run pages.
+
+    Requires the original entire ordered fixture plan. Validates all persisted
+    successful prefix receipts against EXACT intended source/window and RAW
+    bytes. Failed last page is RETRIED (not counted as completed). Never opens
+    HTTP, updates SQLite, infers provider availability, or invents prior pages.
+    The returned plan alone is advisory: call recover_synthetic_batch for a
+    lock-serialized atomic preflight + execution.
+    """
+    path=_fixture_guard(db_path,lock_dir)
+    if (type(prior_run_id) is not str or len(prior_run_id)!=32 or
+            any(ch not in "0123456789abcdef" for ch in prior_run_id)):
+        raise ValueError("Exact persisted source-run UUID required")
+    if type(pages) not in (tuple,list) or not 1 <= len(pages) <= 32:
+        raise ValueError("Bounded original recovery plan required")
+    plan=[_request_identity(page) for page in pages]
+    if inspect_fixture(path,lock_dir)["state"]!="LOCAL_FIXTURE_INTEGRITY_PASS":
+        raise ValueError("BLOCKED_RECOVERY_DB_INTEGRITY")
+    with sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True) as db:
+        db.execute("PRAGMA query_only=ON")
+        db.execute("BEGIN")
+        row=db.execute(
+            "SELECT planned_pages,status FROM package_a_source_runs WHERE run_id=?",
+            (prior_run_id,)).fetchone()
+        if row is None:
+            raise ValueError("BLOCKED_RECOVERY_UNKNOWN_RUN")
+        planned,status=row
+        if planned!=len(pages):
+            raise ValueError("BLOCKED_RECOVERY_PLAN_LENGTH_DRIFT")
+        rows=db.execute(
+            "SELECT p.ordinal,p.receipt_status,r.provider,r.metric,r.symbol,"
+            "r.frequency,r.start_utc,r.end_exclusive_utc,r.raw_sha256,"
+            "r.status,pr.receipt_id IS NOT NULL "
+            "FROM package_a_run_pages p "
+            "JOIN package_a_receipts r ON r.receipt_id=p.receipt_id "
+            "LEFT JOIN package_a_request_provenance pr ON pr.receipt_id=p.receipt_id "
+            "WHERE p.run_id=? ORDER BY p.ordinal",(prior_run_id,)).fetchall()
+        if not rows:
+            raise ValueError("BLOCKED_RECOVERY_EMPTY_RUN")
+        for ordinal,receipt_status,*stored in rows:
+            if ordinal>=len(plan) or (
+                    tuple(stored[:6])!=plan[ordinal][0] or
+                    receipt_status!=stored[7] or
+                    bool(stored[8])!=plan[ordinal][2]):
+                raise ValueError("BLOCKED_RECOVERY_REQUEST_IDENTITY_DRIFT")
+            if receipt_status=="ok" and stored[6]!=plan[ordinal][1]:
+                raise ValueError("BLOCKED_RECOVERY_SUCCESS_RAW_DRIFT")
+        resume_at=len(rows) if status=="running" else (
+            len(pages) if status=="complete" else len(rows)-1)
+        if not 0 <= resume_at <= len(pages):
+            raise ValueError("BLOCKED_RECOVERY_BAD_PREFIX")
+        return {
+            "state":"RESUME_ALREADY_COMPLETE" if resume_at==len(pages)
+                    else "RESUME_PLANNED_OFFLINE",
+            "prior_run_id":prior_run_id,
+            "prior_run_status":status,
+            "resume_index":resume_at,
+            "remaining_pages":len(pages)-resume_at,
+            "verified_successful_prefix":resume_at,
+            "source_integrity":"LOCAL_FIXTURE_INTEGRITY_PASS",
+            "upstream_availability_verified":False,
+            "live_http_requests":0,
+            "production_authorized":False,
+        }
+
+
+def recover_synthetic_batch(db_path, lock_dir, pages, *, prior_run_id,
+                            now, max_pages=32):
+    """Atomic preflight + fake page execution under ONE cooperative parent flock.
+
+    Never runs a real client/DB. No TOCTOU window between reading source-run
+    evidence and executing the next frozen HTTP page. The existing batch
+    creates a NEW run ID; the original blocked/interrupted run stays intact.
+    """
+    _fixture_guard(db_path,lock_dir)
+    if type(max_pages) is not int or not 1 <= max_pages <= 32:
+        raise ValueError("Bounded recovery budget required")
+    try:
+        with hold_writer_lock(lock_dir,namespace=LOCK_NAMESPACE):
+            preflight=plan_synthetic_resume(db_path,lock_dir,pages,
+                                             prior_run_id=prior_run_id)
+            if preflight["remaining_pages"]==0:
+                return {**preflight,"state":"RESUME_ALREADY_COMPLETE",
+                        "requests_attempted":0,"frozen_http_requests":0,
+                        "new_run_id":None}
+            remaining=pages[preflight["resume_index"]:]
+            # Never increase max_pages to bypass the original budget.
+            result=run_synthetic_batch(db_path,lock_dir,remaining,now=now,
+                      max_pages=min(max_pages,len(remaining)),
+                      _parent_lock_held=True)
+            return {**result,
+                    "recovered_from_run_id":prior_run_id,
+                    "new_run_id":result["run_id"],
+                    "recovery_start_index":preflight["resume_index"],
+                    "old_run_remains_immutable":True}
+    except WriterLockBusy:
+        return {"state":"BLOCKED_WRITER_BUSY","child_started":False,
+                "frozen_http_requests":0,"requests_attempted":0,
+                "sqlite_connections_started":0,"live_http_requests":0,
+                "production_authorized":False}
