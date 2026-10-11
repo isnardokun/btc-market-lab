@@ -241,3 +241,65 @@ def read_coverage(conn):
             "last_archived_utc","archived_rows","provider_window_status",
             "entitlement_status","historical_completeness"), row)))
     return result
+
+
+
+def read_history_evidence(conn):
+    """Reconcile attempted versus archived windows in ONE caller-owned snapshot.
+
+    Streams with only failed or empty responses must remain visible. A local
+    success is NOT proof of the provider's earliest obtainable observation.
+    """
+    counts=("ok","empty","failed","rejected")
+    streams={}
+    def row_for(key):
+        if key not in streams:
+            provider,metric,symbol,frequency=key
+            streams[key]={
+                "provider":provider,"metric":metric,"symbol":symbol,"frequency":frequency,
+                "requested_first_utc":None,"requested_end_exclusive_utc":None,
+                "attempted_requests":0,
+                "attempt_status_counts":{status:0 for status in counts},
+                "successful_requests_with_raw_receipt":0,
+                "successful_requests_missing_raw_receipt":0,
+                "reported_rows_by_success_receipts":0,
+                "archived_first_utc":None,"archived_last_utc":None,"archived_rows":0,
+                "provider_window_status":"NOT_CHECKED",
+                "entitlement_status":"NOT_VERIFIED",
+                "historical_completeness":"NOT_VERIFIED"
+            }
+        return streams[key]
+    for provider,metric,symbol,frequency,start,end,status,parsed,digest in conn.execute(
+        "SELECT provider,metric,symbol,frequency,start_utc,end_exclusive_utc,"
+        "status,parsed_count,raw_sha256 FROM package_a_receipts ORDER BY rowid"
+    ):
+        row=row_for((provider,metric,symbol,frequency))
+        row["attempted_requests"]+=1
+        row["attempt_status_counts"][status]+=1
+        row["requested_first_utc"]=(
+            min(start,row["requested_first_utc"]) if row["requested_first_utc"] else start)
+        row["requested_end_exclusive_utc"]=(
+            max(end,row["requested_end_exclusive_utc"]) if row["requested_end_exclusive_utc"] else end)
+        if status=="ok":
+            row["reported_rows_by_success_receipts"]+=parsed
+            row["successful_requests_with_raw_receipt" if digest
+                else "successful_requests_missing_raw_receipt"]+=1
+    for item in read_coverage(conn):
+        row=row_for((item["provider"],item["metric"],item["symbol"],item["frequency"]))
+        row["archived_first_utc"]=item["first_archived_utc"]
+        row["archived_last_utc"]=item["last_archived_utc"]
+        row["archived_rows"]=item["archived_rows"]
+    for row in streams.values():
+        status=row["attempt_status_counts"]
+        row["local_request_history_state"]=(
+            "ATTEMPTS_WITH_FAILURE_OR_EMPTY"
+            if status["failed"] or status["rejected"] or status["empty"]
+            else "LOCAL_SUCCESS_RECEIPTS_ONLY"
+            if status["ok"] else "MISSING_REQUEST_RECEIPTS"
+        )
+        row["local_receipt_completeness"]=(
+            "MISSING_NEW_RECEIPT" if row["successful_requests_missing_raw_receipt"]
+            else "LOCAL_RAW_RECEIPTS_PRESENT" if row["successful_requests_with_raw_receipt"]
+            else "NO_SUCCESS_RECEIPTS"
+        )
+    return [streams[key] for key in sorted(streams)]
