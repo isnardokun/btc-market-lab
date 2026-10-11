@@ -31,6 +31,10 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest -v tests.unit.test_package_a_integrated_ingestion
+      - name: Package A opt-in writer entrypoint OS exclusion tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest -v tests.unit.test_package_a_entrypoint_locks
       - name: Isolated worktree runtime retention regression
         env:
           BTC_RESEARCH_HOME: ${{ github.workspace }}
