@@ -114,16 +114,16 @@ def main(argv=None):
     args = p.parse_args(argv)
     if args.apply:
         return run_with_optional_writer_lock(
-            args.global_lock_dir, lambda:_run_yahoo_history_args(args), label="yahoo-history")
-    return _run_yahoo_history_args(args)
+            args.global_lock_dir, lambda:_run_yahoo_history_args(args,p), label="yahoo-history")
+    return _run_yahoo_history_args(args,p)
 
 
-def _run_yahoo_history_args(args):
+def _run_yahoo_history_args(args,p):
     if not 1 <= args.limit <= 20 or args.offset < 0 or not args.db.is_file():
-        raise ValueError("limit 1..20, offset >=0, SQLite existente obligatorio")
+        p.error("limit 1..20, offset >=0, SQLite existente obligatorio")
     available = symbols_in_catalog(args.db)
     if args.symbol and any(x not in available for x in args.symbol):
-        raise ValueError("No se permite un símbolo ajeno al catálogo local")
+        p.error("No se permite un símbolo ajeno al catálogo local")
     chosen = sorted(set(args.symbol)) if args.symbol else available[args.offset:args.offset + args.limit]
     summary = {"total_symbols": len(available), "selected": chosen,
                "mode": "APPLY" if args.apply else "PLAN", "results": []}
