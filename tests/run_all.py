@@ -53,6 +53,7 @@ TESTS = [
     ("Unit: R10-E.8 Source-Aware Internal Gap Audit RO", "python3 -m unittest -v tests.unit.test_market_r10e8_ro_internal_gap_audit"),
     ("Unit: R10-E.9 Cross-Report Evidence Reconciliation", "python3 -m unittest -v tests.unit.test_market_r10e9_evidence_review_queue"),
     ("Unit: R10-E.10 Atomic Read-Only SQLite Evidence", "python3 -m unittest -v tests.unit.test_market_r10e10_atomic_ro_evidence"),
+    ("Unit: R10-E.11 Cross-Process Writer Lock Offline", "python3 -m unittest -v tests.unit.test_market_r10e11_writer_exclusion"),
     ("Unit: Market Temporal Coverage Audit", "python3 -m unittest -v tests.unit.test_market_temporal_quality"),
     ("Unit: Raw Market Blob Reconciliation", "python3 -m unittest -v tests.unit.test_market_raw_reconcile"),
     ("Unit: Market Context SQLite", "python3 -m unittest -v tests.unit.test_market_context_sqlite"),
