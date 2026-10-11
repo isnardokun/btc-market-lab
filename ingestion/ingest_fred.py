@@ -24,6 +24,10 @@ from ingestion.config import DB_PATH, FRED_API_KEY, FRED_ENDPOINT, FRED_SERIES
 from storage.archive_schema import archive_schema_installed, register_dataset
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from pathlib import Path
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
+
+GLOBAL_LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 TODAY = datetime.date.today()
 FETCH_START = "2024-01-01"  # backfill inicial
@@ -217,6 +221,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="FRED incremental (default) or explicit historical archive")
     parser.add_argument("--history", action="store_true", help="Recover all available old FRED observations")
     parser.add_argument("--apply", action="store_true", help="Required for historical API/DB mutations")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in shared writer lock directory")
     args = parser.parse_args(argv)
     if args.history and not args.apply:
         print("PLAN: --history requerirá --apply. Recuperará historia FRED disponible para 12 series.")
@@ -226,6 +232,18 @@ def main(argv=None):
     if not FRED_API_KEY:
         print("ERROR: configura FRED_API_KEY en el entorno de Hermes", file=sys.stderr)
         return 2
+    if args.global_lock_dir is None:
+        return _run_fred_with_args(args)
+    try:
+        with hold_writer_lock(args.global_lock_dir, namespace=GLOBAL_LOCK_NAMESPACE):
+            return _run_fred_with_args(args)
+    except WriterLockBusy:
+        print("BLOCKED_WRITER_BUSY: FRED ingestion skipped before HTTP/SQLite",
+              file=sys.stderr)
+        return 3
+
+
+def _run_fred_with_args(args):
     global FETCH_ERRORS
     FETCH_ERRORS = 0
     conn = sqlite3.connect(DB_PATH)
