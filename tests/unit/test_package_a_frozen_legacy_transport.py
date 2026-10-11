@@ -1150,3 +1150,163 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertEqual(result["historical_completeness"],"NOT_VERIFIED")
         self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
                          "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+
+    def _yahoo_daily_body(self, *, bad=None, duplicate_day=False):
+        # Nonmidnight NYSE intraday timestamps; dates 2026-10-08 (Thu),
+        # 2026-10-09 (Fri), 2026-10-12 (Mon). No Saturday/Sunday candle.
+        days=("2026-10-08T13:30:00Z",
+              "2026-10-09T13:30:00Z",
+              "2026-10-12T13:30:00Z")
+        ticks=[unix(d) for d in days]
+        if duplicate_day:
+            ticks[1]=unix("2026-10-08T19:59:00Z")
+        quote={
+            "open":[500.,502.,506.], "high":[505.,508.,509.],
+            "low":[498.,500.,504.], "close":[504.,507.,505.],
+            "volume":[1000000,1100000,900000],
+        }
+        if bad == "high_below_low":
+            quote["high"][0]=490.
+        elif bad == "negative_volume":
+            quote["volume"][0]=-1
+        elif bad == "short_close":
+            quote["close"].pop()
+        elif bad == "nonfinite":
+            quote["high"][1]=float("nan")
+        return {"chart":{"result":[{"timestamp":ticks,
+                  "indicators":{"quote":[quote]}}],"error":None}}
+
+    def test_yahoo_spy_five_real_legacy_metrics_fake_http_sqlite_full_roundtrip(self):
+        body=raw(self._yahoo_daily_body())
+        metrics=("open","high","low","close","volume")
+        specs=[SeriesSpec("yahoo",m,"SPY","d1",
+                 "native_volume" if m=="volume" else "USD") for m in metrics]
+        for spec in specs:
+            result=run_mocked_legacy_page(
+                self.path,self.locks,spec,
+                DAY,"2026-10-13T00:00:00Z",
+                raw_bytes=body,now="2026-10-14T00:00:00Z")
+            self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE",spec.metric)
+            self.assertEqual(result["new_rows"],3)
+            self.assertTrue(result["legacy_source_request_builder_used"])
+            self.assertEqual(result["frozen_http_requests"],1)
+        audit=inspect_fixture(self.path,self.locks)
+        self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(audit["rows"],15)
+        self.assertEqual(audit["receipts"],5)
+        self.assertEqual(len(audit["source_manifest"]["streams"]),5)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations "
+                                   "WHERE observed_utc LIKE '2026-10-10%'"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations "
+                                   "WHERE observed_utc LIKE '2026-10-11%'"),[(0,)])
+        for stream in audit["source_manifest"]["streams"]:
+            self.assertEqual(stream["source_native_semantics"],"YAHOO_EXCHANGE_SESSIONS")
+            self.assertEqual(stream["local_grid_state"],
+                             "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+            self.assertIsNone(stream["local_gap_evidence"])
+            self.assertEqual(stream["provider_availability"],"NOT_CHECKED")
+            self.assertEqual(stream["historical_completeness"],"NOT_VERIFIED")
+        self.assertEqual(self.rows("SELECT DISTINCT unit FROM package_a_observations "
+                                   "WHERE metric='volume'"),[("native_volume",)])
+        self.assertEqual(self.rows("SELECT DISTINCT unit FROM package_a_observations "
+                                   "WHERE metric='close'"),[("USD",)])
+
+    def test_yahoo_gl_d_and_btc_native_ohlcv_preserve_independent_source_identity(self):
+        body=raw(self._yahoo_daily_body())
+        result=run_mocked_legacy_page(
+            self.path,self.locks,
+            SeriesSpec("yahoo","high","GLD","d1","USD"),
+            DAY,"2026-10-13T00:00:00Z",raw_bytes=body,
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        result=run_mocked_legacy_page(
+            self.path,self.locks,
+            SeriesSpec("yahoo","volume","BTC-USD","d1","native_volume"),
+            DAY,"2026-10-13T00:00:00Z",raw_bytes=body,
+            now="2026-10-14T00:00:00Z")
+        self.assertEqual(result["state"],"PAGE_COMMITTED_OFFLINE")
+        self.assertEqual(self.rows(
+            "SELECT symbol,metric,COUNT(*) FROM package_a_observations "
+            "GROUP BY symbol,metric ORDER BY symbol"),[
+                ("BTC-USD","volume",3),("GLD","high",3)])
+        self.assertEqual(inspect_fixture(self.path,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(self.rows("SELECT COUNT(DISTINCT request_sha256) "
+                                   "FROM package_a_request_provenance"),[(2,)])
+
+    def test_yahoo_rejects_invalid_quote_lengths_before_sql_mutation(self):
+        spec=SeriesSpec("yahoo","close","SPY","d1","USD")
+        with self.assertRaisesRegex(ValueError,"Mismatched Yahoo OHLCV"):
+            run_mocked_legacy_page(
+                self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
+                raw_bytes=raw(self._yahoo_daily_body(bad="short_close")),
+                now="2026-10-14T00:00:00Z")
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM package_a_observations"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+
+    def test_yahoo_rejects_malformed_ohlc_even_when_requested_metric_is_close(self):
+        spec=SeriesSpec("yahoo","close","SPY","d1","USD")
+        for issue in ("high_below_low","nonfinite"):
+            with self.subTest(issue=issue):
+                with self.assertRaises(ValueError):
+                    run_mocked_legacy_page(
+                        self.path,self.locks,spec,DAY,
+                        "2026-10-13T00:00:00Z",
+                        raw_bytes=raw(self._yahoo_daily_body(bad=issue)),
+                        now="2026-10-14T00:00:00Z")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+
+    def test_yahoo_negative_volume_rejected_without_cursor_or_receipt(self):
+        spec=SeriesSpec("yahoo","volume","SPY","d1","native_volume")
+        with self.assertRaisesRegex(ValueError,"Negative Yahoo"):
+            run_mocked_legacy_page(self.path,self.locks,spec,DAY,
+                "2026-10-13T00:00:00Z",
+                raw_bytes=raw(self._yahoo_daily_body(bad="negative_volume")),
+                now="2026-10-14T00:00:00Z")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+    def test_yahoo_session_normalization_denies_two_timestamps_same_utc_date(self):
+        spec=SeriesSpec("yahoo","open","SPY","d1","USD")
+        with self.assertRaisesRegex(ValueError,"Duplicate Yahoo daily session"):
+            run_mocked_legacy_page(
+                self.path,self.locks,spec,DAY,"2026-10-13T00:00:00Z",
+                raw_bytes=raw(self._yahoo_daily_body(duplicate_day=True)),
+                now="2026-10-14T00:00:00Z")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts"),[(0,)])
+
+    def test_yahoo_market_symbol_metric_unit_scale_scope_is_preflight_blocked(self):
+        for metric,symbol,unit,scale in (
+            ("dividend","SPY","USD","native"),
+            ("close","QQQ","USD","native"),
+            ("volume","SPY","USD","native"),
+            ("high","GLD","shares","native"),
+            ("close","SPY","USD","fraction_0_1"),
+        ):
+            with self.subTest(metric=metric,symbol=symbol):
+                with self.assertRaisesRegex(ValueError,"Yahoo supported"):
+                    SeriesSpec("yahoo",metric,symbol,"d1",unit,scale)
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
+
+    def test_yahoo_legacy_range_max_never_masquerades_as_paged_equity_request(self):
+        from scripts.package_a_historical_window_planner import (
+            plan_offline_historical_windows)
+        for metric,symbol in (("close","SPY"),("high","GLD"),
+                              ("volume","BTC-USD")):
+            spec=SeriesSpec("yahoo",metric,symbol,"d1",
+                            "native_volume" if metric=="volume" else "USD")
+            endpoint,params=_request_for(
+                spec,DAY,"2026-10-13T00:00:00Z")
+            self.assertEqual(params,{"interval":"1d","range":"max"})
+            self.assertIn("/"+symbol,endpoint)
+            plan=plan_offline_historical_windows(
+                spec,DAY,"2026-10-13T00:00:00Z")
+            self.assertEqual(plan["state"],
+                             "BLOCKED_SOURCE_NATIVE_PAGINATION_UNVERIFIED")
+            self.assertEqual(plan["windows"],[])
+            self.assertFalse(plan["request_ready"])
+        self.assertEqual(self.rows(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
