@@ -14,6 +14,7 @@ from ingestion.package_a_contracts import SeriesSpec, utc
 from ingestion.package_a_legacy_bridge import reconciled_fixture_points
 from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
 from storage import package_a_ledger as ledger
+from scripts.package_a_provenance_audit import audit_receipt_reconstruction
 
 MARKER = ".package-a-offline-fixture"
 MARKER_VALUE = "PACKAGE A OFFLINE SQLITE TEST FIXTURE\n"
@@ -130,6 +131,9 @@ def inspect_fixture(db_path, lock_directory):
     path = _fixture_guard(db_path, lock_directory)
     with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
         db.execute("PRAGMA query_only=ON")
+        # All RAW, receipts, observations and cursors must come from one
+        # consistent SQLite snapshot, not independent per-query snapshots.
+        db.execute("BEGIN")
         fk = db.execute("PRAGMA foreign_key_check").fetchall()
         bad_raw = 0
         for payload, digest in db.execute(
@@ -181,11 +185,13 @@ def inspect_fixture(db_path, lock_directory):
         rows = ledger.read_coverage(db)
         evidence = ledger.read_history_evidence(db)
         integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
-    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok"
+        reconstruction = audit_receipt_reconstruction(db)
+    accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS"
     return {
         "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",
         "rows": observations, "receipts": receipts, "source_coverage": rows,
         "historical_request_evidence": evidence,
+        "receipt_reconstruction": reconstruction,
         "raw_digest_errors": bad_raw, "normalized_digest_errors": bad_points,
         "coverage_errors": bad_coverage, "cursor_window_errors": bad_cursor_windows,
         "lineage_errors": bad_links,
