@@ -35,11 +35,13 @@ class TestPackageAWriterAdoptionReview(unittest.TestCase):
         self.assertEqual(
             len(data["optin_candidate_paths"])+len(data["missing_or_unverified_optin_paths"]),24)
 
-    def test_seventeen_entrypoints_expose_optin_and_a_guard_call(self):
+    def test_twenty_entrypoints_expose_optin_and_a_guard_call(self):
         expected={
             "ingestion/ingest_price.py","ingestion/ingest.py","ingestion/ingest_fred.py",
             "ingestion/ingest_all.py","ingestion/bitview_history.py",
             "ingestion/backfill_metrics.py","ingestion/backfill_onchain_metrics.py",
+            "ingestion/researchbitcoin_v2.py",
+            "scripts/archive_db_migrate.py","scripts/market_context_migrate.py",
             "ingestion/yahoo_history.py","ingestion/researchbitcoin_archive.py",
             "scripts/market_context_ingest.py","scripts/market_history_batch.py",
             "scripts/market_history_forward.py","scripts/market_history_pilot.py",
@@ -49,8 +51,8 @@ class TestPackageAWriterAdoptionReview(unittest.TestCase):
         self.assertEqual(set(self.report["optin_candidate_paths"]),expected)
 
     def test_missing_manual_legacy_backfill_paths_not_false_certified(self):
-        for path in ("ingestion/researchbitcoin_v2.py",
-                     "scripts/archive_db_migrate.py","scripts/market_context_migrate.py"):
+        for path in ("ingestion/news_archive.py",
+                     "ingestion/market_context_sources.py","storage/archive_schema.py"):
             self.assertIn(path,self.report["missing_or_unverified_optin_paths"])
             self.assertFalse(self.entries[path]["production_writer_protected"])
 
