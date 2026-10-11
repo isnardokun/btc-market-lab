@@ -99,7 +99,6 @@ import uuid
 
 
 from pathlib import Path
-from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 
 
@@ -112,6 +111,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 sys.path.insert(0, str(ROOT))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 
 
