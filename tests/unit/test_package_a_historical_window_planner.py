@@ -23,6 +23,8 @@ RBN=SeriesSpec("researchbitcoin","sopr_sth","BTC","d1","ratio")
 BINANCE=SeriesSpec("binance","open_interest","BTCUSDT","5m","BTC")
 BYBIT=SeriesSpec("bybit","open_interest","BTCUSDT","5m","BTC")
 BITVIEW=SeriesSpec("bitview","mvrv","BTC","d1","ratio")
+FRED_MONTHLY=SeriesSpec("fred","CPIAUCSL","USA","monthly","index")
+FRED_DAILY=SeriesSpec("fred","DGS10","USA","d1","percent")
 SEPT="2026-09-01T00:00:00Z"
 OCT="2026-10-01T00:00:00Z"
 OISTART="2026-10-07T00:00:00Z"
@@ -123,10 +125,8 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
         self.assertEqual([w["native_slots"] for w in p["windows"]],[200,1])
         self.assertEqual(p["synthetic_max_rows_per_window"],200)
 
-    def test_fred_yahoo_and_funding_are_explicitly_not_autopaginated(self):
+    def test_yahoo_and_funding_are_explicitly_not_autopaginated(self):
         cases=(
-            SeriesSpec("fred","CPIAUCSL","USA","monthly","index"),
-            SeriesSpec("fred","DGS10","USA","d1","percent"),
             SeriesSpec("yahoo","close","BTC-USD","d1","USD"),
             SeriesSpec("binance","funding_settled","BTCUSDT","event","fraction"),
             SeriesSpec("bybit","funding_settled","BTCUSDT","event","fraction"),
@@ -325,6 +325,115 @@ class HistoricalWindowPlannerTests(unittest.TestCase):
             self.assertEqual(len(row["request_contract_sha256"]),64)
             self.assertNotIn("api_key",str(row))
         self.assertFalse(baseline["provider_entitlement_verified"])
+
+
+    def test_fred_monthly_122_calendar_days_paginates_without_expected_bars(self):
+        p=plan_offline_historical_windows(
+            FRED_MONTHLY,"2026-06-01T00:00:00Z",OCT)
+        self.assertEqual(p["state"],"OFFLINE_SOURCE_WINDOWS_PLANNED")
+        self.assertEqual(p["candidate_pages"],2)
+        self.assertEqual(p["requested_native_slots"],122)
+        self.assertEqual(p["synthetic_max_calendar_days_per_window"],90)
+        self.assertIsNone(p["synthetic_max_rows_per_window"])
+        self.assertEqual(p["source_calendar_observation_expectation"],
+                         "NOT_INFERRED_FRED_RELEASE_VINTAGE")
+        self.assertEqual([w["request_calendar_days"] for w in p["windows"]],
+                         [90,32])
+        self.assertEqual([w["native_slots"] for w in p["windows"]],[None,None])
+        self.assertEqual(p["windows"][0]["end_exclusive_utc"],
+                         p["windows"][1]["start_utc"])
+        self.assertIn("NOT_RELEASE_VERIFIED",p["page_limit_policy"])
+        self.assertFalse(p["external_history_verified"])
+        self.assertFalse(p["provider_entitlement_verified"])
+
+    def test_fred_vintage_revisions_execute_two_native_windows_without_missing_grid(self):
+        start="2026-06-01T00:00:00Z"
+        p=plan_offline_historical_windows(FRED_MONTHLY,start,OCT)
+        first={"observations":[
+            {"date":"2026-06-01","realtime_start":"2026-07-10","value":"322.1"},
+            {"date":"2026-06-01","realtime_start":"2026-08-13","value":"322.2"},
+            {"date":"2026-07-01","realtime_start":"2026-08-13","value":"322.5"}]}
+        second={"observations":[
+            {"date":"2026-09-01","realtime_start":"2026-10-09","value":"324.1"}]}
+        bodies=[FrozenPageBody(json.dumps(payload).encode()) for payload in
+                (first,second)]
+        result=run_offline_planned_history(
+            self.db,self.locks,FRED_MONTHLY,start,OCT,bodies,now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(result["frozen_http_requests"],2)
+        self.assertEqual(result["new_observations"],4)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+        report=inspect_fixture(self.db,self.locks)
+        self.assertEqual(report["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
+        stream=report["source_manifest"]["streams"][0]
+        self.assertEqual(stream["distinct_observation_dates"],3)
+        self.assertEqual(stream["distinct_dimension_keys"],3)
+        self.assertEqual(stream["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertIsNone(stream["local_gap_evidence"])
+        self.assertEqual(stream["historical_completeness"],"NOT_VERIFIED")
+        self.assertFalse(stream["request_ready"])
+        self.assertEqual(self.sql("SELECT end_exclusive_utc FROM package_a_cursors"),
+                         [(OCT,)])
+
+    def test_fred_second_page_503_recovery_preserves_previous_vintage_receipt(self):
+        start="2026-06-01T00:00:00Z"
+        p=plan_offline_historical_windows(FRED_MONTHLY,start,OCT)
+        raw1=json.dumps({"observations":[
+            {"date":"2026-06-01","value":"322.1",
+             "realtime_start":"2026-07-10"}]}).encode()
+        raw2=json.dumps({"observations":[
+            {"date":"2026-09-01","value":"324.1",
+             "realtime_start":"2026-10-09"}]}).encode()
+        original=run_offline_planned_history(
+            self.db,self.locks,FRED_MONTHLY,start,OCT,
+            [FrozenPageBody(raw1),FrozenPageBody(b"503 synthetic",503)],
+            now=NOW)
+        self.assertEqual(original["state"],"BATCH_BLOCKED")
+        self.assertEqual(original["new_observations"],1)
+        before=self.sql("SELECT raw_payload FROM package_a_receipts WHERE status='ok'")
+        recovered=recover_offline_planned_history(
+            self.db,self.locks,FRED_MONTHLY,start,OCT,
+            [FrozenPageBody(raw1),FrozenPageBody(raw2)],
+            prior_run_id=original["run_id"],now=NOW)
+        self.assertEqual(recovered["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(recovered["recovery_start_index"],1)
+        self.assertEqual(recovered["frozen_http_requests"],1)
+        self.assertEqual(recovered["new_observations"],1)
+        self.assertEqual(self.sql("SELECT raw_payload FROM package_a_receipts "
+                                  "WHERE status='ok' ORDER BY rowid")[0:1],before)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(3,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(2,)])
+        self.assertEqual(inspect_fixture(self.db,self.locks)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_fred_daily_sparse_calendar_does_not_infer_missing_weekends(self):
+        start="2026-10-01T00:00:00Z"
+        end="2026-10-08T00:00:00Z"
+        p=plan_offline_historical_windows(FRED_DAILY,start,end)
+        self.assertEqual(p["candidate_pages"],1)
+        self.assertIsNone(p["windows"][0]["native_slots"])
+        data={"observations":[
+            {"date":"2026-10-01","value":"4.2","realtime_start":"2026-10-02"},
+            {"date":"2026-10-06","value":"4.1","realtime_start":"2026-10-07"}]}
+        result=run_offline_planned_history(
+            self.db,self.locks,FRED_DAILY,start,end,
+            [FrozenPageBody(json.dumps(data).encode())],now=NOW)
+        self.assertEqual(result["state"],"BATCH_OFFLINE_ACCEPTED")
+        self.assertEqual(result["new_observations"],2)
+        m=result["audit"]["source_manifest"]["streams"][0]
+        self.assertEqual(m["local_grid_state"],
+                         "NOT_APPLICABLE_SOURCE_CALENDAR_OR_EVENTS")
+        self.assertIsNone(m["local_gap_evidence"])
+        self.assertEqual(m["archived_rows"],2)
+        self.assertEqual(m["historical_completeness"],"NOT_VERIFIED")
+
+    def test_fred_unsupported_series_never_starts_fake_http_or_db(self):
+        bad=SeriesSpec("fred","NOT_IN_FRED_CATALOG","USA","monthly","index")
+        with self.assertRaisesRegex(ValueError,"series/frequency mismatch"):
+            plan_offline_historical_windows(bad,SEPT,OCT)
+        self.assertEqual(self.sql(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name='package_a_receipts'"),[(0,)])
 
 
 if __name__=="__main__":
