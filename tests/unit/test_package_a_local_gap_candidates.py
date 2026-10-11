@@ -101,5 +101,92 @@ class OfflineGapCandidates(unittest.TestCase):
         self.assertEqual(result["candidates"],[])
 
 
+    def test_off_grid_observation_blocks_rather_than_understates_missing(self):
+        self.add(A)
+        self.add("2026-10-08T00:06:00Z")
+        result = scan_archived_gaps(self.db, self.oi(), A, D)
+        self.assertEqual(result["state"], "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+        self.assertEqual(result["candidates"], [])
+        self.assertFalse(result["execution_authorized"])
+        self.assertEqual(result["historical_completeness"], "NOT_VERIFIED")
+
+    def test_corrupt_dimension_blocks_oi_completeness(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_observations SET dimension_key='vintage'")
+        result = scan_archived_gaps(self.db, self.oi(), A, B)
+        self.assertEqual(result["state"], "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_mismatched_unit_and_scale_are_not_valid_points(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_observations SET unit='USD'")
+        self.assertEqual(scan_archived_gaps(self.db, self.oi(), A, B)["state"],
+                         "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+        self.db.execute("UPDATE package_a_observations SET unit='BTC',raw_scale='scaled'")
+        self.assertEqual(scan_archived_gaps(self.db, self.oi(), A, B)["state"],
+                         "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_failed_receipt_cannot_certify_an_archived_observation(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_receipts SET status='failed'")
+        result = scan_archived_gaps(self.db, self.oi(), A, B)
+        self.assertEqual(result["state"], "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+        self.assertEqual(result["provider_availability"], "NOT_CHECKED")
+
+    def test_receipt_provider_mismatch_blocks_false_coverage(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_receipts SET provider='bybit'")
+        self.assertEqual(scan_archived_gaps(self.db, self.oi(), A, B)["state"],
+                         "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_receipt_time_boundary_mismatch_blocks_false_coverage(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_receipts SET start_utc=?", (B,))
+        self.assertEqual(scan_archived_gaps(self.db, self.oi(), A, B)["state"],
+                         "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_utc_plus_zero_offset_in_stored_row_is_detected_not_skipped(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_observations SET observed_utc=?", (
+            "2026-10-08T00:00:00+00:00",))
+        result = scan_archived_gaps(self.db, self.oi(), A, B)
+        self.assertEqual(result["state"], "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_fractional_stored_time_is_detected_not_silently_truncated(self):
+        self.add(A)
+        self.db.execute("UPDATE package_a_observations SET observed_utc=?", (
+            "2026-10-08T00:00:00.500Z",))
+        self.assertEqual(scan_archived_gaps(self.db, self.oi(), A, B)["state"],
+                         "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+
+    def test_explicit_boundaries_with_utc_offset_are_canonicalized(self):
+        self.add(A)
+        self.add(B)
+        result = scan_archived_gaps(self.db, self.oi(),
+                    "2026-10-08T00:00:00+00:00",
+                    "2026-10-08T00:10:00+00:00")
+        self.assertEqual(result["state"], "OFFLINE_LOCAL_GAP_CANDIDATES")
+        self.assertEqual(result["missing_candidate_slots"], 0)
+        self.assertEqual(result["observed_distinct_timestamps"], 2)
+
+    def test_fred_daily_calendar_is_not_a_five_minute_or_day_grid(self):
+        spec = SeriesSpec("fred", "DGS10", "USA", "d1", "percent")
+        result = scan_archived_gaps(self.db, spec, A, LATER)
+        self.assertEqual(result["state"], "UNSUPPORTED_CADENCE_NO_INFERRED_GAPS")
+        self.assertEqual(result["candidates"], [])
+        self.assertFalse(result["request_ready"])
+
+    def test_noncanonical_duplicate_dimension_cannot_cause_negative_gaps(self):
+        self.add(A)
+        self.db.execute(
+            "INSERT INTO package_a_observations "
+            "(provider,metric,symbol,frequency,observed_utc,"
+            "dimension_key,value,unit,raw_scale,row_sha256,receipt_id) "
+            "VALUES ('binance','open_interest','BTCUSDT','5m',?"
+            ",'revised',1,'BTC','native','digest','r')", (A,))
+        result = scan_archived_gaps(self.db, self.oi(), A, B)
+        self.assertEqual(result["state"], "BLOCKED_SOURCE_OBSERVATION_DRIFT")
+        self.assertEqual(result["candidates"], [])
+
+
 if __name__=="__main__":
     unittest.main()
