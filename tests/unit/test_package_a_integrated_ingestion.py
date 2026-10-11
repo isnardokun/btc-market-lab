@@ -374,6 +374,35 @@ class TestPackageAIntegratedSlice(unittest.TestCase):
         self.assertEqual(bad["state"],"LOCAL_FIXTURE_INTEGRITY_FAIL")
         self.assertEqual(bad["coverage_errors"],1)
 
+    def test_legacy_parser_disagreement_fails_closed_no_cursor(self):
+        from unittest.mock import patch
+        spec,start,end,payload = sources()[1]
+        with patch("ingestion.package_a_legacy_bridge.bitview_history.decode_day1_response",
+                   return_value=[(unix(DAY), 99.0)]):
+            report=self.apply(spec,start,end,payload)
+        self.assertEqual(report["state"],"PAGE_NOT_COMMITTED")
+        self.assertEqual(report["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations")[0][0],0)
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0],0)
+
+    def test_source_native_rbn_parser_conflict_stops_before_write(self):
+        from unittest.mock import patch
+        spec,start,end,payload = sources()[0]
+        with patch("ingestion.package_a_legacy_bridge.researchbitcoin_v2.parse_scalar_rows",
+                   return_value={"2026-10-08":("2026-10-08T00:00:00+00:00",42.0)}):
+            report=self.apply(spec,start,end,payload)
+        self.assertEqual(report["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_observations")[0][0],0)
+
+    def test_yahoo_existing_ohlcv_parser_must_agree_with_close_ledger(self):
+        from unittest.mock import patch
+        spec,start,end,payload = sources()[3]
+        with patch("ingestion.package_a_legacy_bridge.yahoo_history.extract_daily",
+                   return_value=[(unix(DAY),1,2,3,80000.0,10)]):
+            report=self.apply(spec,start,end,payload)
+        self.assertEqual(report["status"],"rejected")
+        self.assertEqual(self.read("SELECT COUNT(*) FROM package_a_cursors")[0][0],0)
+
     def test_runner_registers_package_suite_without_hardcoded_old_count(self):
         path=Path(__file__).resolve().parents[1]/"run_all.py"
         t=ast.parse(path.read_text(encoding="utf-8"))
