@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 import sqlite3
 import sys
 import time
@@ -142,9 +143,18 @@ def main(argv=None):
     p.add_argument("--pause-seconds",type=int,default=2)
     p.add_argument("--db",type=Path,default=Path(DB_PATH))
     p.add_argument("--apply",action="store_true")
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Explicit shared global writer lock before batch SQL/network")
     args=p.parse_args(argv)
     if not 1<=args.max_pages<=100 or not 1<=args.pause_seconds<=60:
         p.error("max-pages must be 1-100 and pause-seconds must be 1-60")
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir,lambda:_run_batch_args(args),label="derivatives-backfill")
+    return _run_batch_args(args)
+
+
+def _run_batch_args(args):
     if not args.apply:
         print(json.dumps({"status":"PLAN_ONLY","provider":args.provider,"metric":args.metric,
                           "max_pages":args.max_pages,"pause_seconds":args.pause_seconds,
