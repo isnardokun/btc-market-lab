@@ -162,12 +162,12 @@ def audit_report_html(source, *, report_day=None, strict_asof=False):
     if ticker is None or number(ticker.group(1)) is None:
         errors.append("Precio principal BTC/USD ausente o inválido")
 
-    sections = re.findall(r"<section>([\s\S]*?)</section>", source)
+    sections = re.findall(r"<section\b[^>]*>([\s\S]*?)</section>", source)
     inspected = set()
     for section in sections:
-        if "Bitcoin (BTC)" in section or "Bitcoin (BTC) —" in section:
+        if "Bitcoin (BTC)" in plain(section):
             asset = "BTC"
-        elif "SPDR S&P 500 ETF" in section and "section-title" in section:
+        elif "SPDR S&P 500 ETF" in plain(section) and "section-title" in section:
             asset = "SPY"
         elif ("Oro Futuro" in section or section[:500].count("Oro") >= 1) and "section-title" in section:
             asset = "GOLD"

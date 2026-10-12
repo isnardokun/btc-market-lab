@@ -419,6 +419,58 @@ def check_presentacion():
     if '<style' not in html and 'class=' not in html:
         issue("presentacion", "warning", "Reporte sin estilos CSS aplicados")
 
+def evaluate_package_b_fixture(document, *, db_path, lock_dir, asof, cutoff=None):
+    """Evaluate the B schema with explicit marked synthetic inputs only.
+
+    This separate contract shares the five categories and >=95 threshold with
+    the legacy gate. It never invokes legacy DB/report defaults or sends a
+    report. Read RAW/lineage and calculate from ONE read-only snapshot; do not
+    accept a caller-supplied analytical model as evidence. Old archive-specific
+    reconcilers apply to the old schema; B reconciles its native A ledger.
+    """
+    from analysis.package_b_evidence import read_report_snapshot
+    from analysis.package_b_analytics import analyze_snapshot
+    from rendering.package_b_report import audit_candidate_report
+
+    category_errors = {category: [] for category in WEIGHTS}
+    local = None
+    snapshot_sha = None
+    try:
+        snapshot = read_report_snapshot(db_path, lock_dir, asof=asof, cutoff=cutoff)
+        snapshot_sha = snapshot.sha256
+        model = analyze_snapshot(snapshot)
+        local = audit_candidate_report(model, document)
+        for failure in local['failures']:
+            category = {
+                'CRITICAL_INPUT_DATA': 'exactitud',
+                'HTML_DOES_NOT_MATCH_EVIDENCE': 'consistencia',
+                'ANALYTICS_DO_NOT_MATCH_EVIDENCE': 'analisis',
+                'MODEL_EVIDENCE_INVALID': 'trazabilidad',
+                'REMOTE_OR_UNSAFE_DEPENDENCY': 'presentacion',
+                'LEGACY_FINANCIAL_CONTENT_CHECKS': 'consistencia',
+            }.get(failure, 'trazabilidad')
+            category_errors[category].append(failure)
+    except (ValueError, TypeError, OSError, sqlite3.Error) as exc:
+        category_errors['trazabilidad'].append('FIXTURE_EVIDENCE_BLOCKED:' + type(exc).__name__)
+
+    scores = {category: 0 if errors else 100 for category, errors in category_errors.items()}
+    critical_count = sum(len(errors) for errors in category_errors.values())
+    total = round(sum(scores[category] * WEIGHTS[category] for category in WEIGHTS), 2)
+    passed = critical_count == 0 and total >= PASS_SCORE
+    return {
+        'contract': 'package-b-marked-fixture-v1',
+        'state': 'B_OFFLINE_REPORT_GATE_PASS' if passed else 'BLOCKED_B_OFFLINE_REPORT_GATE',
+        'pass': passed, 'score_total': total, 'pass_score': PASS_SCORE,
+        'scores': scores, 'weights': dict(WEIGHTS), 'critical_count': critical_count,
+        'all_issues': [message for messages in category_errors.values() for message in messages],
+        'blocked_reason': 'critical_errors' if critical_count else ('low_score' if not passed else None),
+        'report_sha256': hashlib.sha256(document.encode()).hexdigest(),
+        'snapshot_sha256': snapshot_sha, 'local_reconciliation': local,
+        'production_publication_authorized': False, 'external_history_verified': False,
+        'legacy_daily_contract': 'PRESERVED_NOT_EXECUTED_FOR_PACKAGE_B_SCHEMA',
+    }
+
+
 # ─── EJECUCIÓN PRINCIPAL ──────────────────────────────────────────────────
 def run():
     print(f"\n{'='*65}")

@@ -1,0 +1,12 @@
+{
+  "version": "research-studio-b-v1",
+  "viewports": [320, 390, 768, 1440],
+  "sections": 8,
+  "charts": 3,
+  "source_series": 42,
+  "evidence_series": 57,
+  "minimum_pdf_pages": 8,
+  "maximum_pdf_pages": 14,
+  "minimum_text_characters_per_pdf_page": 200,
+  "required_text": ["EJEMPLO SINTÉTICO", "Bitcoin (BTC)", "SPDR S&P 500 ETF (SPY)", "Gold Shares (GLD)", "Fuentes y trazabilidad", "UNVERIFIED"]
+}

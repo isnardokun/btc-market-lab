@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Reject tracked runtime outputs in public Git
         shell: bash
         run: |
@@ -25,15 +28,15 @@ jobs:
             exit 1
           fi
           echo "No generated portable HTML, manifest, Telegram receipts, or dashboard snapshot tracked."
-      - name: Complete 73-registered-suite OFFLINE regression (1 live blocked)
+      - name: Complete 76-registered-suite OFFLINE regression (1 live blocked)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           BTC_RESEARCH_HOME: ${{ github.workspace }}
         run: |
           set -euo pipefail
           python3 tests/run_all.py | tee "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_EXECUTED=72$' "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_PASSED=72$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_EXECUTED=75$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_PASSED=75$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_SUITES_SKIPPED=1$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_STATUS=NOT_TESTED_NOT_AUTHORIZED$' "$RUNNER_TEMP/package_a_offline_runner.log"
       - name: Isolated worktree runtime retention regression
@@ -41,3 +44,20 @@ jobs:
           BTC_RESEARCH_HOME: ${{ github.workspace }}
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 -m unittest -v tests.unit.test_hermes_skill.HermesSkillTests.test_local_runtime_artifact_retention_survives_git_untracking
+      - name: Install pinned local visual QA tools (no market APIs)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/b-visual-tools" --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/b-visual-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends poppler-utils
+      - name: Synthetic report responsive and A4 acceptance (no upload or publication)
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          BTC_RESEARCH_HOME: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python3 scripts/package_b_report_fixture.py --output-dir "$RUNNER_TEMP/b-report"
+          node scripts/package_b_visual_qa.cjs \
+            --html "$RUNNER_TEMP/b-report/package_b_synthetic_report.html" \
+            --gate "$RUNNER_TEMP/b-report/package_b_synthetic_gate.json" \
+            --output-dir "$RUNNER_TEMP/b-visual-evidence" \
+            --playwright-module "$RUNNER_TEMP/b-visual-tools/node_modules/playwright"
