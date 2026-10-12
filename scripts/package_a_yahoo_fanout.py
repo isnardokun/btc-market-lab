@@ -19,7 +19,7 @@ from scripts.package_a_frozen_legacy_transport import (
 from scripts.package_a_ingest_fixture import (
     _fixture_guard, require_offline_precommit_integrity,
 )
-from scripts.package_a_parent_lock import hold_offline_parent_lease
+from scripts.package_a_parent_lock import hold_offline_parent_lease, verify_offline_parent_lease
 from scripts.market_r10e11_writer_exclusion import WriterLockBusy
 from storage import package_a_ledger as ledger
 
@@ -68,6 +68,7 @@ def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
          endpoint,params],sort_keys=True,separators=(",",":")).encode()).hexdigest()
     try:
         with hold_offline_parent_lease(lock_dir):
+            verify_offline_parent_lease(lock_dir)
             parse_error=None
             payload=None
             parsed={}
@@ -139,6 +140,7 @@ def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
                 if fault=="before_precommit":
                     raise ledger.SimulatedCrash("YAHOO_FANOUT_ATOMIC_ROLLBACK")
                 quality=require_offline_precommit_integrity(conn)
+                verify_offline_parent_lease(lock_dir)
             return {
                 "state":("YAHOO_FANOUT_COMMITTED_OFFLINE" if status=="ok" else
                          "YAHOO_FANOUT_EMPTY_UNVERIFIED" if status=="empty" else
