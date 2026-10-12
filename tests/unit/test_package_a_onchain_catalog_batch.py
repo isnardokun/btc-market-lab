@@ -12,7 +12,7 @@ import unittest
 
 from scripts.package_a_onchain_catalog_batch import (
     _BITVIEW_UNIT,configured_onchain_series,plan_offline_onchain_catalog,
-    run_offline_onchain_catalog,
+    run_offline_onchain_catalog,recover_offline_onchain_catalog,
 )
 from scripts.package_a_historical_window_planner import FrozenPageBody
 from scripts.package_a_ingest_fixture import MARKER,MARKER_VALUE,inspect_fixture
@@ -315,6 +315,178 @@ class OnchainCatalogHistoryTests(unittest.TestCase):
             raw_bytes=json.dumps(data).encode(),now=NOW)
         self.assertEqual(r["status"],"rejected")
         self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(0,)])
+
+
+    def resume(self,prior,plan,corrected=None,*,manifest=None):
+        return recover_offline_onchain_catalog(
+            self.db,self.lock,plan,
+            bodies(plan) if corrected is None else corrected,
+            prior_runs=prior["recovery_manifest"] if manifest is None else manifest,
+            now=NOW)
+
+    def test_full_catalog_shard_0_429_recovers_without_replaying_successful_prefix(self):
+        plan=self.plan()
+        first=self.run_plan(plan,bodies(plan,overrides={
+            2:FrozenPageBody(b"mock-429-first-shard",429)}))
+        self.assertEqual(first["state"],"OFFLINE_ONCHAIN_CATALOG_BLOCKED")
+        self.assertEqual(first["pages_attempted"],3)
+        before=self.sql("SELECT receipt_id FROM package_a_observations ORDER BY rowid")
+        result=self.resume(first,plan)
+        self.assertEqual(result["state"],"OFFLINE_ONCHAIN_RECOVERY_ACCEPTED")
+        self.assertEqual(result["verified_previous_successful_pages"],2)
+        self.assertEqual(result["pages_attempted"],34)
+        self.assertEqual(result["frozen_http_requests"],34)
+        self.assertEqual(result["new_observations"],34)
+        self.assertFalse(result["previously_accepted_pages_replayed"])
+        self.assertEqual([x["planned_pages"] for x in result["new_source_runs"]],
+                         [30,4])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),
+                         [(36,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(37,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_source_runs"),[(3,)])
+        self.assertEqual(self.sql("SELECT receipt_id FROM package_a_observations "
+                                  "ORDER BY rowid LIMIT 2"),before)
+        self.assertEqual(inspect_fixture(self.db,self.lock)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+        self.assertEqual(len(result["recovery_manifest"]),3)
+        self.assertFalse(result["production_authorized"])
+
+    def test_second_shard_failure_recovery_never_refetches_first_34_pages(self):
+        plan=self.plan()
+        original=self.run_plan(plan,bodies(plan,overrides={
+            34:FrozenPageBody(b"mock-second-shard-503",503)}))
+        self.assertEqual(original["pages_attempted"],35)
+        self.assertEqual([x["state"] for x in original["source_runs"]],
+                         ["BATCH_OFFLINE_ACCEPTED","BATCH_BLOCKED"])
+        prior=self.sql("SELECT receipt_id FROM package_a_observations ORDER BY rowid")
+        result=self.resume(original,plan)
+        self.assertEqual(result["state"],"OFFLINE_ONCHAIN_RECOVERY_ACCEPTED")
+        self.assertEqual(result["verified_previous_successful_pages"],34)
+        self.assertEqual(result["pages_attempted"],2)
+        self.assertEqual(result["new_observations"],2)
+        self.assertEqual(len(result["new_source_runs"]),1)
+        self.assertEqual(result["new_source_runs"][0]["start_page"],34)
+        self.assertEqual(result["new_source_runs"][0]["planned_pages"],2)
+        self.assertEqual(self.sql("SELECT receipt_id FROM package_a_observations "
+                                  "ORDER BY rowid LIMIT 34"),prior)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(36,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(37,)])
+        self.assertEqual(inspect_fixture(self.db,self.lock)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_first_request_of_second_shard_timeout_can_resume_exact_boundary(self):
+        plan=self.plan()
+        original=self.run_plan(plan,bodies(plan,overrides={
+            32:FrozenPageBody(b"",None)}))
+        self.assertEqual(original["pages_attempted"],33)
+        result=self.resume(original,plan)
+        self.assertEqual(result["state"],"OFFLINE_ONCHAIN_RECOVERY_ACCEPTED")
+        self.assertEqual(result["pages_attempted"],4)
+        self.assertEqual(result["new_source_runs"][0]["start_page"],32)
+        self.assertEqual(result["new_source_runs"][0]["planned_pages"],4)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(36,)])
+
+    def test_two_retry_attempts_same_page_chain_until_success(self):
+        plan=self.plan([("bitview","mvrv"),("researchbitcoin","sopr_sth"),
+                        ("researchbitcoin","liveliness")])
+        first=self.run_plan(plan,bodies(plan,overrides={
+            1:FrozenPageBody(b"mock-429",429)}))
+        second=self.resume(first,plan,corrected=bodies(plan,overrides={
+            1:FrozenPageBody(b"mock-503",503)}))
+        self.assertEqual(second["state"],"OFFLINE_ONCHAIN_RECOVERY_BLOCKED")
+        self.assertEqual(second["pages_attempted"],1)
+        self.assertEqual(second["verified_previous_successful_pages"],1)
+        self.assertEqual(len(second["recovery_manifest"]),2)
+        third=self.resume(second,plan)
+        self.assertEqual(third["state"],"OFFLINE_ONCHAIN_RECOVERY_ACCEPTED")
+        self.assertEqual(third["pages_attempted"],2)
+        self.assertEqual(third["verified_previous_successful_pages"],1)
+        self.assertEqual(len(third["recovery_manifest"]),3)
+        self.assertEqual(self.sql("SELECT status,COUNT(*) FROM package_a_receipts "
+                                  "GROUP BY status ORDER BY status"),
+                         [("failed",2),("ok",3)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_observations"),[(3,)])
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_cursors"),[(3,)])
+        self.assertEqual(inspect_fixture(self.db,self.lock)["state"],
+                         "LOCAL_FIXTURE_INTEGRITY_PASS")
+
+    def test_fully_accepted_catalog_explicit_recovery_is_noop(self):
+        plan=self.plan()
+        first=self.run_plan(plan)
+        self.assertEqual(first["state"],"OFFLINE_ONCHAIN_CATALOG_ACCEPTED")
+        previous=self.sql("SELECT COUNT(*) FROM package_a_receipts")
+        recovery=self.resume(first,plan)
+        self.assertEqual(recovery["state"],"OFFLINE_ONCHAIN_RECOVERY_ACCEPTED")
+        self.assertEqual(recovery["pages_attempted"],0)
+        self.assertEqual(recovery["new_source_runs"],[])
+        self.assertEqual(recovery["verified_previous_successful_pages"],36)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),
+                         previous)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_source_runs"),[(2,)])
+
+    def test_changed_frozen_body_of_previously_committed_page_refused(self):
+        plan=self.plan([("bitview","mvrv"),("researchbitcoin","sopr_sth")])
+        first=self.run_plan(plan,bodies(plan,overrides={
+            1:FrozenPageBody(b"retry-429",429)}))
+        wrong=bodies(plan)
+        wrong[0]=FrozenPageBody(wrong[0].body+b" ")
+        before=self.sql("SELECT COUNT(*) FROM package_a_receipts")
+        with self.assertRaisesRegex(ValueError,"SUCCESS_RAW_DRIFT"):
+            self.resume(first,plan,wrong)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),before)
+
+    def test_manifest_omission_or_reordered_prior_runs_fails_closed(self):
+        plan=self.plan()
+        old=self.run_plan(plan,bodies(plan,overrides={
+            34:FrozenPageBody(b"mock-503",503)}))
+        original=self.sql("SELECT COUNT(*) FROM package_a_receipts")
+        for bad in (
+            old["recovery_manifest"][1:],
+            list(reversed(old["recovery_manifest"])),
+            [old["recovery_manifest"][0],old["recovery_manifest"][0]],
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaisesRegex(ValueError,
+                                             "ONCHAIN_RECOVERY_(NONCONTIGUOUS_RUN|DUPLICATE_SOURCE_RUN)"):
+                    self.resume(old,plan,manifest=bad)
+                self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),
+                                 original)
+
+    def test_prior_run_id_unknown_and_tampered_plan_never_start_new_attempt(self):
+        plan=self.plan([("bitview","mvrv"),("researchbitcoin","sopr_sth")])
+        previous=self.run_plan(plan,bodies(plan,overrides={
+            1:FrozenPageBody(b"failed",429)}))
+        manifest=[dict(x) for x in previous["recovery_manifest"]]
+        manifest[0]["source_run_id"]="f"*32
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RECOVERY_UNKNOWN_RUN"):
+            self.resume(previous,plan,manifest=manifest)
+        plan["ordered_requests"][0]["metric"]="not-the-signed-metric"
+        with self.assertRaisesRegex(ValueError,"PLAN_DRIFT"):
+            self.resume(previous,plan)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
+
+    def test_global_writer_lock_busy_blocks_catalog_resume_before_any_new_work(self):
+        plan=self.plan([("bitview","mvrv"),("researchbitcoin","sopr_sth")])
+        old=self.run_plan(plan,bodies(plan,overrides={
+            1:FrozenPageBody(b"simulated-429",429)}))
+        count=self.sql("SELECT COUNT(*) FROM package_a_receipts")
+        with hold_writer_lock(self.lock,namespace="btc-research-global-writer-v1"):
+            result=self.resume(old,plan)
+        self.assertEqual(result["state"],"BLOCKED_WRITER_BUSY")
+        self.assertEqual(result["frozen_http_requests"],0)
+        self.assertEqual(result["sqlite_connections_started"],0)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),count)
+
+    def test_corrupt_persisted_success_prevents_recovery_before_any_new_request(self):
+        plan=self.plan([("bitview","mvrv"),("researchbitcoin","sopr_sth")])
+        old=self.run_plan(plan,bodies(plan,overrides={
+            1:FrozenPageBody(b"mock-429",429)}))
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE package_a_receipts SET raw_sha256=? "
+                       "WHERE status='ok'",("0"*64,))
+        with self.assertRaisesRegex(ValueError,"BLOCKED_RECOVERY_DB_INTEGRITY"):
+            self.resume(old,plan)
+        self.assertEqual(self.sql("SELECT COUNT(*) FROM package_a_receipts"),[(2,)])
 
 
 if __name__=="__main__":
