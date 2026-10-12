@@ -1,8 +1,9 @@
 # Package A — Engineering execution ledger (living document in ONE PR)
 
-**Status:** `A_IN_PROGRESS / OFFLINE_QA_CANDIDATE / EXTERNAL_VERIFICATION_PENDING`
+**Status:** `A_OFFLINE_ACCEPTED / MERGED / EXTERNAL_VERIFICATION_PENDING`
 **Working branch:** `feat/package-a-integrated-historical-ingestion`.
 **Source of truth:** [Program A/B/C](INTEGRATED_DELIVERY_PROGRAM_ABC.md), [Issue #76](https://github.com/isnardokun/btc-market-lab/issues/76), [Agent roles](../AGENTS.md).
+**Cierre vigente:** [aceptación offline e integración](PACKAGE_A_OFFLINE_ACCEPTANCE.md); HEAD 7744ade, merge 45bbb35. Hermes STOP.
 **Baseline master:** `8ca80e0f221ad2b0b276f6557d16ee00fe0ee381` (R10-E.14 integrated; 52 prior suites).
 **Rule:** update THIS draft PR with meaningful commits until A is integrated; **do not create micro-PRs** for the following workstreams.
 
@@ -465,3 +466,16 @@ Siguiente gate autorizado: publicar el conjunto en ESTA PR, observar CI del
 SHA exacto y emitir UNA orden formal Hermes, offline y QA-only, con STOP tras
 un único reporte. No merge hasta PASS Hermes en ese mismo SHA y P0/P1=0.
 No APIs live, SQLite productiva, backups, cron, flags o publicaciones ejecutados.
+
+
+## 2026-10-12 — A_OFFLINE_ACCEPTED e integrado en master
+
+Hermes completó QA 72/72 offline y retention RC0 sobre HEAD `7744ade`,
+Python 3.14.7, checkout limpio/aislado. Limitación del RC original sin captura
+independiente documentada y aceptada con marcador determinista, validación
+local RC0 y CI pipefail SUCCESS. Aceptación: comentario #6126185175.
+Merge #79: `45bbb3530df7f177844decf6e7df5f17d51d4ff4`; árbol idéntico al
+HEAD probado (diff RC0). [Cierre vigente](PACKAGE_A_OFFLINE_ACCEPTANCE.md).
+Hermes STOP; B/C pendientes; EXTERNAL_VERIFICATION_PENDING. No producción,
+APIs reales, suite live, cron ni publicación activados. Estimaciones previas
+≈90% se conservan como historial anterior a la aceptación, no estado actual.

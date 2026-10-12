@@ -1,5 +1,7 @@
 # Package A — Cuadro de avance por criterios de aceptación
 
+**Actualización 2026-10-12:** `A_OFFLINE_ACCEPTED / MERGED / EXTERNAL_VERIFICATION_PENDING`. [Cierre y evidencia vigente](PACKAGE_A_OFFLINE_ACCEPTANCE.md). La tabla y el ≈90% siguientes conservan el corte anterior al QA; Hermes ya aprobó 72/72 offline y retention, y PR #79 se integró como 45bbb35. No representan el estado actual ni cobertura de APIs reales.
+
 **Corte:** 2026-10-11 · **PR:** #79 (borrador) · **Estado:** `A_IN_PROGRESS`
 **Avance estimado de ingeniería offline:** **≈90%** · **Confianza:** orientativa, ±5 puntos porcentuales.
 Este es un juicio técnico de los entregables frente a `docs/INTEGRATED_DELIVERY_PROGRAM_ABC.md`
