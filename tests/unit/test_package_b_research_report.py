@@ -146,4 +146,76 @@ class FundingDisplayTests(unittest.TestCase):
         document=render_report(analyze_snapshot(snapshot))
         self.assertIn('1e-08',document)
 
+
+class PublicationGateFixtureTests(unittest.TestCase):
+    def test_existing_gate_evaluates_fixture_and_blocks_html_tampering(self):
+        import tempfile,sqlite3
+        from pathlib import Path
+        from scripts.package_b_report_fixture import create_example_fixture
+        from scripts.package_a_ingest_fixture import MARKER,MARKER_VALUE
+        from analysis.package_b_evidence import read_report_snapshot
+        from validation.publication_gate import evaluate_package_b_fixture,WEIGHTS,PASS_SCORE
+        with tempfile.TemporaryDirectory(prefix='package-a-fixture-') as directory:
+            root=Path(directory);locks=root/'locks';locks.mkdir()
+            (root/MARKER).write_text(MARKER_VALUE)
+            path=root/'package_a_synthetic.db'
+            with sqlite3.connect(path) as db:db.execute('CREATE TABLE keep(id INTEGER)')
+            create_example_fixture(path,locks)
+            asof='2026-10-12T00:05:00Z'
+            model=analyze_snapshot(read_report_snapshot(path,locks,asof=asof))
+            document=render_report(model)
+            before=path.read_bytes()
+            gate=evaluate_package_b_fixture(document,db_path=path,lock_dir=locks,asof=asof)
+            self.assertTrue(gate['pass'],gate)
+            self.assertEqual(set(gate['scores']),set(WEIGHTS))
+            self.assertGreaterEqual(gate['score_total'],PASS_SCORE)
+            self.assertEqual(gate['state'],'B_OFFLINE_REPORT_GATE_PASS')
+            self.assertFalse(gate['production_publication_authorized'])
+            bad=evaluate_package_b_fixture(document.replace('stroke-width="2.6"','stroke-width="9"'),
+                db_path=path,lock_dir=locks,asof=asof)
+            self.assertFalse(bad['pass'])
+            self.assertGreater(bad['critical_count'],0)
+            self.assertEqual(path.read_bytes(),before)
+
+    def test_unmarked_database_is_blocked_without_touching_legacy_defaults(self):
+        import tempfile,sqlite3
+        from pathlib import Path
+        from unittest.mock import patch
+        from validation import publication_gate
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);path=root/'unmarked.db'
+            with sqlite3.connect(path) as db:db.execute('CREATE TABLE keep(id INTEGER)')
+            before=path.read_bytes()
+            with patch.object(publication_gate,'check_exactitud',side_effect=AssertionError('legacy IO')):
+                gate=publication_gate.evaluate_package_b_fixture('<html></html>',
+                    db_path=path,lock_dir=root,asof='2026-10-12T00:05:00Z')
+            self.assertFalse(gate['pass'])
+            self.assertEqual(gate['state'],'BLOCKED_B_OFFLINE_REPORT_GATE')
+            self.assertEqual(path.read_bytes(),before)
+
+
+class VisualGateInputTests(unittest.TestCase):
+    def test_visual_runner_rejects_nonboolean_pass_or_missing_nonfinite_score_before_browser(self):
+        import hashlib,json,shutil,subprocess,tempfile
+        from pathlib import Path
+        node=shutil.which('node')
+        if node is None:self.skipTest('Node required for the separate visual CI job')
+        script=Path(__file__).resolve().parents[2]/'scripts/package_b_visual_qa.cjs'
+        document=render_report(analyze_snapshot(snapshot_fixture())).encode()
+        sha=hashlib.sha256(document).hexdigest()
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);html=root/'report.html';html.write_bytes(document)
+            for invalid in ({'pass':'false','score_total':100},
+                            {'pass':True}, {'pass':True,'score_total':'not-a-number'},
+                            {'pass':True,'score_total':'100'}):
+                gate={'html_sha256':sha,'production_publication_authorized':False,
+                      'publication_gate':{'report_sha256':sha,'critical_count':0,**invalid}}
+                gate_path=root/'gate.json';gate_path.write_text(json.dumps(gate))
+                result=subprocess.run([node,str(script),'--html',str(html),'--gate',str(gate_path),
+                    '--output-dir',str(root/'new-output'),'--playwright-module',str(root/'no-browser')],
+                    text=True,capture_output=True)
+                self.assertEqual(result.returncode,1)
+                self.assertIn('Unapproved or mismatched synthetic HTML/gate',result.stderr)
+                self.assertFalse((root/'new-output').exists())
+
 if __name__=='__main__': unittest.main()

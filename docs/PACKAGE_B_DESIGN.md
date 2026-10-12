@@ -57,11 +57,16 @@ se verifica antes de B_OFFLINE_ACCEPTED. No basta una plantilla bonita.
 ETFs/news/calendar/liquidaciones sin dataset verificable figuran NO_DATA.
 Los valores de ejemplo tienen watermark SINTÉTICO y no son investigación real.
 
-## Estado de ejecución del primer candidato
+## Estado del candidato integrado
 
 Ver PACKAGE_B_EXECUTION_LEDGER.md. El generador alimenta 57 series locales
 con fuentes fake de los seis proveedores y exporta HTML + JSON de evidencia
-+ gate LOCAL. No invoca ni reemplaza `validation/publication_gate.py`.
++ gate LOCAL y contrato B marcado dentro de `validation/publication_gate.py`.
+El gate B reconstruye RAW/lineage/snapshot/analítica y usa las cinco categorías,
+pesos y umbral >=95, con bloqueo por cualquier crítico. Los checks de tablas
+legacy ajenas al esquema A y `run()` del gate diario conservan su contrato.
 Los checks financieros puros existentes ahora reconocen atributos section y
-entidades HTML escapadas sin perder los checks anteriores. B no está listo
-para aceptación ni Hermes mientras falten gate completo y renders reales.
+entidades HTML escapadas sin perder los checks anteriores. El renderer tiene
+QA local real 320/390/768/1440 y A4; B requiere CI del SHA final y QA Hermes
+antes de aceptación. Tooling visual: `scripts/package_b_visual_qa.cjs --help`;
+baseline estructural versionado: `tests/fixtures/package_b_visual_contract.json`.

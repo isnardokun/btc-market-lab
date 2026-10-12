@@ -47,6 +47,14 @@ class ReportAnalysis:
     source_quality: tuple[SourceQuality,...]=()
     calculation_version: str=VERSION
     external_verification: str='NOT_VERIFIED'
+    calculation_parameters: tuple[tuple[str,str],...]=(
+        ('RSI','period=14; Wilder; first 14 changes seed; zero-loss=100'),
+        ('SMA','periods=20,50,200; arithmetic mean; no padding'),
+        ('MACD','EMA periods=12,26,9; arithmetic initial EMA seed'),
+        ('ATR','period=14; simple mean of true range; not Wilder ATR'),
+        ('PIVOTS','lookback=5; confirmed historical pivots; price-relative levels'),
+        ('HORIZON','completed UTC daily observations; conditional daily scenarios'),
+    )
 
 PROFILES=(('BTC-USD','Bitcoin (BTC)',72,'BTC'),
           ('SPY','SPDR S&P 500 ETF (SPY)',120,'SPY'),
@@ -97,6 +105,9 @@ def _asset(snapshot,symbol,instrument,max_age,tag):
     support,resistance=find_supp_res(numbers,highs,lows,lookback=5)
     scenarios=compute_scenarios(latest,numbers,highs,lows,support,resistance,
                                 rsi,atr_value,macd,tag)
+    if symbol!='BTC-USD':
+        scenarios=tuple(text.replace('(spot ','(cotización ').replace('demanda spot','demanda del instrumento')
+                        for text in scenarios)
     return AssetAnalysis(symbol,instrument,snapshot.sha256,stamp,closes,
         latest,(latest/numbers[-2]-1)*100,rsi,compute_ma(numbers,20),
         compute_ma(numbers,50),compute_ma(numbers,200),macd,atr_value,

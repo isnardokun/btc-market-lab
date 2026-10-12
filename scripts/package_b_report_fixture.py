@@ -26,6 +26,7 @@ from scripts.package_a_onchain_catalog_batch import configured_onchain_series
 from analysis.package_b_evidence import read_report_snapshot
 from analysis.package_b_analytics import analyze_snapshot
 from rendering.package_b_report import render_report,audit_candidate_report
+from validation.publication_gate import evaluate_package_b_fixture
 
 ASOF='2026-10-12T00:05:00Z'
 END='2026-10-12T00:00:00Z'
@@ -127,6 +128,11 @@ def main(argv=None):
         if gate['state']!='OFFLINE_REPORT_LOCAL_RECONCILIATION_PASS':
             print(json.dumps(gate,sort_keys=True),file=sys.stderr)
             return 3
+        publication_gate=evaluate_package_b_fixture(report,db_path=path,lock_dir=locks,asof=ASOF)
+        if not publication_gate['pass']:
+            print(json.dumps(publication_gate,sort_keys=True),file=sys.stderr)
+            return 4
+        gate['publication_gate']=publication_gate
         args.output_dir.mkdir(parents=True,exist_ok=True)
         from rendering.portable_report import atomic_write
         atomic_write(args.output_dir/'package_b_synthetic_report.html',report.encode())
@@ -135,6 +141,8 @@ def main(argv=None):
         atomic_write(args.output_dir/'package_b_synthetic_gate.json',json.dumps(gate,sort_keys=True,indent=2).encode())
         print(json.dumps({'state':gate['state'],'html_sha256':gate['html_sha256'],
             'series':len(snapshot.series),'output_dir':str(args.output_dir),
+            'publication_gate_state':publication_gate['state'],
+            'publication_gate_score':publication_gate['score_total'],
             'production_publication_authorized':False},sort_keys=True))
     return 0
 

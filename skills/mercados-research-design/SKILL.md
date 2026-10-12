@@ -78,7 +78,65 @@ Este es un objetivo editorial; no añadir secciones fingidas cuando los datos
 no existen o el pipeline todavía no las calcula. No reordenar el HTML
 automáticamente si rompe los selectores del gate.
 
-## Flujo obligatorio de generación
+## Perfil Package B offline — desarrollo y QA editorial
+
+Aplicar este perfil cuando el candidato declara `OFFLINE_SYNTHETIC`.
+Consultar `docs/PACKAGE_B_DESIGN.md` y `AGENTS.md`; el skill no constituye
+una orden QA. **Sin orden vigente de PR y SHA exacto: Hermes STOP.**
+
+ChatGPT genera exclusivamente la fixture marcada, desde adaptadores fake
+hasta SQLite y snapshot RO, con este comando en el worktree B:
+
+```bash
+python3 scripts/package_b_report_fixture.py --output-dir /ruta/temporal/b-preview
+```
+
+El CLI no recibe DB productiva ni credenciales; no abre HTTP de mercado.
+Produce HTML, JSON de evidencia y gate. Verificar `publication_gate.pass`,
+`score_total >= 95`, cero críticos y SHA del HTML. La ruta B de
+`validation/publication_gate.py` reconstruye evidencia desde la fixture;
+el gate legacy diario conserva su contrato. Ninguno autoriza publicación.
+Repetir una ingesta genera nuevos receipts: el hash cambia con la evidencia;
+el mismo snapshot/modelo produce el mismo HTML sin depender del reloj.
+
+Validar responsive 320/390/768/1440 y A4 con Chromium local ya instalado,
+sin descargas desde el renderer. Bloquear HTTP(S) y declarar cualquier
+dependencia remota; conservar capturas, manifest de geometría/hashes y PDF
+fuera del Git público. Inspeccionar todo el A4, no solo la portada.
+Si no hay browser, declarar `VISUAL_QA_PENDING`: no sustituirlo por un
+check CSS, una imagen creada o un PDF compuesto con otro layout.
+
+Herramienta de ChatGPT (Node + Playwright y `pdfinfo`/`pdftotext` existentes):
+
+```bash
+node scripts/package_b_visual_qa.cjs --html /ruta/b-preview/package_b_synthetic_report.html --gate /ruta/b-preview/package_b_synthetic_gate.json --output-dir /ruta/temporal/visual-nueva
+```
+
+Consultar `--help` para módulos/browser explícitos. El output debe ser nuevo;
+la herramienta no instala nada. Exige gate/SHA coincidentes, texto realmente
+renderizado, cifras sin corte, 57 series en anexo, 3 charts y capturas estables.
+`VISUAL_STRUCTURE_PASS_MANUAL_REVIEW_REQUIRED` exige además inspección humana
+de PNG/A4. No es aceptación de B ni una orden de Hermes.
+
+Revisar unidades por bloque, GLD USD/participación, funding en fracción,
+exchanges separados y STALE visible. Las cifras RBN fracción 0..1 no se
+convierten a porcentaje sin contrato. Las unidades Bitview siguen UNVERIFIED.
+No usar inputs opcionales stale/unverified para inferencias actuales.
+Conservar hechos, lectura condicional, escenarios con activación/invalidez
+y riesgo; el ejemplo sintético no acredita investigación real.
+
+Hermes ejecuta solo suites/comandos permitidos por la orden congelada,
+informa SHA/Python/RC/aislamiento/evidencias y publica UN reporte QA/STOP.
+No instala Chromium, altera el skill, genera órdenes propias ni ejecuta
+`history_coverage.py`, `daily.sh` o `send_report.py` para evaluar B.
+ChatGPT corrige y mantiene la única PR B. El runner offline no acredita
+render visual; la evidencia de diseño debe existir antes del QA final.
+
+## Flujo diario legacy — solo operación explícitamente autorizada
+
+Los comandos siguientes requieren permiso específico del propietario para
+las rutas/fuentes afectadas. No ejecutarlos como diagnóstico ni QA de B.
+Hermes conserva su rol QA/STOP y no opera la generación productiva.
 
 1. Actualizar repositorio mediante el **actualizador seguro**:
    `bash scripts/update_local_and_test.sh` cuando sea master limpio.
@@ -120,8 +178,8 @@ Proponer un cambio mínimo con ventaja medible y casos de prueba.
 Entregar un diagnóstico concreto, no modificar scripts críticos sin
 revisión por PR de ChatGPT.
 
-**Responsabilidad operativa:** Hermes prepara diagnóstico/render y comprueba;
-ChatGPT mantiene el código de producción por PR y CI.
+**Responsabilidad:** Hermes prepara diagnóstico y comprueba únicamente
+la orden QA vigente; ChatGPT implementa y mantiene código por PR y CI.
 
 ## Contrato editorial Research Studio v2 — Hermes 2026-10-09
 
