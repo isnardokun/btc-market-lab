@@ -12,9 +12,11 @@
 | --- | --- | --- |
 | A | A_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING | PR #79, merge `45bbb353`; [cierre](PACKAGE_A_OFFLINE_ACCEPTANCE.md) |
 | B | B_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING | PR #80, merge `19b3298a`; [cierre](PACKAGE_B_OFFLINE_ACCEPTANCE.md) |
-| C | PENDING | Issue #78, orquestación/rollout todavía sin aceptar |
+| C | C_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING | PR #81, merge `fdb7867a`; [cierre](PACKAGE_C_OFFLINE_ACCEPTANCE.md) |
 
-Hermes STOP, órdenes A/B cerradas. Estos estados no autorizan API real,
+Hermes STOP, órdenes A/B/C cerradas. Las tres capacidades integradas están
+aceptadas offline; histórico externo y despliegue real permanecen pendientes.
+Estos estados no autorizan API real,
 DB productiva, cron, backups, flags, despliegue o publicación. El alcance y
 las definiciones siguientes se mantienen como contrato del programa.
 

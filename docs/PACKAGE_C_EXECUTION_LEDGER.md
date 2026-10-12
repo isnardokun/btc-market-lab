@@ -1,6 +1,6 @@
 # Package C — registro de ejecución
 
-Estado: C_LOCAL_VERIFIED_CI_AND_HERMES_PENDING / HERMES_STOP / PRODUCTION_NOT_ENABLED.
+Estado: C_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING / HERMES_STOP / PRODUCTION_NOT_ENABLED.
 Base: `89b5a8bb03dcfb6ad67a1e996563121e95388847`.
 Spec: PACKAGE_C_DESIGN.md. Plan: PACKAGE_C_IMPLEMENTATION_PLAN.md.
 Rama única: `feat/package-c-offline-orchestration`; worktree C aislado de A/B.
@@ -81,3 +81,19 @@ LIVE_STATUS=NOT_TESTED_NOT_AUTHORIZED. Umask 022, TMPDIR propio y
 BTC_RESEARCH_HOME del worktree C. Después commit/PR DRAFT, CI de HEAD y una
 orden QA Hermes concreta. C_OFFLINE_ACCEPTED requiere reporte Hermes PASS
 revisado por ChatGPT; merge/producción no se infieren de estas pruebas.
+
+## 2026-10-12 — aceptación offline e integración
+
+Este cierre prevalece sobre el gate pendiente histórico anterior.
+HEAD probado `167cdf5409b9d42ae7a56b1a137f9a8c8564c0c8`, base89b5a8b.
+CI38299924256 SUCCESS: 78/78 offline, retención y visual B/C. Python CI3.11.17;
+Chromium151.0.7922.34, cuatro anchos/A4 11 páginas, cero requests externos.
+QA Hermes6131951839: Python3.14.7, UTC20:14:24Z–20:20:34Z, detached y limpio,
+79 registradas/78 PASS/0 FAIL/1 live omitida, runnerRC0, retenciónRC0/0.224s,
+tres suites C PASS y aislamiento confirmado. Umask/TMPDIR/skips individuales
+no enumerados: NOT_REPORTED; no se inventan ni se repiten pruebas por metadata.
+Ruling6131995237 acepta evidencia y cierra orden. Merge
+`fdb7867a539b5a1104d207b9a51d758565017280`, árbol idéntico al candidato
+`f0debffb368a9abcce5066787d02f108a9a1809c`. Sin P0/P1 confirmados abiertos
+según revisión y regresión del alcance. Cierre en PACKAGE_C_OFFLINE_ACCEPTANCE.md.
+Hermes DONE/STOP; worktrees A/B/C conservados, sin nueva orden ni producción.

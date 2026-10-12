@@ -68,5 +68,6 @@ tests/run_all.py, test_package_a_runner_offline_gate.py,
 - [x] Runbook/stop/permisos reales/rollback/cutover sin activar host.
 - [x] Revisión fresca final; dos hallazgos P1/P2 reproducidos RED→GREEN.
 - [x] Full runner final post-fix: 78/78 offline PASS, RC0, una live omitida.
-- [ ] Commit(s) en única PR C; CI HEAD PASS antes de orden Hermes única.
+- [x] Commit en PR #81; CI HEAD PASS, orden única y QA Hermes PASS.
+- [x] Merge con árbol idéntico; cierre C_OFFLINE_ACCEPTED documentado.
 - [x] Política de DRAFT/no aceptación hasta QA Hermes; ninguna operación live.

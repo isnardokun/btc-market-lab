@@ -70,7 +70,7 @@ tampering. El contrato diario y checks de tablas legacy se preservan, no se
 ejecutan contra el esquema A incompatible. CLI B exporta solo tras ambos gates.
 El control visual declara revisión manual necesaria y no instala browser.
 
-## Límites y siguiente paquete
+## Límites y orquestación
 
 No se acredita investigación diaria real ni histórico descargado completo.
 Entitlement/cuotas/retención/unidades/calendarios externos siguen pendientes;
@@ -82,8 +82,9 @@ produce el mismo HTML. PNG/PDF/HTML/JSON runtime permanecen fuera de Git públic
 
 No API real, SQLite productiva, cron/flags, backups/migraciones productivas,
 Telegram/deploy/publicación. El reporte B no sustituye ni activa daily.sh.
-La orquestación/recuperación/runbook y rollout corresponden a C (#78), con
-verificación offline y autorizaciones productivas separadas.
+La orquestación/recuperación/runbook C (#78) quedó aceptada offline por
+su propio gate: [cierre C](PACKAGE_C_OFFLINE_ACCEPTANCE.md). El rollout real
+conserva autorizaciones y evidencia productivas separadas.
 
-**Hermes DONE/STOP. Orden B cerrada.** A y B aceptados offline; C pendiente.
+**Hermes DONE/STOP. Orden B cerrada.** A/B/C aceptados offline por sus gates.
 Ni el merge ni QA autoriza acceso externo o puesta en producción.

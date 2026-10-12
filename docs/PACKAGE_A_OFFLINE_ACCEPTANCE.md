@@ -54,7 +54,7 @@ No se ejecutaron API real, SQLite productiva, cron/flags, backups, deploy o
 publicación. La suite live queda `NOT_TESTED_NOT_AUTHORIZED` por alcance,
 no por falta de keys. El único workflow integrado ejecuta tests offline.
 
-**Hermes STOP.** La orden del SHA queda cerrada. B (#77: analítica y diseño)
-y C (#78: orquestación/rollout) siguen pendientes y no quedan aceptados por
-la integración de A. La verificación externa y producción se controlan por
-sus gates específicos, sin inferirlas del merge.
+**Hermes STOP.** La orden A queda cerrada. B y C fueron aceptados después
+mediante sus propios gates: [B](PACKAGE_B_OFFLINE_ACCEPTANCE.md),
+[C](PACKAGE_C_OFFLINE_ACCEPTANCE.md). La verificación externa y producción
+se controlan por permisos y evidencia independientes, sin inferirlas del merge.
