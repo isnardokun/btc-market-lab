@@ -18,36 +18,23 @@ from __future__ import annotations
 
 def compute_rsi(closes, period=14):
     """RSI de Wilder (smoothed). Requiere al menos `period` valores."""
-    vals = [c for c in closes[-period-1:] if c is not None]
-    if len(vals) < period + 1:
+    import math
+    if type(period) is not int or period < 1 or len(closes) < period + 1:
         return None
-    gains = []
-    losses = []
-    for i in range(1, len(vals)):
-        delta = vals[i] - vals[i-1]
-        gains.append(max(delta, 0))
-        losses.append(max(-delta, 0))
-    if not gains:
+    if any(type(c) not in (int, float) or not math.isfinite(c) for c in closes):
         return None
-    avg_gain = sum(gains) / len(gains)
-    avg_loss = sum(losses) / len(losses)
-    if avg_loss == 0:
-        return 100.0
-    rs = avg_gain / avg_loss
-    rsi = 100.0 - (100.0 / (1.0 + rs))
-    # Wilder smoothing for subsequent values
-    for i in range(len(gains), len(closes)):
-        delta = closes[i] - closes[i-1] if closes[i-1] is not None else 0
-        g = max(delta, 0)
-        l = max(-delta, 0)
-        avg_gain = (avg_gain * (period - 1) + g) / period
-        avg_loss = (avg_loss * (period - 1) + l) / period
-        if avg_loss == 0:
-            rsi = 100.0
-        else:
-            rs = avg_gain / avg_loss
-            rsi = 100.0 - (100.0 / (1.0 + rs))
-    return rsi
+    changes = [closes[i] - closes[i-1] for i in range(1, len(closes))]
+    # Wilder seeds from the FIRST period, then advances once per new close.
+    # Seeding from the trailing period and looping earlier changes again
+    # reverses temporal order and biases the final oscillator.
+    avg_gain = sum(max(delta, 0) for delta in changes[:period]) / period
+    avg_loss = sum(max(-delta, 0) for delta in changes[:period]) / period
+    for delta in changes[period:]:
+        avg_gain = ((period - 1) * avg_gain + max(delta, 0)) / period
+        avg_loss = ((period - 1) * avg_loss + max(-delta, 0)) / period
+    # Preserve the established legacy zero-loss convention, including flat
+    # prices (100), rather than silently changing that separate contract.
+    return 100.0 if avg_loss == 0 else 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
 
 
 def compute_ma(closes, period):
@@ -227,7 +214,7 @@ def compute_scenarios(price, closes, highs, lows, supports, resistances,
                 "sobrecompra" if rsi is not None and rsi > 70 else "neutral")
     macd_dir = ("positivo" if macd_hist is not None and macd_hist > 0 else
                 "negativo" if macd_hist is not None else "no disponible")
-    precision = 2 if asset in ("SPY", "SPX") else 0
+    precision = 2 if asset in ("SPY", "SPX", "GLD") else 0
     fmt = lambda n: f"$" + f"{n:,.{precision}f}"
     pct = lambda target: f"{(target / price - 1) * 100:+.1f}%"
     market = {"BTC": "BTC", "SPY": "SPY", "SPX": "SPY", "GOLD": "oro"}.get(asset, asset)
