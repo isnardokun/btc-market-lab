@@ -93,3 +93,8 @@ Regresión local: 75/75 suites offline, 76 registradas, 1 live omitida sin permi
 Python 3.12.14, Node 24.19.0. Pendiente para aceptación: CI HEAD final y una
 orden/reporte Hermes del SHA congelado. B_CANDIDATE_READY; HERMES_STOP hasta
 que se publique esa orden. No live API/DB/cron/publicación.
+
+CI 38270083332 / SHA 90f016e: suites y retención PASS, generación/gate PASS,
+browser/capturas completadas; fallo de infraestructura `spawnSync pdfinfo
+ENOENT`. Se declara Poppler explícito en instalación del job. No se modifica
+ni relaja el control A4; CI del nuevo SHA debe repetir todas sus etapas.

@@ -48,6 +48,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/b-visual-tools" --no-audit --no-fund playwright@1.62.1
           node "$RUNNER_TEMP/b-visual-tools/node_modules/playwright/cli.js" install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends poppler-utils
       - name: Synthetic report responsive and A4 acceptance (no upload or publication)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
