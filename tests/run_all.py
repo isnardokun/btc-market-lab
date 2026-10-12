@@ -67,6 +67,7 @@ TESTS = [
     ("Unit: Package A Writer Route SHA Attestation and Drift Gate", "python3 -m unittest -v tests.unit.test_package_a_writer_source_attestation"),
     ("Unit: Package A Parent-Lock Cutover (Synthetic Process Only)", "python3 -m unittest -v tests.unit.test_package_a_writer_cutover"),
     ("Unit: Package A Parent-Lock Descendant Process Supervision", "python3 -m unittest -v tests.unit.test_package_a_parent_lock_process_supervision"),
+    ("Unit: Package A Physical Lock Inode Guard and PRECOMMIT", "python3 -m unittest -v tests.unit.test_package_a_writer_lock_inode_guard"),
     ("Unit: Package A RBN and Schema Migration Global Lock", "python3 -m unittest -v tests.unit.test_package_a_migration_and_rbn_locks"),
     ("Unit: Package A Daily Report and News Library Shared Lock", "python3 -m unittest -v tests.unit.test_package_a_report_library_lock"),
     ("Unit: Package A Source-Aware Offline Gap Candidates", "python3 -m unittest -v tests.unit.test_package_a_local_gap_candidates"),
