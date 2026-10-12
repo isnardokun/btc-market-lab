@@ -4,6 +4,7 @@ Tests use only marked disposable synthetic SQLite and fake HTTP. No host
 scheduler, credentials, provider APIs, production DB or real publisher.
 """
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import sqlite3
@@ -18,7 +19,7 @@ from scripts.package_a_parent_lock import (
     hold_offline_parent_lease,verify_offline_parent_lease,
 )
 from scripts.package_a_ingest_fixture import (
-    MARKER,MARKER_VALUE,inspect_fixture,
+    MARKER,MARKER_VALUE,inspect_fixture,run_fixture_page,FixtureResponse,
 )
 from scripts.package_a_frozen_legacy_transport import run_mocked_legacy_page
 from scripts.package_a_yahoo_fanout import run_offline_yahoo_ohlcv_fanout
@@ -156,6 +157,67 @@ class TestPackageALockPhysicalInodeSafety(unittest.TestCase):
                 self.filename.write_text("RECREATED",encoding="utf-8")
                 self.filename.chmod(0o600)
                 verify_offline_parent_lease(self.locks)
+
+    def fork_child(self, worker):
+        context = multiprocessing.get_context("fork")
+        parent, child = context.Pipe()
+        process = context.Process(target=worker, args=(child,))
+        process.start()
+        child.close()
+        def cleanup():
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=5)
+            parent.close()
+        self.addCleanup(cleanup)
+        return process, parent
+
+    @unittest.skipUnless("fork" in multiprocessing.get_all_start_methods(), "POSIX fork required")
+    def test_fork_cannot_reuse_parent_lease_after_release_while_contender_holds_lock(self):
+        def worker(channel):
+            channel.recv()
+            try:
+                result = run_fixture_page(
+                    self.db, self.locks,
+                    SeriesSpec("researchbitcoin", "sopr_sth", "BTC", "d1", "ratio"),
+                    START, STOP, FixtureResponse(200, {
+                        "data": [{"date": "2026-10-08", "value": 1.03}]}),
+                    now=NOW, _parent_lock_held=True)
+                channel.send(result["state"])
+            except ValueError:
+                channel.send("BLOCKED_INHERITED_LEASE")
+
+        with hold_offline_parent_lease(self.locks):
+            process, channel = self.fork_child(worker)
+        with hold_writer_lock(self.locks, namespace=NAMESPACE):
+            channel.send("parent-released-contender-held")
+            self.assertTrue(channel.poll(5), "Child did not report")
+            self.assertEqual(channel.recv(), "BLOCKED_INHERITED_LEASE")
+        process.join(timeout=5)
+        self.assertEqual(process.exitcode, 0)
+        self.assertEqual(self.counts(), 0)
+        self.check_untouched()
+
+    @unittest.skipUnless("fork" in multiprocessing.get_all_start_methods(), "POSIX fork required")
+    def test_inherited_lock_context_cleanup_cannot_unlock_original_parent(self):
+        lease = hold_writer_lock(self.locks, namespace=NAMESPACE)
+        with lease:
+            def worker(channel):
+                try:
+                    lease.__exit__(None, None, None)
+                except ValueError:
+                    pass
+                channel.send("child-cleanup-complete")
+            process, channel = self.fork_child(worker)
+            self.assertTrue(channel.poll(5), "Child did not finish cleanup")
+            self.assertEqual(channel.recv(), "child-cleanup-complete")
+            with self.assertRaises(WriterLockBusy):
+                with hold_writer_lock(self.locks, namespace=NAMESPACE):
+                    self.fail("Child released the original parent's lock")
+        process.join(timeout=5)
+        self.assertEqual(process.exitcode, 0)
+        with hold_writer_lock(self.locks, namespace=NAMESPACE):
+            pass
 
     def test_synthetic_one_page_replacement_at_precommit_rolls_back(self):
         from scripts import package_a_ingest_fixture as fixture

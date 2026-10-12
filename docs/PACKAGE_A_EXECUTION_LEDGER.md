@@ -444,3 +444,24 @@ The full offline runner now expects **62 registered suites**, of which **61 are 
 **Revisión estructural inicial del alcance real de la PR frente a master (NO certificación del diff):** `compare_commits` arrojó **82 archivos modificados** y **301 commits** en HEAD de test `26ef2d9` (números de corte, pueden variar con documentación). No hubo archivos eliminados. `scripts/daily.sh` y `validation/publication_gate.py` no aparecieron en los cambios respecto a la base; sí aparecen `ingestion/ingest.py`, `ingestion/ingest_all.py` e `ingestion/ingest_fred.py` con cambios de opt-in, además de `.github/workflows/portable-report-tests.yml`. El tamaño del diff hace imprescindible un QA por dominios y un SHA congelado; **CI no equivale a revisión de seguridad, no lo hemos certificado como completo**.
 
 **Scorecard ≈90% ingeniería OFFLINE:** A1 80, A2 93 (audit integral no confunde evidencia parcial con fuente íntegra), A3 94, A4 96, A5 86 (nuevo gate 46 streams con 12 casos); media 89.8%, estimación manual. **No porcentaje de historia API descargada, ni garantía operativa del host**. Penden: contratos dimensionales externos Tier2 RBN, unidades y calendarios Bitview, retención real Yahoo, exclusión host-wide de escritores manuales, auditoría completa de 82+ archivos/300+ commits, congelar SHA y única orden Hermes. Gates `A_IN_PROGRESS / PR_DRAFT / HERMES_STOP / HOST_GLOBAL_WRITERS_UNVERIFIED / REAL_PROVIDER_HISTORY_UNVERIFIED / PRODUCTION_NOT_AUTHORIZED`.
+
+
+## 2026-10-12 UTC — revisión transversal y corrección integral previa a QA Hermes
+
+Revisión de contexto fresco del diff completo de 83 archivos en HEAD
+`faeee6acc27288272f5bb53ba144f1503a273900` frente a master `8ca80e0`.
+Seis defectos corregidos en un conjunto coherente: fork lease/LOCK_UN,
+aceptación RAW+coverage en snapshot único, import CLI Bitview, RC0 de snapshot,
+Bybit OI envelope/scope y parser RBN. Diez métodos de regresión nuevos
+reprodujeron primero los fallos y luego aprobaron. Evidencia, rulings y minor
+diferido: [revisión de cierre](PACKAGE_A_FINAL_OFFLINE_REVIEW.md).
+
+Runner sobre código corregido: Python 3.12.14, RC0, 73 registradas / 72 de 72
+offline PASS / 1 live excluida; retention test PASS y git diff --check limpio.
+La estimación de alcance permanece ≈90%: QA independiente y verificación
+externa no se convierten en porcentaje aprobado por añadir tests.
+
+Siguiente gate autorizado: publicar el conjunto en ESTA PR, observar CI del
+SHA exacto y emitir UNA orden formal Hermes, offline y QA-only, con STOP tras
+un único reporte. No merge hasta PASS Hermes en ese mismo SHA y P0/P1=0.
+No APIs live, SQLite productiva, backups, cron, flags o publicaciones ejecutados.

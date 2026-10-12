@@ -80,6 +80,15 @@ class TestPackageAEntrypointLocks(unittest.TestCase):
                 self.assertEqual(rc,expected)
                 runner.assert_called_once()
 
+    def test_bitview_direct_cli_help_from_outside_repository_without_pythonpath(self):
+        environment = dict(os.environ)
+        environment.pop("PYTHONPATH", None)
+        result = subprocess.run(
+            [sys.executable, "-B", str(self.repo / "ingestion" / "ingest.py"), "--help"],
+            cwd=self.lockdir, env=environment, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--global-lock-dir", result.stdout)
+
     def test_all_three_unlocked_defaults_preserve_previous_delegates(self):
         for source, expected in (("bitview",11),("fred",12),("context",13)):
             with self.subTest(source=source):

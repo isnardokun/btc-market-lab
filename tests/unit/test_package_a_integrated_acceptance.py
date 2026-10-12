@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 from ingestion.package_a_contracts import SeriesSpec
 from scripts.package_a_integrated_acceptance import (
@@ -221,6 +222,49 @@ class TestPackageAIntegratedAcceptanceMatrix(unittest.TestCase):
         self.assertFalse(gate["native_http_requests_verified_as_REAL"])
         self.assertFalse(gate["entire_real_history_downloaded"])
         self.assertEqual(self.sql("SELECT content FROM protected_historical_data"),[("SAFE",)])
+
+    def test_acceptance_never_combines_raw_audit_and_coverage_from_different_snapshots(self):
+        self.completed()
+        real_connect = sqlite3.connect
+        readers = []
+        changed = []
+        reads_after_change = []
+        path = self.db
+
+        class SnapshotReader(sqlite3.Connection):
+            def execute(connection, query, *args, **kwargs):
+                if changed:
+                    reads_after_change.append(query)
+                return super().execute(query, *args, **kwargs)
+
+            def __exit__(connection, *args):
+                result = super().__exit__(*args)
+                connection.close()
+                if not changed:
+                    # Simulate a committed writer precisely at the gap
+                    # between the old integrity and aggregate snapshots.
+                    with real_connect(path) as writer:
+                        writer.execute("UPDATE package_a_receipts SET raw_sha256=? "
+                                       "WHERE provider='fred'", ("a" * 64,))
+                    changed.append(True)
+                return result
+
+        def connect(database, *args, **kwargs):
+            self.assertTrue(kwargs.get("uri"))
+            self.assertTrue(str(database).endswith("?mode=ro"))
+            connection = real_connect(database, *args, factory=SnapshotReader, **kwargs)
+            readers.append(connection)
+            return connection
+
+        with mock.patch("sqlite3.connect", side_effect=connect):
+            gate = audit_integrated_offline_acceptance(self.db, self.lock)
+        # A READY report may refer to the original coherent snapshot. It
+        # must never attach its RAW PASS to later, already corrupted rows.
+        if reads_after_change:
+            self.assertEqual(gate["state"], "BLOCKED_INCOMPLETE_OFFLINE_ACCEPTANCE_EVIDENCE")
+        self.assertEqual(len(readers), 1)
+        self.assertEqual(gate["state"], "OFFLINE_INTEGRATED_EVIDENCE_READY_FOR_INDEPENDENT_QA")
+        self.assertEqual(inspect_fixture(self.db, self.lock)["state"], "LOCAL_FIXTURE_INTEGRITY_FAIL")
 
 
 if __name__=="__main__":

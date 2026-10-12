@@ -15,7 +15,7 @@ to run APIs, migrate production SQLite, schedule, merge or publish.
 from collections import Counter
 import sqlite3
 
-from scripts.package_a_ingest_fixture import inspect_fixture, _fixture_guard
+from scripts.package_a_ingest_fixture import _inspect_fixture_snapshot, _fixture_guard
 from scripts.package_a_onchain_catalog_batch import configured_onchain_series
 
 
@@ -44,10 +44,10 @@ def audit_integrated_offline_acceptance(db_path,lock_dir):
     snapshots of receipts, cursors and native request lineage.
     """
     path=_fixture_guard(db_path,lock_dir)
-    audit=inspect_fixture(path,lock_dir)
     with sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True) as db:
         db.execute("PRAGMA query_only=ON")
         db.execute("BEGIN")
+        audit=_inspect_fixture_snapshot(db)
         rows=db.execute(
             "SELECT provider,metric,symbol,frequency,COUNT(*) "
             "FROM package_a_observations GROUP BY provider,metric,symbol,frequency"

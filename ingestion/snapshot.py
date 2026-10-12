@@ -147,8 +147,11 @@ def main(argv=None):
     parser.add_argument("--global-lock-dir", type=Path, default=None,
                         help="Explicit opt-in lock for consistent SQLite reads and snapshot writes")
     args = parser.parse_args(argv)
-    return run_with_optional_writer_lock(
+    result = run_with_optional_writer_lock(
         args.global_lock_dir, create_snapshot, label="post-publication-snapshot")
+    # The collector's dictionary is a library result, not a process exit
+    # code. Preserve the guard's numeric failure code (e.g. busy RC=3).
+    return 0 if isinstance(result, dict) else result
 
 
 if __name__ == "__main__":

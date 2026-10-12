@@ -227,62 +227,74 @@ def inspect_fixture(db_path, lock_directory):
         # All RAW, receipts, observations and cursors must come from one
         # consistent SQLite snapshot, not independent per-query snapshots.
         db.execute("BEGIN")
-        fk = db.execute("PRAGMA foreign_key_check").fetchall()
-        bad_raw = 0
-        for payload, digest in db.execute(
-                "SELECT raw_payload,raw_sha256 FROM package_a_receipts "
-                "WHERE raw_payload IS NOT NULL"):
-            if hashlib.sha256(payload).hexdigest() != digest:
-                bad_raw += 1
-        bad_points = 0
-        for source, metric, symbol, frequency, moment, dim, value, unit, scale, digest in db.execute(
-            "SELECT provider,metric,symbol,frequency,observed_utc,dimension_key,"
-            "value,unit,raw_scale,row_sha256 FROM package_a_observations"
-        ):
-            try:
-                spec = SeriesSpec(source, metric, symbol, frequency, unit, scale)
-                from ingestion.package_a_contracts import Point
-                actual = ledger._point_hash(spec, Point(moment, dim, value))
-                if actual != digest:
-                    bad_points += 1
-            except (ValueError, TypeError):
+        return _inspect_fixture_snapshot(db)
+
+
+def _inspect_fixture_snapshot(db):
+    """Audit only a caller-owned, already pinned read-only transaction.
+
+    The acceptance gate uses this same connection for RAW reconstruction and
+    coverage/receipt aggregation; no intervening connection or commit.
+    """
+    if (not db.in_transaction or
+            db.execute("PRAGMA query_only").fetchone()[0] != 1):
+        raise ValueError("A pinned read-only fixture transaction is required")
+    fk = db.execute("PRAGMA foreign_key_check").fetchall()
+    bad_raw = 0
+    for payload, digest in db.execute(
+            "SELECT raw_payload,raw_sha256 FROM package_a_receipts "
+            "WHERE raw_payload IS NOT NULL"):
+        if hashlib.sha256(payload).hexdigest() != digest:
+            bad_raw += 1
+    bad_points = 0
+    for source, metric, symbol, frequency, moment, dim, value, unit, scale, digest in db.execute(
+        "SELECT provider,metric,symbol,frequency,observed_utc,dimension_key,"
+        "value,unit,raw_scale,row_sha256 FROM package_a_observations"
+    ):
+        try:
+            spec = SeriesSpec(source, metric, symbol, frequency, unit, scale)
+            from ingestion.package_a_contracts import Point
+            actual = ledger._point_hash(spec, Point(moment, dim, value))
+            if actual != digest:
                 bad_points += 1
-        bad_links = db.execute(
-            "SELECT COUNT(*) FROM package_a_observations o LEFT JOIN package_a_receipts r "
-            "ON o.receipt_id=r.receipt_id "
-            "WHERE r.receipt_id IS NULL OR r.status <> 'ok'").fetchone()[0]
-        bad_cursors = db.execute(
-            "SELECT COUNT(*) FROM package_a_cursors c LEFT JOIN package_a_receipts r "
-            "ON c.advanced_by_receipt=r.receipt_id WHERE r.receipt_id IS NULL "
-            "OR r.status <> 'ok'").fetchone()[0]
-        bad_cursor_windows = db.execute(
-            "SELECT COUNT(*) FROM package_a_cursors c JOIN package_a_receipts r "
-            "ON c.advanced_by_receipt=r.receipt_id WHERE "
-            "c.provider<>r.provider OR c.metric<>r.metric OR c.symbol<>r.symbol "
-            "OR c.frequency<>r.frequency OR c.end_exclusive_utc<>r.end_exclusive_utc"
-        ).fetchone()[0]
-        bad_coverage = 0
-        for provider,metric,symbol,frequency,left,right,count in db.execute(
-            "SELECT provider,metric,symbol,frequency,first_archived_utc,"
-            "last_archived_utc,archived_rows FROM package_a_coverage"
-        ):
-            observed = db.execute(
-                "SELECT MIN(observed_utc),MAX(observed_utc),COUNT(*) "
-                "FROM package_a_observations WHERE provider=? AND metric=? "
-                "AND symbol=? AND frequency=?",(provider,metric,symbol,frequency)
-            ).fetchone()
-            if observed != (left,right,count):
-                bad_coverage += 1
-        observations = db.execute("SELECT COUNT(*) FROM package_a_observations").fetchone()[0]
-        receipts = db.execute("SELECT COUNT(*) FROM package_a_receipts").fetchone()[0]
-        rows = ledger.read_coverage(db)
-        evidence = ledger.read_history_evidence(db)
-        request_meta = ledger.audit_frozen_request_provenance(db)
-        native_request_meta = audit_native_frozen_request_lineage(db)
-        source_runs = ledger.audit_batch_source_runs(db)
-        source_manifest = source_aware_manifest(db)
-        integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
-        reconstruction = audit_receipt_reconstruction(db)
+        except (ValueError, TypeError):
+            bad_points += 1
+    bad_links = db.execute(
+        "SELECT COUNT(*) FROM package_a_observations o LEFT JOIN package_a_receipts r "
+        "ON o.receipt_id=r.receipt_id "
+        "WHERE r.receipt_id IS NULL OR r.status <> 'ok'").fetchone()[0]
+    bad_cursors = db.execute(
+        "SELECT COUNT(*) FROM package_a_cursors c LEFT JOIN package_a_receipts r "
+        "ON c.advanced_by_receipt=r.receipt_id WHERE r.receipt_id IS NULL "
+        "OR r.status <> 'ok'").fetchone()[0]
+    bad_cursor_windows = db.execute(
+        "SELECT COUNT(*) FROM package_a_cursors c JOIN package_a_receipts r "
+        "ON c.advanced_by_receipt=r.receipt_id WHERE "
+        "c.provider<>r.provider OR c.metric<>r.metric OR c.symbol<>r.symbol "
+        "OR c.frequency<>r.frequency OR c.end_exclusive_utc<>r.end_exclusive_utc"
+    ).fetchone()[0]
+    bad_coverage = 0
+    for provider,metric,symbol,frequency,left,right,count in db.execute(
+        "SELECT provider,metric,symbol,frequency,first_archived_utc,"
+        "last_archived_utc,archived_rows FROM package_a_coverage"
+    ):
+        observed = db.execute(
+            "SELECT MIN(observed_utc),MAX(observed_utc),COUNT(*) "
+            "FROM package_a_observations WHERE provider=? AND metric=? "
+            "AND symbol=? AND frequency=?",(provider,metric,symbol,frequency)
+        ).fetchone()
+        if observed != (left,right,count):
+            bad_coverage += 1
+    observations = db.execute("SELECT COUNT(*) FROM package_a_observations").fetchone()[0]
+    receipts = db.execute("SELECT COUNT(*) FROM package_a_receipts").fetchone()[0]
+    rows = ledger.read_coverage(db)
+    evidence = ledger.read_history_evidence(db)
+    request_meta = ledger.audit_frozen_request_provenance(db)
+    native_request_meta = audit_native_frozen_request_lineage(db)
+    source_runs = ledger.audit_batch_source_runs(db)
+    source_manifest = source_aware_manifest(db)
+    integrity = db.execute("PRAGMA integrity_check").fetchone()[0]
+    reconstruction = audit_receipt_reconstruction(db)
     accepted = not (fk or bad_raw or bad_points or bad_links or bad_cursors or bad_cursor_windows or bad_coverage) and integrity == "ok" and reconstruction["state"] == "RAW_SQL_LINEAGE_PASS" and request_meta["state"] == "FROZEN_REQUEST_METADATA_PASS" and native_request_meta["state"] == "NATIVE_FROZEN_REQUEST_LINEAGE_PASS" and source_runs["state"] == "BATCH_SOURCE_RUN_LINEAGE_PASS" and source_manifest["state"] == "SOURCE_MANIFEST_LOCAL_EVIDENCE_PASS"
     return {
         "state": "LOCAL_FIXTURE_INTEGRITY_PASS" if accepted else "LOCAL_FIXTURE_INTEGRITY_FAIL",

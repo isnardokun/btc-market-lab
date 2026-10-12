@@ -263,13 +263,16 @@ def parse_fixture(spec, payload, *, start, end):
                 out.append(_point(epoch(row["timestamp"], millis=True), row["sumOpenInterest"]))
     elif spec.provider == "bybit":
         try:
-            if spec.metric == "funding_settled" and payload.get("retCode") != 0:
-                raise ValueError("Bybit settlement requires successful response code")
+            # Older direct OI fixtures omitted the envelope code. Preserve
+            # that fixture compatibility, but an explicit error/malformed
+            # code must never be normalized into successful observations.
+            code = payload.get("retCode", 0) if spec.metric == "open_interest" else payload.get("retCode")
+            if type(code) is not int or code != 0:
+                raise ValueError("Bybit derivatives require successful response code")
             part = payload["result"]
-            if (spec.metric == "funding_settled"
-                    and (part.get("category", "linear") != "linear"
-                         or part.get("symbol", "BTCUSDT") != "BTCUSDT")):
-                raise ValueError("Bybit funding result scope mismatch")
+            if (part.get("category", "linear") != "linear"
+                    or part.get("symbol", "BTCUSDT") != "BTCUSDT"):
+                raise ValueError("Bybit derivatives result scope mismatch")
             rows = part["list"]
             if not isinstance(rows, list):
                 raise ValueError("Malformed Bybit list")

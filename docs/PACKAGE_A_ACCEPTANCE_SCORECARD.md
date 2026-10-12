@@ -71,3 +71,15 @@ emitir UNA orden de QA independiente a Hermes. El QA puede cerrar
 conceder permisos sobre APIs, SQLite, cron o deployments. La comprobación
 de disponibilidad y descarga de TODO el histórico permitido es una
 actividad posterior y por separado, sujeta al propietario.
+
+
+## Revisión de cierre — 2026-10-12 UTC
+
+La revisión transversal del diff y las correcciones de seis defectos están
+registradas en [PACKAGE_A_FINAL_OFFLINE_REVIEW.md](PACKAGE_A_FINAL_OFFLINE_REVIEW.md).
+RAW/lineage/matriz de 46 streams ya comparten una sola transacción read-only;
+flock liga su lease al PID e impide que un hijo fork libere el bloqueo del padre.
+CLI daily y contratos Bybit OI preservan éxito/fallo y no avanzan cursores de
+envelopes rechazados. Diez regresiones RED→GREEN; runner 72/72 offline PASS.
+Se prepara SHA único para QA Hermes tras CI; aceptación y merge siguen pendientes.
+Avance estimado se mantiene ≈90%; fuentes reales y host continúan sin verificar.

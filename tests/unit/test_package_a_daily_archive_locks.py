@@ -96,6 +96,29 @@ class DailyArchiveWriterLocks(unittest.TestCase):
         self.assertTrue(p.is_file())
         self.assertEqual(p.stat().st_mode & 0o777,0o600)
 
+    def test_successful_snapshot_payload_is_not_a_cli_failure_exit_code(self):
+        for opt_in in (False, True):
+            with self.subTest(opt_in=opt_in):
+                result, worker, stderr = self.invoke(
+                    self.targets[3], opt_in=opt_in,
+                    callback=lambda: {"snapshot_id": "synthetic-offline", "data_hash": {}})
+                self.assertEqual(result, 0)
+                worker.assert_called_once()
+                self.assertEqual(stderr, "")
+
+    def test_snapshot_cli_process_exits_success_without_dumping_snapshot_to_stderr(self):
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(self.repo)
+        code = (
+            "import sys; from ingestion import snapshot; "
+            "snapshot.create_snapshot=lambda: {'snapshot_id':'synthetic-offline'}; "
+            "raise SystemExit(snapshot.main([]))")
+        result = subprocess.run(
+            [sys.executable, "-B", "-c", code], cwd=self.root,
+            env=environment, capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+
     def test_all_six_busy_lock_deny_all_workers_before_db_or_files(self):
         with hold_writer_lock(self.locks,namespace=NAMESPACE):
             for target in self.targets:

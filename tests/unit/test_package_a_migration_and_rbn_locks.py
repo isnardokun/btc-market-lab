@@ -175,6 +175,22 @@ class PackageAMigrationAndRbnLockTests(unittest.TestCase):
                 self.assertEqual(rbn.main(["--catalog","--global-lock-dir",str(self.locks)]),0)
         worker.assert_called_once()
 
+    def test_rbn_missing_database_uses_argparse_error_before_mutation(self):
+        with patch.object(rbn, "initialize_database", side_effect=AssertionError("DB opened")):
+            with contextlib.redirect_stderr(StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as exit_result:
+                    rbn.main(["--init-db", "--db", str(self.root / "missing.db")])
+        self.assertEqual(exit_result.exception.code, 2)
+        self.assertIn("La base local no existe", stderr.getvalue())
+
+    def test_rbn_fetch_rejection_uses_controlled_error_without_nameerror(self):
+        with patch.object(rbn, "fetch", side_effect=ValueError("synthetic rejected request")):
+            with contextlib.redirect_stderr(StringIO()) as stderr:
+                with self.assertRaises(SystemExit) as exit_result:
+                    rbn.main(["--sample", "sopr_sth"])
+        self.assertEqual(exit_result.exception.code, 1)
+        self.assertIn("RECHAZADO: synthetic rejected request", stderr.getvalue())
+
     def test_rbn_inventory_and_api_sample_are_non_mutating_paths(self):
         for argv in (["--inventory"],["--sample","sopr_sth"]):
             with self.subTest(argv=argv):

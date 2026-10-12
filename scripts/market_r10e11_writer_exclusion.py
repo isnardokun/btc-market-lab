@@ -48,6 +48,7 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
     parent_fd = None
     fd = None
     locked = False
+    owner_pid = os.getpid()
     try:
         parent_fd = os.open(directory, dir_flags)
         parent_stat = os.fstat(parent_fd)
@@ -89,6 +90,11 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
             can eliminate a hostile race between checks, and flock remains
             advisory for processes that do not cooperate.
             """
+            # flock and the open-file description are inherited by fork.
+            # The parent's ContextVar/closure is copied too, but cannot
+            # grant a child a lease after the parent releases its lock.
+            if os.getpid() != owner_pid:
+                raise WriterLockUnsafe("BLOCKED_WRITER_LOCK_INHERITED_PROCESS")
             own_parent=os.fstat(parent_fd)
             own_lock=os.fstat(fd)
             try:
@@ -120,6 +126,7 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
                  "namespace": namespace,
                  "physical_lock_device": info.st_dev,
                  "physical_lock_inode": info.st_ino,
+                 "owner_pid": owner_pid,
                  "check_identity": verify_identity,
                  "excludes_uncooperative_writers": False,
                  "production_authorized": False}
@@ -134,7 +141,10 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
             # as a successful cooperative writer transaction.
             verify_identity()
     finally:
-        if locked:
+        # A forked child's LOCK_UN would release the parent's flock on
+        # their shared open-file description. Close only the child's copy;
+        # the acquiring process alone may explicitly unlock it.
+        if locked and os.getpid() == owner_pid:
             fcntl.flock(fd, fcntl.LOCK_UN)
         if fd is not None:
             os.close(fd)

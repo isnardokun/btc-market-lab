@@ -113,6 +113,31 @@ class FrozenLegacyTransportTests(unittest.TestCase):
         self.assertTrue(all(row["historical_completeness"]=="NOT_VERIFIED"
                             for row in report["source_coverage"]))
 
+    def test_bybit_oi_error_envelope_cannot_commit_valid_looking_points_or_cursor(self):
+        for code in (10006, "0", False, None):
+            with self.subTest(retCode=code):
+                spec, start, end, payload = scenarios()[5]
+                payload["retCode"] = code
+                result = self.apply((spec, start, end, payload))
+                self.assertEqual(result["status"], "rejected")
+                self.assertFalse(result["cursor_advanced"])
+                self.assertEqual(result["new_rows"], 0)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"), [(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_cursors"), [(0,)])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_receipts WHERE status='rejected'"), [(4,)])
+        self.assertEqual(self.rows("SELECT value FROM legacy_untouched"), [("preserve",)])
+
+    def test_bybit_oi_explicit_wrong_symbol_or_category_is_rejected(self):
+        for field, value in (("symbol", "ETHUSDT"), ("category", "inverse")):
+            with self.subTest(field=field):
+                spec, start, end, payload = scenarios()[5]
+                payload["retCode"] = 0
+                payload["result"][field] = value
+                result = self.apply((spec, start, end, payload))
+                self.assertEqual(result["status"], "rejected")
+                self.assertFalse(result["cursor_advanced"])
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM package_a_observations"), [(0,)])
+
     def test_original_raw_bytes_persist_exactly_including_whitespace(self):
         scenario=scenarios()[0]
         data=raw(scenario[3])+b" "

@@ -286,12 +286,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.init_db or args.sync:
         return run_with_optional_writer_lock(
-            args.global_lock_dir, lambda: _run_rbn_v2_args(args),
+            args.global_lock_dir, lambda: _run_rbn_v2_args(args, parser),
             label="researchbitcoin-v2-write")
-    return _run_rbn_v2_args(args)
+    return _run_rbn_v2_args(args, parser)
 
 
-def _run_rbn_v2_args(args):
+def _run_rbn_v2_args(args, parser):
     if args.catalog:
         print(json.dumps([vars(item) | {"docs": item.docs} for item in CATALOG.values()],
                          ensure_ascii=False, indent=2))
