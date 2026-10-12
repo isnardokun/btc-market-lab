@@ -15,6 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import config
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
+
+GLOBAL_LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 API = config.API_BASE
 
@@ -99,7 +103,7 @@ def fetch_tip_height() -> int:
     """Get current blockchain tip height."""
     return int(api_fetch("/blocks/tip/height"))
 
-def fetch_series(series_name: str, index: str, start: str = None, end: str = None, block_start: int = None, block_end: int = None):
+def fetch_series(series_name: str, index: str, start: str = None, end: str = None, block_start: int = None, block_end: int = None, *, client=None):
     """Fetch a series from bitview API. Returns list of [ts_or_height, value] pairs."""
     params = []
     if start:
@@ -115,7 +119,10 @@ def fetch_series(series_name: str, index: str, start: str = None, end: str = Non
     if query:
         path += f"?{query}"
 
-    data = api_fetch(path)
+    # Optional explicitly supplied callable is for offline transport contract
+    # tests. The legacy API remains the default; no API call is made when a
+    # fixture-only client is supplied.
+    data = client(path) if client is not None else api_fetch(path)
     return data  # dict with 'data' key
 
 def get_series_id(db, name: str, description: str = "") -> int:
@@ -289,13 +296,26 @@ def update_tip_height(db):
 
 # ─── Main ───────────────────────────────────────────────────────────────────
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="BTC Research — Daily Ingestion")
     parser.add_argument("--full", action="store_true", help="Full historical backfill")
     parser.add_argument("--dry-run", action="store_true", help="Test API without writing")
     parser.add_argument("--series", type=str, help="Ingest only one series by short name")
-    args = parser.parse_args()
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in shared writer lock; directory must exist")
+    args = parser.parse_args(argv)
+    if args.global_lock_dir is None:
+        return _run_ingest_args(args)
+    try:
+        with hold_writer_lock(args.global_lock_dir, namespace=GLOBAL_LOCK_NAMESPACE):
+            return _run_ingest_args(args)
+    except WriterLockBusy:
+        print("BLOCKED_WRITER_BUSY: Bitview ingestion skipped before HTTP/SQLite",
+              file=sys.stderr)
+        return 3
 
+
+def _run_ingest_args(args):
     db = get_db()
     init_db(db)
 
@@ -335,4 +355,4 @@ def main():
         print(f"{'='*60}")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -7,6 +7,8 @@ Despues de generar el HTML con daily_report.py, corre este script.
 import sys, os, json, sqlite3, datetime, shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.config import DB_PATH, REPORTS
+from pathlib import Path
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 def archive_report(html_path, snapshot_data, levels, section="daily"):
     """
@@ -106,7 +108,7 @@ def archive_from_html(html_path, report_date, asset, section="daily",
     return archive_report(html_path, snapshot, levels or [], section)
 
 
-if __name__ == "__main__":
+def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument("--html")
@@ -114,8 +116,15 @@ if __name__ == "__main__":
     ap.add_argument("--asset", default="ALL")
     ap.add_argument("--section", default="daily")
     ap.add_argument("--snapshot-json")
-    args = ap.parse_args()
+    ap.add_argument("--global-lock-dir", type=Path, default=None,
+                    help="Explicit opt-in global writer lock for report archival")
+    args = ap.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, lambda: _archive_report_cli(args),
+        label="report-archive")
 
+
+def _archive_report_cli(args):
     if args.html and os.path.exists(args.html):
         with open(args.html) as f:
             html = f.read()
@@ -130,3 +139,7 @@ if __name__ == "__main__":
         print(f"  HTML archivado: {args.html}")
     else:
         print("  Uso: python archive_report.py --html <path> --date YYYY-MM-DD --asset BTC")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -4,7 +4,8 @@ Mercados Daily — BTC + Bolsa + Metales
 Estructura profesional: Bitfinex Alpha + CoinMarketCap + Glassnode
 Precios: Yahoo Finance | On-chain: bitview | News: Exa
 """
-import os, sys, datetime, sqlite3, json, subprocess, re
+import os, sys, datetime, sqlite3, json, subprocess, re, argparse
+from pathlib import Path
 from html import escape as html_escape
 from urllib.request import Request, urlopen
 
@@ -16,6 +17,7 @@ from analysis.research_studio import render_executive_brief, rbn_diagnostic, rsi
 from rendering.market_design import RESEARCH_CSS, STYLE_VERSION
 from analysis.knowledge_rag import render_research_note
 from ingestion.news_archive import archive_news
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_PATH  = BASE_DIR + "/db/btc_research.db"
 try:
@@ -830,7 +832,21 @@ def gen_macro_narrative(macro):
 
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 
-def main():
+def main(argv=None):
+    """Optional whole-report cooperative lock, BEFORE HTTP or SQLite reads.
+
+    The nested news archive uses its legacy unlocked call inside this parent
+    lock to avoid re-acquiring the same flock and deadlocking.
+    """
+    parser = argparse.ArgumentParser(description="Generate daily market research")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in global lock around the complete report")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, _generate_daily_report, label="daily-report")
+
+
+def _generate_daily_report():
     btc_ohlc    = closed_daily_bars(yahoo_ohlc("BTC-USD", 252))  # only completed UTC bars
     spy_ohlc    = closed_daily_bars(yahoo_ohlc("SPY", 252))
     spx_ohlc    = closed_daily_bars(yahoo_ohlc("^GSPC", 90))
@@ -1475,4 +1491,4 @@ def main():
     print(f"News: BTC {len(nb)} | Stocks {len(ns)} | Metals {len(nm)}")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

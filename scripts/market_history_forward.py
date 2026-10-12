@@ -111,6 +111,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 sys.path.insert(0, str(ROOT))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 
 
@@ -1324,7 +1325,17 @@ def main(argv=None, _db=None):
     p.add_argument("--apply", action="store_true",
                    help="Execute exactly one forward page (default: PLAN_ONLY)")
     p.add_argument("--db", type=Path, default=Path(DB_PATH))
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Opt-in shared global writer lock before SQLite/network")
     args = p.parse_args(argv)
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda:_run_forward_args(args,_db),
+            label="oi-forward")
+    return _run_forward_args(args,_db)
+
+
+def _run_forward_args(args,_db):
     if _db is None and not args.db.is_file():
         print(json.dumps({"status": "failed", "error_code": "DatabaseNotFound"}))
         return 2

@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from storage.archive_schema import archive_schema_installed, attach_available_triggers, register_dataset
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS market_ohlc_history (
@@ -99,7 +100,7 @@ def archive(db, symbol, rows):
         )
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--db", type=Path, default=Path(DB_PATH))
     p.add_argument("--symbol", action="append",
@@ -108,7 +109,16 @@ def main():
     p.add_argument("--limit", type=int, default=4)
     p.add_argument("--apply", action="store_true",
                    help="Permitir API + ingesta no destructiva; por defecto solo PLAN")
-    args = p.parse_args()
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Opt-in global lock directory (existing); no cron activation")
+    args = p.parse_args(argv)
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda:_run_yahoo_history_args(args,p), label="yahoo-history")
+    return _run_yahoo_history_args(args,p)
+
+
+def _run_yahoo_history_args(args,p):
     if not 1 <= args.limit <= 20 or args.offset < 0 or not args.db.is_file():
         p.error("limit 1..20, offset >=0, SQLite existente obligatorio")
     available = symbols_in_catalog(args.db)

@@ -19,6 +19,9 @@ from ingestion.market_context_sources import (
     download,fetch_binance,fetch_bybit,fetch_farside,fetch_bls,fetch_fred)
 from ingestion.market_network_errors import error_category
 from storage.market_context import installed,now_utc
+from scripts.market_r10e11_writer_exclusion import hold_writer_lock, WriterLockBusy
+
+GLOBAL_LOCK_NAMESPACE = "btc-research-global-writer-v1"
 
 SOURCES=("binance","bybit","farside","bls","fred")
 
@@ -71,6 +74,8 @@ def main(argv=None):
     p.add_argument("--history",action="store_true",
                    help="Start Binance funding at earliest configured year; capped by --max-pages")
     p.add_argument("--db",type=Path,default=Path(DB_PATH))
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Existing lock directory; opt-in global cooperative lock")
     args=p.parse_args(argv)
     providers=[x.strip() for x in args.sources.split(",")]
     if not providers or len(set(providers))!=len(providers) or any(x not in SOURCES for x in providers):
@@ -80,6 +85,18 @@ def main(argv=None):
         print("PLAN only: no HTTP, no SQLite writes. Sources="+",".join(providers))
         print("Run SQLite migration with backup first; then --apply.")
         return 0
+    if args.global_lock_dir is None:
+        return _run_market_context_args(args, providers)
+    try:
+        with hold_writer_lock(args.global_lock_dir, namespace=GLOBAL_LOCK_NAMESPACE):
+            return _run_market_context_args(args, providers)
+    except WriterLockBusy:
+        print("BLOCKED_WRITER_BUSY: market context skipped before HTTP/SQLite",
+              file=sys.stderr)
+        return 3
+
+
+def _run_market_context_args(args, providers):
     if not args.db.is_file():
         print("STOP: existing btc_research.db required",file=sys.stderr);return 2
     try:

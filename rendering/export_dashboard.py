@@ -4,10 +4,11 @@ export_dashboard.py — Genera dashboard_latest.json con el estado
 actual del sistema: precios, macro, predicciones, niveles, hit rates.
 Corre diariamente via cron.
 """
-import sys, os, json, sqlite3, datetime, tempfile, re
+import sys, os, json, sqlite3, datetime, tempfile, re, argparse
 from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.config import DB_PATH, BASE_DIR
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 OUT_PATH = BASE_DIR + "/dashboards/dashboard_latest.json"
 
@@ -226,7 +227,16 @@ def atomic_text(path, text):
             os.unlink(tmp)
 
 
-def main():
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Export research dashboard")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in global writer lock before DB/output writes")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, _export_dashboard_unlocked, label="dashboard-export")
+
+
+def _export_dashboard_unlocked():
     conn = sqlite3.connect(DB_PATH)
 
     # Crear dashboards dir si no existe
@@ -274,4 +284,4 @@ def main():
     print(f"  Reportes recientes: {len(dashboard['reports'])}")
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

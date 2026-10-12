@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ingestion.researchbitcoin_catalog import CATALOG, PROVIDER
 from storage.archive_schema import require_archive_schema, register_dataset, save_window
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from ingestion.researchbitcoin_v2 import (
     DEFAULT_DB, fetch, last_completed_day, parse_scalar_rows, store_rows,
 )
@@ -217,7 +218,7 @@ def run(db_path, *, mode, slugs, tier=0, history_start=None, max_requests=13,
     return results
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     m = p.add_mutually_exclusive_group(required=True)
     m.add_argument("--incremental", action="store_true", help="Solo días posteriores al último observado")
@@ -229,7 +230,17 @@ def main():
     p.add_argument("--max-requests", type=int, default=13,
                    help="Máximo solicitudes HTTP por ejecución (1..100), default 13")
     p.add_argument("--apply", action="store_true", help="AUTORIZACIÓN: consultar API y archivar SQLite")
-    args = p.parse_args()
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Opt-in global writer lock; does not verify Tier2 entitlement")
+    args = p.parse_args(argv)
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda:_run_rbn_history_args(args),
+            label="researchbitcoin-history")
+    return _run_rbn_history_args(args)
+
+
+def _run_rbn_history_args(args):
     try:
         if args.incremental and (args.history_start is not None or args.tier != 0):
             raise ValueError("Opciones --from/--tier aplican solo a --history")

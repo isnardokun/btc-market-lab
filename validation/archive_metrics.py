@@ -4,9 +4,11 @@ archive_metrics.py — Archiva todos los indicadores del dia en daily_metrics.
 Se ejecuta DESPUES de daily_report_v2.py en el pipeline daily.sh.
 Guarda: BTC (precio + on-chain + tecnicos), SPY, GOLD, OIL, SILVER, MACRO.
 """
-import os, sys, datetime, sqlite3
+import os, sys, datetime, sqlite3, argparse
+from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ingestion.daily_cutoff import closed_daily_bars
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from analysis.daily_report import (
     yahoo_ohlc, compute_rsi, compute_ma, ema_python,
     compute_macd, stoch, williams_r, cci, atr,
@@ -254,5 +256,14 @@ def archive_all():
         print(f"  {m}: {r[0] if r else '---'}")
     db.close()
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Archive daily metrics")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in global lock before HTTP and SQLite writes")
+    args = parser.parse_args(argv)
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, archive_all, label="daily-metrics-archive")
+
+
 if __name__ == "__main__":
-    archive_all()
+    raise SystemExit(main())

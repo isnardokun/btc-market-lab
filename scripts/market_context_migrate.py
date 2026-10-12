@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from ingestion.config import DB_PATH
 from scripts.backup_db import create_backup
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 from scripts.market_v3_preflight import _v3_layout_issues
 from storage.market_context import install, installed, request_lineage_installed, install_request_lineage
 
@@ -14,10 +15,18 @@ def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--apply",action="store_true",help="Backup original and install additive SQLite tables")
     p.add_argument("--db",type=Path,default=Path(DB_PATH))
+    p.add_argument("--global-lock-dir",type=Path,default=None,
+                   help="Explicit opt-in shared lock before WAL backup and migration")
     args=p.parse_args(argv)
     if not args.apply:
         print("PLAN: create WAL-safe checked backup, then add market_* SQLite tables; no rows modified.")
         return 0
+    return run_with_optional_writer_lock(
+        args.global_lock_dir, lambda:_apply_market_schema_args(args),
+        label="market-context-migration")
+
+
+def _apply_market_schema_args(args):
     if not args.db.is_file():
         print("STOP: original SQLite not found",file=sys.stderr);return 2
     try:

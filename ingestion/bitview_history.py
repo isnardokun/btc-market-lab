@@ -19,6 +19,7 @@ from ingestion import config
 from ingestion.daily_cutoff import previous_completed_utc_day
 from ingestion.ingest import fetch_series
 from storage.archive_schema import archive_schema_installed, save_window, register_dataset
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
 EPOCH = dt.date(2009, 1, 1)
 LEDGER = """
@@ -167,7 +168,7 @@ def run(db_path, *, apply=False, all_daily=False, slug=None, first=None,
     return report
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db",type=Path,default=Path(config.DB_PATH))
     parser.add_argument("--all-daily",action="store_true",
@@ -177,7 +178,16 @@ def main():
     parser.add_argument("--chunk-days",type=int,default=180)
     parser.add_argument("--max-requests",type=int,default=8)
     parser.add_argument("--apply",action="store_true",help="Autorizar HTTP y SQLite")
-    args=parser.parse_args()
+    parser.add_argument("--global-lock-dir",type=Path,default=None,
+                        help="Opt-in: ruta compartida del bloqueo global; no activa cron")
+    args=parser.parse_args(argv)
+    if args.apply:
+        return run_with_optional_writer_lock(
+            args.global_lock_dir, lambda:_run_history_args(args), label="bitview-history")
+    return _run_history_args(args)
+
+
+def _run_history_args(args):
     try:
         result=run(args.db,apply=args.apply,all_daily=args.all_daily,
                    slug=args.series,first=dt.date.fromisoformat(args.first),

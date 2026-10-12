@@ -11,10 +11,11 @@ Contiene:
 
 Se guarda en: reports/snapshots/snapshot_YYYY-MM-DD_HHMMSS.json
 """
-import sys, os, datetime, json, hashlib, sqlite3, subprocess
+import sys, os, datetime, json, hashlib, sqlite3, subprocess, argparse
 from pathlib import Path
-
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+from scripts.package_a_writer_guard import run_with_optional_writer_lock
 DB_PATH = BASE_DIR / "db" / "btc_research.db"
 SNAP_DIR = BASE_DIR / "reports" / "snapshots"
 TODAY = datetime.date.today()
@@ -141,5 +142,17 @@ def create_snapshot():
     return snapshot
 
 
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Write post-publication data snapshot")
+    parser.add_argument("--global-lock-dir", type=Path, default=None,
+                        help="Explicit opt-in lock for consistent SQLite reads and snapshot writes")
+    args = parser.parse_args(argv)
+    result = run_with_optional_writer_lock(
+        args.global_lock_dir, create_snapshot, label="post-publication-snapshot")
+    # The collector's dictionary is a library result, not a process exit
+    # code. Preserve the guard's numeric failure code (e.g. busy RC=3).
+    return 0 if isinstance(result, dict) else result
+
+
 if __name__ == "__main__":
-    create_snapshot()
+    raise SystemExit(main())
