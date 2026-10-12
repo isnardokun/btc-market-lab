@@ -6,6 +6,18 @@
 
 > Ningún PASS offline acredita disponibilidad histórica real, derechos del token ResearchBitcoin Tier 2, exclusión de writers no cooperativos ni autorización productiva. `historical_completeness=NOT_VERIFIED` hasta verificar métricas/proveedores contra límites efectivos.
 
+## Estado vigente — 2026-10-12
+
+| Paquete | Estado | Evidencia y alcance |
+| --- | --- | --- |
+| A | A_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING | PR #79, merge `45bbb353`; [cierre](PACKAGE_A_OFFLINE_ACCEPTANCE.md) |
+| B | B_OFFLINE_ACCEPTED; EXTERNAL_VERIFICATION_PENDING | PR #80, merge `19b3298a`; [cierre](PACKAGE_B_OFFLINE_ACCEPTANCE.md) |
+| C | PENDING | Issue #78, orquestación/rollout todavía sin aceptar |
+
+Hermes STOP, órdenes A/B cerradas. Estos estados no autorizan API real,
+DB productiva, cron, backups, flags, despliegue o publicación. El alcance y
+las definiciones siguientes se mantienen como contrato del programa.
+
 ## 1. Nuevo método operativo (obligatorio)
 
 1. **Una PR sustancial por capacidad, no por función**: A / datos e ingesta, B / analítica e informes, C / orquestación y puesta en marcha. Cada paquete puede usar varios commits coherentes, pruebas intermedias y revisión continua; evitar PR de una función, de una sola suite o solo de documentación como ciclos de entrega.

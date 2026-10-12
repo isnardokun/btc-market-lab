@@ -1,6 +1,8 @@
 # Package B — ejecución
 
-Estado B_IN_PROGRESS / DRAFT / HERMES_STOP / PRODUCTION_NOT_ENABLED.
+Estado actual B_OFFLINE_ACCEPTED / EXTERNAL_VERIFICATION_PENDING / HERMES_STOP /
+PRODUCTION_NOT_ENABLED. Cierre vigente: [PACKAGE_B_OFFLINE_ACCEPTANCE.md](PACKAGE_B_OFFLINE_ACCEPTANCE.md).
+Las entradas siguientes conservan sus estados históricos de desarrollo.
 Spec: PACKAGE_B_DESIGN.md. Plan: PACKAGE_B_IMPLEMENTATION_PLAN.md.
 Base master 8fc5a60 (cierre A), una PR B, ejecución inline.
 
@@ -98,3 +100,13 @@ CI 38270083332 / SHA 90f016e: suites y retención PASS, generación/gate PASS,
 browser/capturas completadas; fallo de infraestructura `spawnSync pdfinfo
 ENOENT`. Se declara Poppler explícito en instalación del job. No se modifica
 ni relaja el control A4; CI del nuevo SHA debe repetir todas sus etapas.
+
+## 2026-10-12 — cierre offline e integración
+
+QA Hermes 6127727828: HEAD bcbd174, 75/75 offline, runner RC0,
+retention RC0/0.224s, Python 3.14.7 y aislamiento/árbol limpio confirmados.
+CI 38270621629 del mismo HEAD PASS, incluida QA responsive/A4. Ruling 6127788311
+registra metadata omitida como NOT_REPORTED y corrige Python CI a 3.11.17.
+Merge 19b3298a805be2e600fd5cfd06c50eaeadb066d1 con tree idéntico
+581bda8f8eb799e3d715f0912eae50756261824c. Cierre completo y límites en el
+documento de aceptación. Hermes STOP; no nueva orden ni autorización productiva.
