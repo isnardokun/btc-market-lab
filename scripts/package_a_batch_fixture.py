@@ -246,7 +246,7 @@ def plan_synthetic_resume(db_path, lock_dir, pages, *, prior_run_id):
 
 
 def recover_synthetic_batch(db_path, lock_dir, pages, *, prior_run_id,
-                            now, max_pages=32):
+                            now, max_pages=32, _parent_lock_held=False):
     """Atomic preflight + fake page execution under ONE cooperative parent flock.
 
     Never runs a real client/DB. No TOCTOU window between reading source-run
@@ -256,8 +256,15 @@ def recover_synthetic_batch(db_path, lock_dir, pages, *, prior_run_id,
     _fixture_guard(db_path,lock_dir)
     if type(max_pages) is not int or not 1 <= max_pages <= 32:
         raise ValueError("Bounded recovery budget required")
+    if type(_parent_lock_held) is not bool:
+        raise ValueError("Invalid offline recovery parent-lock marker")
+    if _parent_lock_held:
+        verify_offline_parent_lease(lock_dir)
     try:
-        with hold_offline_parent_lease(lock_dir):
+        with (nullcontext() if _parent_lock_held else
+              hold_offline_parent_lease(lock_dir)):
+            if _parent_lock_held:
+                verify_offline_parent_lease(lock_dir)
             preflight=plan_synthetic_resume(db_path,lock_dir,pages,
                                              prior_run_id=prior_run_id)
             if preflight["remaining_pages"]==0:
