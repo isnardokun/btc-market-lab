@@ -86,6 +86,10 @@ def audit_integrated_offline_acceptance(db_path,lock_dir):
             "WHERE r.provider='yahoo' AND r.symbol='SPY' "
             "AND r.frequency='d1'"
         ).fetchall()
+        run_states=dict(db.execute(
+            "SELECT status,COUNT(*) FROM package_a_source_runs "
+            "GROUP BY status"
+        ).fetchall())
         sql_state=db.execute("PRAGMA query_only").fetchone()[0]
 
     actual=set(recorded)|set(evidence)
@@ -112,6 +116,9 @@ def audit_integrated_offline_acceptance(db_path,lock_dir):
         all(x[5]=="ok" for x in yahoo_rows)
     )
     counts=Counter(k[0] for k in recorded)
+    observation_counts=Counter()
+    for key,number in recorded.items():
+        observation_counts[key[0]]+=number
     failures=[]
     if audit["state"]!="LOCAL_FIXTURE_INTEGRITY_PASS":
         failures.append("RAW_SQL_AUDITS_NOT_PASS")
@@ -126,6 +133,8 @@ def audit_integrated_offline_acceptance(db_path,lock_dir):
     if source_status.get("failed",0) or source_status.get("rejected",0) or source_status.get("empty",0):
         failures.append("FAILED_REJECTED_OR_EMPTY_PAGE_UNRESOLVED")
     if missing_catalog_run:failures.append("ONCHAIN_RECEIPT_WITHOUT_SOURCE_RUN")
+    if run_states.get("blocked",0) or run_states.get("running",0) or not run_states.get("complete",0):
+        failures.append("SOURCE_RUN_NOT_FINALIZED_SUCCESSFULLY")
     if not yahoo_one_envelope:failures.append("YAHOO_FIVE_METRIC_SINGLE_ENVELOPE_UNVERIFIED")
     if sql_state!=1:failures.append("READ_ONLY_SQLITE_NOT_ENFORCED")
     if audit["receipt_reconstruction"]["state"]!="RAW_SQL_LINEAGE_PASS":
@@ -143,7 +152,9 @@ def audit_integrated_offline_acceptance(db_path,lock_dir):
             name:sum(1 for s in EXPECTED_STREAMS if s[0]==name)
             for name in ("researchbitcoin","bitview","yahoo","fred","binance","bybit")
         },
-        "archived_observation_counts_by_provider":dict(sorted(counts.items())),
+        "stream_counts_by_provider":dict(sorted(counts.items())),
+        "archived_observation_counts_by_provider":dict(sorted(observation_counts.items())),
+        "source_run_states":dict(sorted(run_states.items())),
         "missing_expected_streams":[list(x) for x in missing],
         "unexpected_streams":[list(x) for x in unexpected],
         "streams_without_successful_cursors":[list(x) for x in absent_cursors],
