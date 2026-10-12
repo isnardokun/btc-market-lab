@@ -51,8 +51,22 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
     try:
         parent_fd = os.open(directory, dir_flags)
         parent_stat = os.fstat(parent_fd)
-        if not stat.S_ISDIR(parent_stat.st_mode):
-            raise WriterLockUnsafe("Parent is not a directory")
+        # The lock-file inode cannot be protected if another user can
+        # unlink and recreate it in a shared writable directory. Owner-only
+        # (for writes) lock folders prevent this common cooperative-lock
+        # bypass; e.g. mode 0755 is fine, mode 0775 or 1777 is not.
+        if (not stat.S_ISDIR(parent_stat.st_mode)
+                or parent_stat.st_uid != os.getuid()
+                or stat.S_IMODE(parent_stat.st_mode) & 0o022):
+            raise WriterLockUnsafe(
+                "Lock directory must be owner-controlled, not shared writable")
+        # Path may have been swapped between is_dir() and os.open(); require
+        # the directory still refers to the same physical inode.
+        path_parent = os.stat(directory, follow_symlinks=False)
+        if (not stat.S_ISDIR(path_parent.st_mode)
+                or (path_parent.st_dev,path_parent.st_ino)!=
+                    (parent_stat.st_dev,parent_stat.st_ino)):
+            raise WriterLockUnsafe("Lock directory pathname was replaced")
         fd = os.open(namespace + ".lock", open_flags, 0o600, dir_fd=parent_fd)
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode)
@@ -67,10 +81,58 @@ def hold_writer_lock(lock_directory, *, namespace="market-history-v3"):
                 raise WriterLockBusy("Writer lock already held") from exc
             raise
         locked = True
-        yield {"state": "COOPERATIVE_LOCK_HELD",
-               "namespace": namespace,
-               "excludes_uncooperative_writers": False,
-               "production_authorized": False}
+
+        def verify_identity():
+            """Verify held FD still has the SAME publicly reachable inode.
+
+            Check at every important HTTP/SQL boundary: no filesystem check
+            can eliminate a hostile race between checks, and flock remains
+            advisory for processes that do not cooperate.
+            """
+            own_parent=os.fstat(parent_fd)
+            own_lock=os.fstat(fd)
+            try:
+                current_parent=os.stat(directory,follow_symlinks=False)
+                current_lock=os.stat(namespace+".lock",dir_fd=parent_fd,
+                                     follow_symlinks=False)
+            except FileNotFoundError as exc:
+                raise WriterLockUnsafe(
+                    "BLOCKED_WRITER_LOCK_INODE_DISAPPEARED") from exc
+            if (not stat.S_ISDIR(current_parent.st_mode)
+                    or (current_parent.st_dev,current_parent.st_ino)!=
+                       (own_parent.st_dev,own_parent.st_ino)
+                    or own_parent.st_uid!=os.getuid()
+                    or stat.S_IMODE(own_parent.st_mode)&0o022):
+                raise WriterLockUnsafe(
+                    "BLOCKED_WRITER_LOCK_DIRECTORY_REPLACED")
+            if (not stat.S_ISREG(current_lock.st_mode)
+                    or (current_lock.st_dev,current_lock.st_ino)!=
+                       (own_lock.st_dev,own_lock.st_ino)
+                    or own_lock.st_nlink!=1
+                    or current_lock.st_uid!=os.getuid()
+                    or stat.S_IMODE(current_lock.st_mode)&0o077):
+                raise WriterLockUnsafe(
+                    "BLOCKED_WRITER_LOCK_INODE_REPLACED")
+            return True
+
+        verify_identity()
+        lease = {"state": "COOPERATIVE_LOCK_HELD",
+                 "namespace": namespace,
+                 "physical_lock_device": info.st_dev,
+                 "physical_lock_inode": info.st_ino,
+                 "check_identity": verify_identity,
+                 "excludes_uncooperative_writers": False,
+                 "production_authorized": False}
+        try:
+            yield lease
+        except BaseException:
+            # Never suppress/mask the caller's original failure; the lock FD
+            # will still be unlocked and closed in the outer finally.
+            raise
+        else:
+            # A rename or unlink during the body is surfaced, NOT accepted
+            # as a successful cooperative writer transaction.
+            verify_identity()
     finally:
         if locked:
             fcntl.flock(fd, fcntl.LOCK_UN)
