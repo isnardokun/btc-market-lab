@@ -107,7 +107,6 @@ class TestPackageAIntegratedAcceptanceMatrix(unittest.TestCase):
         self.assertEqual(self.sql("SELECT content FROM protected_historical_data"),[("SAFE",)])
 
     def test_integrity_pass_alone_must_not_claim_complete_source_coverage(self):
-        report=inspect_fixture(self.db,self.lock) if False else None
         self.baseline()
         audit=inspect_fixture(self.db,self.lock)
         self.assertEqual(audit["state"],"LOCAL_FIXTURE_INTEGRITY_PASS")
@@ -190,6 +189,28 @@ class TestPackageAIntegratedAcceptanceMatrix(unittest.TestCase):
         gate=audit_integrated_offline_acceptance(self.db,self.lock)
         self.assertIn("ONCHAIN_RECEIPT_WITHOUT_SOURCE_RUN",gate["failures"])
         self.assertEqual(gate["state"],"BLOCKED_INCOMPLETE_OFFLINE_ACCEPTANCE_EVIDENCE")
+
+    def test_all_six_provider_stream_counts_and_observation_counts_are_not_confused(self):
+        gate=self.completed()
+        self.assertEqual(gate["stream_counts_by_provider"],{
+            "binance":2,"bitview":23,"bybit":2,
+            "fred":1,"researchbitcoin":13,"yahoo":5,
+        })
+        self.assertEqual(gate["archived_observation_counts_by_provider"],{
+            "binance":3,"bitview":23,"bybit":3,
+            "fred":2,"researchbitcoin":13,"yahoo":15,
+        })
+        self.assertEqual(gate["source_run_states"],{"complete":2})
+
+    def test_tampered_source_run_status_rejected_despite_all_46_raw_streams(self):
+        self.completed()
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE package_a_source_runs SET status='blocked' "
+                       "WHERE run_id=(SELECT run_id FROM package_a_source_runs LIMIT 1)")
+        gate=audit_integrated_offline_acceptance(self.db,self.lock)
+        self.assertEqual(gate["state"],"BLOCKED_INCOMPLETE_OFFLINE_ACCEPTANCE_EVIDENCE")
+        self.assertIn("SOURCE_RUN_NOT_FINALIZED_SUCCESSFULLY",gate["failures"])
+        self.assertEqual(gate["expected_streams"],46)
 
     def test_only_complete_local_fixture_is_explicitly_not_production_or_hermes_approval(self):
         self.completed()
