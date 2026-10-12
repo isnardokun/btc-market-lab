@@ -143,6 +143,7 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                                                       start=start, end=end, now=now)
                 except (ValueError, KeyError, TypeError, OverflowError) as exc:
                     error = type(exc).__name__
+            verify_live_lock_inode()
             with sqlite3.connect(path) as db:
                 db.execute("PRAGMA foreign_keys=ON")
                 # Keep the additive, self-contained SCHEMA migration outside

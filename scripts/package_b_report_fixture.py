@@ -5,7 +5,8 @@ Every numeric input below is synthetic. No provider client may open a real
 socket; A frozen transport rejects request drift. No production path exists.
 """
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict,dataclass
+import hashlib
 import datetime as dt
 import json
 import math
@@ -35,8 +36,30 @@ END='2026-10-12T00:00:00Z'
 def raw(value):return json.dumps(value,sort_keys=True,separators=(',',':')).encode()
 
 
-def create_example_fixture(db_path,lock_dir):
-    _fixture_guard(db_path,lock_dir)
+@dataclass(frozen=True)
+class ExampleJob:
+    kind: str
+    specs: tuple[SeriesSpec,...]
+    start: str
+    end: str
+    raw_bytes: bytes
+
+    @property
+    def key(self):
+        spec=self.specs[0]
+        return ':'.join((spec.provider,spec.symbol,
+            'ohlcv' if self.kind=='yahoo_ohlcv' else spec.metric,spec.frequency))
+
+    @property
+    def sha256(self):
+        return hashlib.sha256(raw({'kind':self.kind,'specs':[asdict(s) for s in self.specs],
+            'start':self.start,'end':self.end,
+            'raw_sha256':hashlib.sha256(self.raw_bytes).hexdigest()})).hexdigest()
+
+
+def example_jobs():
+    """Pure source-native fake pages: 45 requests / 57 streams, no I/O."""
+    jobs=[]
     stop=dt.date(2026,10,12)
     start=stop-dt.timedelta(days=320)
     for symbol,base,trend,amplitude in [('BTC-USD',79000,8,2400),('SPY',610,.15,18),('GLD',370,.12,9)]:
@@ -51,11 +74,11 @@ def create_example_fixture(db_path,lock_dir):
             ticks.append(int(dt.datetime.combine(day,dt.time(),dt.timezone.utc).timestamp()))
             for key,value in zip(quotes,(opened,high,low,close,100000+i*130)):
                 quotes[key].append(value)
-        result=run_offline_yahoo_ohlcv_fanout(db_path,lock_dir,symbol,
-            start.isoformat()+'T00:00:00Z',END,
-            raw_bytes=raw({'chart':{'result':[{'timestamp':ticks,
-                'indicators':{'quote':[quotes]}}],'error':None}}),now=ASOF)
-        if result['status']!='ok':raise ValueError('Synthetic Yahoo example rejected')
+        specs=tuple(SeriesSpec('yahoo',metric,symbol,'d1',
+            'native_volume' if metric=='volume' else 'USD') for metric in quotes)
+        jobs.append(ExampleJob('yahoo_ohlcv',specs,start.isoformat()+'T00:00:00Z',END,
+            raw({'chart':{'result':[{'timestamp':ticks,
+                'indicators':{'quote':[quotes]}}],'error':None}})))
     rbn_values={'realized_price_sth':76500,'realized_price_lth':39000,
         'true_market_meanprice':61000,'mvrv_sth':1.1,'mvrv_z_sth':1.3,
         'sopr_sth':1.015,'sopr_lth':1.03,'realized_loss_sth':42000000,
@@ -69,9 +92,7 @@ def create_example_fixture(db_path,lock_dir):
         else:
             payload={'index':'1d','start':(dt.date(2026,10,8)-EPOCH).days,
                      'data':[1.0+i*.02 for i in range(4)]}
-        result=run_mocked_legacy_page(db_path,lock_dir,spec,
-            '2026-10-08T00:00:00Z',END,raw_bytes=raw(payload),now=ASOF)
-        if result['status']!='ok':raise ValueError('Synthetic onchain example rejected')
+        jobs.append(ExampleJob('legacy',(spec,),'2026-10-08T00:00:00Z',END,raw(payload)))
     for metric,frequency,unit,rows,start_day in [
         ('DGS10','d1','percent',[
             {'date':'2026-10-08','value':'4.10','realtime_start':'2026-10-10'},
@@ -79,10 +100,8 @@ def create_example_fixture(db_path,lock_dir):
         ('CPIAUCSL','monthly','index',[
             {'date':'2026-08-01','value':'322.4','realtime_start':'2026-10-10'},
             {'date':'2026-09-01','value':'323.1','realtime_start':'2026-10-10'}],'2026-08-01')]:
-        result=run_mocked_legacy_page(db_path,lock_dir,
-            SeriesSpec('fred',metric,'USA',frequency,unit),start_day+'T00:00:00Z',END,
-            raw_bytes=raw({'observations':rows}),now=ASOF)
-        if result['status']!='ok':raise ValueError('Synthetic FRED example rejected')
+        jobs.append(ExampleJob('legacy',(SeriesSpec('fred',metric,'USA',frequency,unit),),
+            start_day+'T00:00:00Z',END,raw({'observations':rows})))
     a='2026-10-11T23:50:00Z'
     ms=lambda text:int(dt.datetime.fromisoformat(text.replace('Z','+00:00')).timestamp()*1000)
     for provider in ('binance','bybit'):
@@ -99,10 +118,28 @@ def create_example_fixture(db_path,lock_dir):
         for metric,freq,unit,payload,begin in [
             ('open_interest','5m','BTC',oi,a),
             ('funding_settled','event','fraction',funding,'2026-10-11T00:00:00Z')]:
-            result=run_mocked_legacy_page(db_path,lock_dir,
-                SeriesSpec(provider,metric,'BTCUSDT',freq,unit),begin,END,
-                raw_bytes=raw(payload),now=ASOF)
-            if result['status']!='ok':raise ValueError('Synthetic derivatives example rejected')
+            jobs.append(ExampleJob('legacy',(SeriesSpec(provider,metric,'BTCUSDT',freq,unit),),
+                begin,END,raw(payload)))
+    return tuple(jobs)
+
+
+def apply_example_job(db_path,lock_dir,job,*,now,status_code=200,_parent_lock_held=False):
+    if not isinstance(job,ExampleJob):raise ValueError('Typed synthetic source job required')
+    body=job.raw_bytes if status_code==200 else b'{"reason":"SYNTHETIC_SOURCE_FAILURE"}' if status_code is not None else b''
+    if job.kind=='yahoo_ohlcv':
+        return run_offline_yahoo_ohlcv_fanout(db_path,lock_dir,job.specs[0].symbol,
+            job.start,job.end,raw_bytes=body,status_code=status_code,now=now,
+            _parent_lock_held=_parent_lock_held)
+    if job.kind!='legacy' or len(job.specs)!=1:raise ValueError('Unknown source job kind')
+    return run_mocked_legacy_page(db_path,lock_dir,job.specs[0],job.start,job.end,
+        raw_bytes=body,status_code=status_code,now=now,_parent_lock_held=_parent_lock_held)
+
+
+def create_example_fixture(db_path,lock_dir):
+    _fixture_guard(db_path,lock_dir)
+    for job in example_jobs():
+        result=apply_example_job(db_path,lock_dir,job,now=ASOF)
+        if result.get('status')!='ok':raise ValueError('Synthetic provider example rejected')
 
 
 def main(argv=None):

@@ -9,6 +9,7 @@ independent HTTP calls and no partial OHLCV ingestion.
 import hashlib
 import json
 import sqlite3
+from contextlib import nullcontext
 from urllib.error import HTTPError
 
 from ingestion.package_a_contracts import SeriesSpec, utc
@@ -41,7 +42,7 @@ def _specs(symbol):
 
 def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
                                    raw_bytes, status_code=200, now,
-                                   fault=None):
+                                   fault=None, _parent_lock_held=False):
     """One source-native fake fetch with ALL-OR-NOTHING five-metric SQL.
 
     An HTTP-200 invalid or partly unavailable multi-field quote yields five
@@ -56,6 +57,10 @@ def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
         raise ValueError("BLOCKED_YAHOO_FANOUT_TIME_RANGE")
     utc(now)
     db_path=_fixture_guard(db_path,lock_dir)
+    if type(_parent_lock_held) is not bool:
+        raise ValueError('Invalid offline parent lease marker')
+    if _parent_lock_held:
+        verify_offline_parent_lease(lock_dir)
     endpoint,params=_request_for(specs[0],start,end)
     frozen=FrozenLegacyHTTP(url=endpoint,params=params,body=raw_bytes,
                             status=status_code)
@@ -67,7 +72,7 @@ def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
         [symbol,utc(start).isoformat(),utc(end).isoformat(),response_digest,
          endpoint,params],sort_keys=True,separators=(",",":")).encode()).hexdigest()
     try:
-        with hold_offline_parent_lease(lock_dir):
+        with (nullcontext() if _parent_lock_held else hold_offline_parent_lease(lock_dir)):
             verify_offline_parent_lease(lock_dir)
             parse_error=None
             payload=None
@@ -113,6 +118,7 @@ def run_offline_yahoo_ohlcv_fanout(db_path, lock_dir, symbol, start, end, *,
                 failure_class=None
 
             outcomes=[]
+            verify_offline_parent_lease(lock_dir)
             with sqlite3.connect(db_path) as conn:
                 conn.execute("PRAGMA foreign_keys=ON")
                 ledger.initialize(conn,now=now)
