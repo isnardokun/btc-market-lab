@@ -295,7 +295,7 @@ class TestPackageAEntrypointLocks(unittest.TestCase):
         source=(self.repo/"ingestion"/"ingest_all.py").read_text(encoding="utf-8")
         self.assertIn("run_with_optional_writer_lock(",source)
         self.assertIn("--global-lock-dir",source)
-        self.assertNotIn("ingestion/ingest_all.py", 
+        self.assertNotIn("ingestion/ingest_all.py",
                          (self.repo/"scripts"/"daily.sh").read_text(encoding="utf-8"))
 
     def test_runner_registry_new_integrated_writer_suite_unique(self):

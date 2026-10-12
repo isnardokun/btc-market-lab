@@ -1,9 +1,9 @@
 # Package A — Engineering execution ledger (living document in ONE PR)
 
-**Status:** `A_IN_PROGRESS / QA_NOT_REQUESTED / PRODUCTION_NOT_AUTHORIZED`  
-**Working branch:** `feat/package-a-integrated-historical-ingestion`.  
-**Source of truth:** [Program A/B/C](INTEGRATED_DELIVERY_PROGRAM_ABC.md), [Issue #76](https://github.com/isnardokun/btc-market-lab/issues/76), [Agent roles](../AGENTS.md).  
-**Baseline master:** `8ca80e0f221ad2b0b276f6557d16ee00fe0ee381` (R10-E.14 integrated; 52 prior suites).  
+**Status:** `A_IN_PROGRESS / OFFLINE_QA_CANDIDATE / EXTERNAL_VERIFICATION_PENDING`
+**Working branch:** `feat/package-a-integrated-historical-ingestion`.
+**Source of truth:** [Program A/B/C](INTEGRATED_DELIVERY_PROGRAM_ABC.md), [Issue #76](https://github.com/isnardokun/btc-market-lab/issues/76), [Agent roles](../AGENTS.md).
+**Baseline master:** `8ca80e0f221ad2b0b276f6557d16ee00fe0ee381` (R10-E.14 integrated; 52 prior suites).
 **Rule:** update THIS draft PR with meaningful commits until A is integrated; **do not create micro-PRs** for the following workstreams.
 
 ## Workstreams and objective acceptance
