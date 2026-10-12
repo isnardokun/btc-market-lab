@@ -86,6 +86,9 @@ TESTS = [
     ("Unit: Package B Immutable Temporal Report Evidence", "python3 -m unittest -v tests.unit.test_package_b_evidence"),
     ("Unit: Package B Source-Linked Analytics and Wilder RSI", "python3 -m unittest -v tests.unit.test_package_b_analytics"),
     ("Unit: Package B Offline Report Gate and Six-Provider E2E", "python3 -m unittest -v tests.unit.test_package_b_research_report"),
+    ("Unit: Package C Native Jobs and Shared Parent Lease", "python3 -m unittest -v tests.unit.test_package_c_source_jobs"),
+    ("Unit: Package C Durable Pipeline, Gates and Explicit CLI", "python3 -m unittest -v tests.unit.test_package_c_pipeline"),
+    ("Unit: Package C Crash, Retry, Corruption and Concurrency", "python3 -m unittest -v tests.unit.test_package_c_recovery"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 

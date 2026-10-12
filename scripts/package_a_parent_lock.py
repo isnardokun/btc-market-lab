@@ -16,18 +16,23 @@ _ACTIVE_LEASE=ContextVar("package_a_offline_parent_flock_lease",default=None)
 
 
 @contextmanager
-def hold_offline_parent_lease(lock_directory):
+def hold_offline_parent_lease(lock_directory, *, identity_check=None):
     """Acquire real OS flock before granting a child its reuse lease."""
+    if identity_check is not None and not callable(identity_check):
+        raise ValueError("BLOCKED_OFFLINE_IDENTITY_CHECK_REQUIRED")
     root=Path(lock_directory).resolve(strict=True)
     with hold_writer_lock(lock_directory,namespace=_NAMESPACE) as evidence:
         # A boolean or borrowed root path is not enough: every nested fake
         # page must prove that the parent's original lock inode is still the
         # physical lock-file pathname before a new SQL commit.
-        evidence["check_identity"]()
-        token=_ACTIVE_LEASE.set((root,evidence["check_identity"]))
+        def check_identity():
+            evidence["check_identity"]()
+            if identity_check is not None:identity_check()
+        check_identity()
+        token=_ACTIVE_LEASE.set((root,check_identity))
         try:
             yield
-            evidence["check_identity"]()
+            check_identity()
         finally:
             _ACTIVE_LEASE.reset(token)
 
