@@ -114,7 +114,15 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
             verify_offline_parent_lease(lock_directory)
         lock_context = (nullcontext() if _parent_lock_held else
                         hold_writer_lock(lock_directory, namespace=LOCK_NAMESPACE))
-        with lock_context:
+        with lock_context as lock_evidence:
+            def verify_live_lock_inode():
+                if _parent_lock_held:
+                    return verify_offline_parent_lease(lock_directory)
+                return lock_evidence["check_identity"]()
+            # Before any fake HTTP/SQLite work and again INSIDE the outer
+            # transaction before commit: never commit if another cooperating
+            # writer could now acquire a replacement lock inode.
+            verify_live_lock_inode()
             raw = (response.raw_bytes if response.raw_bytes is not None else
                    json.dumps(response.payload, sort_keys=True,
                               separators=(",",":"), allow_nan=False).encode("utf-8")
@@ -190,6 +198,7 @@ def run_fixture_page(db_path, lock_directory, spec, start, end, response, *,
                         receipt_id=result["receipt_id"],receipt_status=result["status"],
                         now=now)
                 require_offline_precommit_integrity(db)
+                verify_live_lock_inode()
             return {
                 **result, "provider": spec.provider, "metric": spec.metric,
                 "page_provenance_gate": "RAW_SQL_LINEAGE_PASS",
