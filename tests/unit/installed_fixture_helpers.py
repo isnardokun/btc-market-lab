@@ -4,6 +4,7 @@ Unknown CHECK/default/trigger expressions are deliberately not reconstructed.
 All values below are invented test inputs; no production rows or RAW are used.
 """
 import datetime as dt
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -85,10 +86,14 @@ def new_fixture(testcase, *, seed=True):
     from scripts.package_a_migration_rehearsal import MARKER as MIGRATION_MARKER, MARKER_TEXT
     (root/MIGRATION_MARKER).write_text(MARKER_TEXT)
     path = root/'package_a_synthetic.db'
-    with sqlite3.connect(path) as db:
-        db.execute('PRAGMA foreign_keys=ON')
-        create_schema(db)
-        if seed: seed_legacy(db)
+    # Connection.__exit__ commits/rolls back but does not close MAIN. Leaving
+    # it to GC can populate SQLite's retained-descriptor cache while the WAL
+    # test holds a lock, making the later writer impossible to attest as new.
+    with closing(sqlite3.connect(path)) as db:
+        with db:
+            db.execute('PRAGMA foreign_keys=ON')
+            create_schema(db)
+            if seed: seed_legacy(db)
     path.chmod(0o600)
     r=root.stat(); d=path.stat()
     (root/state.FLAG).write_bytes(state.encode({'version':1,'run_id':uuid.uuid4().hex,

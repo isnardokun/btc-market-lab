@@ -1,3 +1,4 @@
+from contextlib import closing
 import importlib.util
 import sqlite3
 import unittest
@@ -14,7 +15,7 @@ class InstalledSchemaTests(unittest.TestCase):
         return installed_schema
 
     def test_profile_and_all_34_tables(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             result=self.module().inspect_installed_schema(db)
         self.assertEqual(result['state'],'INSTALLED_STRUCTURE_MATCH')
         self.assertEqual(result['legacy_tables'],34)
@@ -22,14 +23,14 @@ class InstalledSchemaTests(unittest.TestCase):
         self.assertEqual(result['scope'],'STRUCTURAL_METADATA_NOT_COMPLETE_DDL')
 
     def test_missing_or_changed_contract(self):
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('ALTER TABLE price_btc ADD COLUMN close REAL')
             with self.assertRaisesRegex(ValueError,'SCHEMA_DRIFT'):
                 self.module().inspect_installed_schema(db)
 
     def test_fingerprints_include_legacy_rows_and_trigger_sql(self):
         module=self.module()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             first=module.legacy_fingerprint(db)
             db.execute('UPDATE price_btc SET price=1 WHERE id=1')
             changed=module.legacy_fingerprint(db)
@@ -41,7 +42,7 @@ class InstalledSchemaTests(unittest.TestCase):
 
     def test_versions_and_extra_objects(self):
         module=self.module()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("INSERT INTO market_context_migrations VALUES(4,'SYNTHETIC')")
             with self.assertRaisesRegex(ValueError,'MIGRATION_VERSION_DRIFT'): module.inspect_installed_schema(db)
             db.execute('DELETE FROM market_context_migrations WHERE version=4')
@@ -50,7 +51,7 @@ class InstalledSchemaTests(unittest.TestCase):
 
     def test_index_and_fk_drift_fail_closed(self):
         module=self.module()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('DROP INDEX idx_daily_series_ts')
             db.execute('CREATE INDEX idx_daily_series_ts ON daily(ts,series_id)')
             with self.assertRaisesRegex(ValueError,'INDEX_DRIFT'): module.inspect_installed_schema(db)

@@ -3,6 +3,7 @@
 Real transport is a distinct FUTURE storage contract, never a runtime binding.
 This offline integration audits FAKE_HTTP only and never labels it real.
 """
+from contextlib import closing
 from dataclasses import asdict
 import datetime as dt
 import hashlib
@@ -49,7 +50,7 @@ def _sql(conn):
 
 
 def assert_schema(conn):
-    with sqlite3.connect(':memory:') as expected:
+    with closing(sqlite3.connect(':memory:')) as expected:
         for sql in DDL: expected.execute(sql)
         if _sql(conn)!=_sql(expected): raise ValueError('ADDON_SCHEMA_CONTRACT_DRIFT')
         for name in ADDON_TABLES:

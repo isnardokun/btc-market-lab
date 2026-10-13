@@ -7,6 +7,22 @@ permissions:
   contents: read
 
 jobs:
+  installed-python314:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Installed compatibility and WAL restore on Python 3.14
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          BTC_RESEARCH_HOME: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python3 -c 'import sys, sqlite3; print(sys.version); print(sqlite3.sqlite_version)'
+          python3 -m unittest -v tests.unit.test_installed_schema tests.unit.test_installed_evidence tests.unit.test_compatibility_acquisition tests.unit.test_installed_pipeline
+          python3 scripts/installed_schema_pipeline.py
   unit-portable:
     runs-on: ubuntu-latest
     steps:

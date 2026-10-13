@@ -1,3 +1,4 @@
+from contextlib import closing
 import importlib.util
 import json
 import os
@@ -48,13 +49,13 @@ class InstalledPipelineTests(unittest.TestCase):
 
     def test_full_acquired_report_is_private_reconciled_and_preserves_legacy(self):
         root,path,locks,t=self.prepared(all_sources=True)
-        with sqlite3.connect(path) as db: before=legacy_fingerprint(db)
+        with closing(sqlite3.connect(path)) as db, db: before=legacy_fingerprint(db)
         result=self.module().run_installed_pipeline(root,apply=True,transport=t)
         self.assertEqual(result['state'],'COMPLETE_OFFLINE_COMPATIBILITY',result)
         self.assertTrue(result['report_gate_pass'])
         self.assertFalse(result['production_publication_authorized'])
         self.assertEqual(t.calls,45)
-        with sqlite3.connect(path) as db: self.assertEqual(before,legacy_fingerprint(db))
+        with closing(sqlite3.connect(path)) as db, db: self.assertEqual(before,legacy_fingerprint(db))
         evidence=json.loads((root/'artifacts/evidence.json').read_text())
         self.assertEqual(len(evidence['snapshot']['series']),57)
         self.assertEqual(evidence['snapshot']['mode'],'OFFLINE_INSTALLED_SCHEMA')
@@ -104,7 +105,7 @@ class InstalledPipelineTests(unittest.TestCase):
         self.assertEqual(result['state'],'BLOCKED',result)
         self.assertFalse((root/'artifacts/report.html').exists())
         self.assertEqual(state.read_state(root)['status'],'BLOCKED')
-        with sqlite3.connect(path) as db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],3)
+        with closing(sqlite3.connect(path)) as db, db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],3)
 
     def test_lock_contender_has_no_sql_or_transport(self):
         root,path,locks,t=self.prepared()
@@ -144,12 +145,12 @@ p.run_installed_pipeline(Path(sys.argv[1]),apply=True,transport=t)
         result=subprocess.run([sys.executable,'-c',code,str(root)],cwd=Path(__file__).resolve().parents[2],capture_output=True,timeout=30)
         self.assertEqual(result.returncode,-signal.SIGKILL,result.stderr.decode())
         self.assertEqual(self.module().run_installed_pipeline(root,apply=True,transport=t)['state'],'COMPLETE_OFFLINE_COMPATIBILITY')
-        with sqlite3.connect(path) as db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],4)
+        with closing(sqlite3.connect(path)) as db, db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],4)
 
     def test_finished_run_cannot_accept_changed_run_policy_or_unknown_event(self):
         root,path,locks,t=self.prepared()
         m=self.module();m.run_installed_pipeline(root,apply=True,transport=t)
-        with sqlite3.connect(path) as db: db.execute("UPDATE compat_runs SET policy_json='{}'")
+        with closing(sqlite3.connect(path)) as db, db: db.execute("UPDATE compat_runs SET policy_json='{}'")
         self.assertEqual(m.run_installed_pipeline(root,apply=True,transport=t)['state'],'BLOCKED')
 
     def test_plan_and_fake_response_drift_block_before_sql(self):
@@ -183,7 +184,7 @@ p.run_installed_pipeline(Path(sys.argv[1]),apply=True,transport=t)
     def test_deleted_cursors_block_completed_run_and_further_acquisition(self):
         root,path,locks,t=self.prepared();m=self.module()
         self.assertEqual(m.run_installed_pipeline(root,apply=True,transport=t)['state'],'COMPLETE_OFFLINE_COMPATIBILITY')
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],15)
             db.execute('DELETE FROM compat_cursors')
         self.assertEqual(m.run_installed_pipeline(root,apply=True,transport=t)['state'],'BLOCKED')

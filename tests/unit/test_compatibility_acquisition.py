@@ -1,5 +1,8 @@
+from contextlib import closing
 import importlib.util
+import gc
 import json
+import os
 import sqlite3
 import unittest
 from unittest.mock import patch
@@ -13,6 +16,38 @@ from scripts.market_r10e11_writer_exclusion import WriterLockBusy
 
 class CompatibilityAcquisitionTests(unittest.TestCase):
     def setUp(self): self.root,self.path,self.locks=new_fixture(self)
+
+    def test_fixture_initializer_closes_sqlite_without_garbage_collection(self):
+        was_enabled=gc.isenabled();gc.disable()
+        try:
+            _,path,_=new_fixture(self)
+            identity=(path.stat().st_dev,path.stat().st_ino)
+            leaked=[]
+            for name in os.listdir('/proc/self/fd'):
+                try: info=os.fstat(int(name))
+                except OSError: continue
+                if (info.st_dev,info.st_ino)==identity: leaked.append(int(name))
+            self.assertEqual(leaked,[], 'Fixture initializer left SQLite MAIN open after return')
+        finally:
+            if was_enabled: gc.enable()
+
+    def test_schema_audit_closes_its_private_sqlite_reference(self):
+        from storage import compatibility_ledger as ledger
+        real=sqlite3.connect;references=[]
+        def reference(*args,**kwargs):
+            conn=real(*args,**kwargs);references.append(conn)
+            return conn
+        with closing(real(':memory:')) as db:
+            for sql in ledger.DDL: db.execute(sql)
+            db.execute('INSERT INTO compat_schema_migrations VALUES(1,?)',(ASOF,))
+            with patch('storage.compatibility_ledger.sqlite3.connect',side_effect=reference):
+                ledger.assert_schema(db)
+            self.assertEqual(len(references),1)
+            try:
+                with self.assertRaises(sqlite3.ProgrammingError):
+                    references[0].execute('SELECT 1')
+            finally:
+                references[0].close()
 
     def module(self):
         self.assertIsNotNone(importlib.util.find_spec('ingestion.compatibility_acquisition'),'Acquisition route missing')
@@ -31,9 +66,9 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
 
     def test_additive_migration_keeps_34_tables_and_is_idempotent(self):
         m=self.module()
-        with sqlite3.connect(self.path) as db: before=legacy_fingerprint(db)
+        with closing(sqlite3.connect(self.path)) as db, db: before=legacy_fingerprint(db)
         result,transport=self.apply()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(before,legacy_fingerprint(db))
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_raw_payloads').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],1)
@@ -49,7 +84,7 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
             request=m.request_from_job(job);t=m.FakeTransport({request.sha256:((200,job.raw_bytes),)})
             result=m.acquire_fake_page(self.path,self.locks,request,t,run_id='source-'+str(i),now=ASOF,max_requests=3,max_attempts=3)
             self.assertEqual(result['status'],'ok',result)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             providers={json.loads(row[0])['specs'][0]['provider'] for row in db.execute('SELECT request_json FROM compat_requests')}
             self.assertEqual(len(providers),6)
             from storage.compatibility_ledger import audit
@@ -60,24 +95,24 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
             (200,b'{"chart":{"result":[],"error":null}}','rejected')]:
             result,_=self.apply(status=status,raw=raw,run_id='failure-'+str(status)+str(len(raw)))
             self.assertEqual(result['status'],expected)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
 
     def test_reserved_crash_consumes_budget_and_never_refetches_success(self):
         m=self.module()
         with self.assertRaises(m.InjectedCrash): self.apply(fault='after_reserve',max_requests=1)
         with self.assertRaisesRegex(ValueError,'BUDGET'): self.apply(max_requests=1)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT status FROM compat_requests').fetchone()[0],'reserved')
 
     def test_after_observations_rollback_then_recovery_is_atomic(self):
         m=self.module()
         with self.assertRaises(m.InjectedCrash): self.apply(fault='after_observations')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_observations').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
         result,_=self.apply();self.assertEqual(result['status'],'ok')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_requests').fetchone()[0],2)
 
     def test_after_commit_resume_reuses_receipt_without_transport(self):
@@ -100,11 +135,11 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
 
     def test_raw_corruption_blocks_evidence_and_replay(self):
         self.apply()
-        with sqlite3.connect(self.path) as db: db.execute("UPDATE compat_raw_payloads SET body=X'00'")
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute("UPDATE compat_raw_payloads SET body=X'00'")
         with self.assertRaisesRegex(ValueError,'RAW'): self.apply()
 
     def test_partial_schema_not_silently_installed(self):
-        with sqlite3.connect(self.path) as db: db.execute('CREATE TABLE compat_requests(bad TEXT)')
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute('CREATE TABLE compat_requests(bad TEXT)')
         with self.assertRaisesRegex(ValueError,'ADDON_SCHEMA'): self.apply()
 
     def test_backup_restore_rehearsal_preserves_private_previous_backup(self):
@@ -123,7 +158,7 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
         request=m.request_from_job(job);raw=json.dumps(json.loads(job.raw_bytes)[:1]).encode()
         result,t=self.apply(request=request,raw=raw,run_id='gap')
         self.assertEqual(result['status'],'rejected')
-        with sqlite3.connect(self.path) as db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
+        with closing(sqlite3.connect(self.path)) as db, db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
 
     def test_empty_fred_is_recorded_without_cursor(self):
         job=next(j for j in example_jobs() if j.specs[0].provider=='fred')
@@ -137,20 +172,20 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
         payload=json.loads(job.raw_bytes);payload['data']=payload['data'][1:]
         result,t=self.apply(request=m.request_from_job(job),raw=json.dumps(payload).encode(),run_id='daily-gap')
         self.assertEqual(result['status'],'rejected')
-        with sqlite3.connect(self.path) as db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
+        with closing(sqlite3.connect(self.path)) as db, db: self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],0)
 
     def test_equal_raw_across_sources_keeps_distinct_request_provenance(self):
         m=self.module()
         for provider in ('binance','bybit'):
             job=next(j for j in example_jobs() if j.specs[0].provider==provider)
             self.apply(request=m.request_from_job(job),status=429,raw=b'{}',run_id=provider)
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_raw_payloads').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(DISTINCT request_sha256) FROM compat_requests').fetchone()[0],2)
 
     def test_inconsistent_transport_modes_cannot_be_written_or_audited(self):
         self.apply()
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             with self.assertRaises(sqlite3.IntegrityError): db.execute("UPDATE compat_requests SET transport='HTTP'")
             db.execute("UPDATE compat_requests SET transport='HTTP',mode='REAL_ACQUISITION'")
             from storage.compatibility_ledger import audit
@@ -159,22 +194,22 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
     def test_migration_crash_rolls_back_all_addons(self):
         self.module()
         from scripts.installed_migration_rehearsal import rehearsal
-        with sqlite3.connect(self.path) as db: before=legacy_fingerprint(db)
+        with closing(sqlite3.connect(self.path)) as db, db: before=legacy_fingerprint(db)
         with self.assertRaisesRegex(ValueError,'INJECTED_MIGRATION'): rehearsal(self.path,self.locks,now=ASOF,fault='after_first_ddl')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             self.assertEqual(before,legacy_fingerprint(db))
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'compat_%'").fetchone()[0],0)
 
     def test_wal_backup_includes_uncheckpointed_legacy_row(self):
         self.module()
         from scripts.installed_migration_rehearsal import rehearsal
-        with sqlite3.connect(self.path) as active:
+        with closing(sqlite3.connect(self.path)) as active, active:
             active.execute('PRAGMA journal_mode=WAL');active.execute('PRAGMA wal_autocheckpoint=0')
             active.execute("INSERT INTO meta VALUES('wal-row','SYNTHETIC_UNCHECKPOINTED')");active.commit()
             wal=self.path.with_name(self.path.name+'-wal')
             before=wal.read_bytes()
             result=rehearsal(self.path,self.locks,now=ASOF)
-            with sqlite3.connect(result['backup']) as backup:
+            with closing(sqlite3.connect(result['backup'])) as backup, backup:
                 self.assertEqual(backup.execute("SELECT value FROM meta WHERE key='wal-row'").fetchone()[0],'SYNTHETIC_UNCHECKPOINTED')
             self.assertEqual(result['backup_fingerprint']['tables']['meta']['rows'],2)
             self.assertTrue(before)
@@ -185,7 +220,7 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
         kw=dict(run_id='budget-delete',now=ASOF,max_requests=2,max_attempts=3,plan_sha='a'*64)
         with self.assertRaises(m.InjectedCrash): m.acquire_fake_page(self.path,self.locks,requests[0],t,fault='after_reserve',**kw)
         m.acquire_fake_page(self.path,self.locks,requests[0],t,**kw)
-        with sqlite3.connect(self.path) as db: db.execute("DELETE FROM compat_requests WHERE status='reserved'")
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute("DELETE FROM compat_requests WHERE status='reserved'")
         with self.assertRaisesRegex(ValueError,'ATTEMPT|BUDGET'):
             m.acquire_fake_page(self.path,self.locks,requests[1],t,**kw)
 
@@ -196,13 +231,13 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
             return real(foreign,isolation_level=None)
         with patch('ingestion.compatibility_acquisition.sqlite3.connect',side_effect=wrong):
             with self.assertRaisesRegex(ValueError,'SQLITE.*IDENTITY'): self.apply()
-        with real(foreign) as db:
+        with closing(real(foreign)) as db, db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'compat_%'").fetchone()[0],0)
 
     def test_deleting_entire_reserved_history_cannot_refund_high_water_budget(self):
         m=self.module()
         with self.assertRaises(m.InjectedCrash): self.apply(fault='after_reserve',max_requests=1)
-        with sqlite3.connect(self.path) as db: db.execute('DELETE FROM compat_requests')
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute('DELETE FROM compat_requests')
         with self.assertRaisesRegex(ValueError,'ATTEMPT|BUDGET'): self.apply(max_requests=1)
 
 

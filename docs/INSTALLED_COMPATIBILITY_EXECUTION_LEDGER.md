@@ -105,5 +105,37 @@ backup directly in a new private fixture folder; do not alter the historical
 trusted backup helper used by the already-closed production diagnostic order.
 Cost if wrong: revise only this offline rehearsal before productive migration.
 
-Next: current-SHA CI runner/retention/visual proof, then one final pinned Hermes
-order. PR #82 is the sole authorized integration PR and stays draft meanwhile.
+## Hermes QA failure and deterministic fixture lifecycle correction
+
+Initial final candidate 65ebed2 had current-SHA CI 82/82 PASS, retention and
+structural visual checks PASS. Hermes report #6152857496 nevertheless returned
+81/82 PASS, runner RC=1, SQLITE_ACTUAL_IDENTITY_MISMATCH in acquisition/WAL
+restore. The report also used stale local master e0a3be9 as merge-base instead
+of the ordered 1a224b0; it is not acceptance evidence for the frozen base.
+
+Reproduced the existing uncheckpointed-WAL test on Python 3.14.8: failure at
+the rehearsal's final writer open, with no newly opened SQLite MAIN descriptor.
+The synthetic fixture initializer used Connection's transaction context manager,
+which does not close the connection. Later garbage collection can leave its
+descriptor in SQLite's retained cache while another WAL connection holds a lock.
+The attestation correctly refuses an ambiguous reused descriptor before SQL.
+
+Two new lifecycle regressions reproduced RED: initializer leaves MAIN open
+with GC disabled; schema audit leaves its private in-memory reference open.
+GREEN fix closes the initializer, direct connections in the four installed
+test modules, and the audit reference deterministically. Transaction contexts
+retain their commit/rollback behavior. Actual-descriptor attestation is unchanged;
+cached/ambiguous descriptors, foreign connections and swap/restore still fail
+closed. No synthetic test was skipped and WAL backup assertions remain intact.
+
+Local verification: Python 3.14.7 / SQLite 3.53.1, 23 acquisition/lifecycle tests
+plus 33 profile/evidence/pipeline tests PASS, original RC=0 for both commands.
+Python 3.12.3 / SQLite 3.45.1: 23 acquisition/WAL tests PASS, RC=0. These are two
+different version combinations, not a claim to have reproduced Hermes's exact
+Python/SQLite build. CI adds a Python 3.14 job for all four installed modules;
+the existing complete runner/retention/visual job remains.
+
+Next: verify the complete runner and current-SHA CI, then publish FINAL_2,
+explicitly superseding FINAL_1. Require fetching origin/master and verifying the
+literal pinned base and its ancestry; never compare to stale local master.
+Preserve pr-82-qa and use a distinct new QA worktree. PR #82 remains unmerged.

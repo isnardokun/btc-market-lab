@@ -1,3 +1,4 @@
+from contextlib import closing
 from dataclasses import replace
 import importlib.util
 import sqlite3
@@ -64,20 +65,20 @@ class InstalledEvidenceTests(unittest.TestCase):
 
     def test_missing_native_raw_blocks_read(self):
         selection=self.selection('binance','funding_settled','BTCUSDT','event','fraction','market_derivatives','BTCUSDT')
-        with sqlite3.connect(self.path) as db: db.execute("UPDATE market_raw_payloads SET body=X'00'")
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute("UPDATE market_raw_payloads SET body=X'00'")
         with self.assertRaisesRegex(ValueError,'RAW'): self.read([selection])
 
     def test_future_fetch_and_snapshot_upper_bound_no_lookahead(self):
         snapshot=self.read([self.close()],asof='2026-10-11T12:00:00Z')
         self.assertFalse(snapshot.series)
         selection=self.selection('researchbitcoin','sopr_sth','BTC','d1','ratio','onchain_external_observations','sopr_sth')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("UPDATE onchain_external_observations SET fetched_at_utc='2026-10-13T00:00:00Z'")
         self.assertFalse(self.read([selection]).series)
 
     def test_mixed_units_or_implicit_mapping_rejected(self):
         selection=self.selection('researchbitcoin','sopr_sth','BTC','d1','ratio','onchain_external_observations','sopr_sth')
-        with sqlite3.connect(self.path) as db: db.execute("UPDATE onchain_external_observations SET unit='USD'")
+        with closing(sqlite3.connect(self.path)) as db, db: db.execute("UPDATE onchain_external_observations SET unit='USD'")
         with self.assertRaisesRegex(ValueError,'UNIT'): self.read([selection])
         with self.assertRaises(ValueError): self.selection('yahoo','high','BTC-USD','d1','USD','price_btc','BTC-USD')
 
@@ -111,7 +112,7 @@ class InstalledEvidenceTests(unittest.TestCase):
 
     def test_nonzero_offset_future_capture_is_not_replaced_by_snapshot_bound(self):
         selection=self.selection('researchbitcoin','sopr_sth','BTC','d1','ratio','onchain_external_observations','sopr_sth')
-        with sqlite3.connect(self.path) as db:
+        with closing(sqlite3.connect(self.path)) as db, db:
             db.execute("UPDATE onchain_external_observations SET fetched_at_utc='2026-10-13T01:00:00+01:00'")
         self.assertFalse(self.read([selection]).series)
 
@@ -119,14 +120,14 @@ class InstalledEvidenceTests(unittest.TestCase):
         selection=self.selection('researchbitcoin','sopr_sth','BTC','d1','ratio','onchain_external_observations','sopr_sth')
         for capture in ('2026-10-13T00:00:00','2026-10-13'):
             with self.subTest(capture=capture):
-                with sqlite3.connect(self.path) as db: db.execute('UPDATE onchain_external_observations SET fetched_at_utc=?',(capture,))
+                with closing(sqlite3.connect(self.path)) as db, db: db.execute('UPDATE onchain_external_observations SET fetched_at_utc=?',(capture,))
                 try: snapshot=self.read([selection])
                 except ValueError: continue
                 self.assertFalse(snapshot.series,'Ambiguous future capture was credited')
 
     def test_actual_sqlite_descriptor_cannot_read_swapped_foreign_inode(self):
         selection=self.close(); other,foreign,_=new_fixture(self)
-        with sqlite3.connect(foreign) as db: db.execute('UPDATE price_btc SET price=999999')
+        with closing(sqlite3.connect(foreign)) as db, db: db.execute('UPDATE price_btc SET price=999999')
         real=sqlite3.connect
         def racing_connect(*args,**kwargs):
             if args[0]==':memory:': return real(*args,**kwargs)
