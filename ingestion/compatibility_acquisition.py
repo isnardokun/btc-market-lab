@@ -19,6 +19,7 @@ from scripts import package_c_state as state
 from scripts.package_a_parent_lock import hold_offline_parent_lease, verify_offline_parent_lease
 from storage import compatibility_ledger as ledger
 from storage.installed_schema import inspect_installed_schema
+from storage.installed_connection import attested_connection
 
 MAX_RAW=4_000_000
 
@@ -110,7 +111,7 @@ def acquire_fake_page(db_path,lock_dir,request,transport,*,run_id,now,max_reques
         fault not in (None,'after_reserve','after_raw','after_observations','after_commit') or type(_parent_lock_held) is not bool):
         raise ValueError('BOUNDED_ACQUISITION_POLICY_REQUIRED')
     stamp=utc(now).isoformat().replace('+00:00','Z')
-    root,path,locks,_=state.guard(Path(db_path).parent)
+    root,path,locks,flag=state.guard(Path(db_path).parent)
     if path!=Path(db_path) or locks!=Path(lock_dir): raise ValueError('EXPLICIT_FIXTURE_PATH_MISMATCH')
     budgets={} if provider_budgets is None else dict(provider_budgets)
     if any(p not in ('yahoo','fred','bitview','researchbitcoin','binance','bybit') or type(n) is not int or not 1<=n<=128 for p,n in budgets.items()):
@@ -122,22 +123,22 @@ def acquire_fake_page(db_path,lock_dir,request,transport,*,run_id,now,max_reques
     lease=nullcontext() if _parent_lock_held else hold_offline_parent_lease(locks,identity_check=lambda:state.guard(root))
     with lease:
         verify_offline_parent_lease(locks); state.guard(root)
-        with closing(sqlite3.connect(path,isolation_level=None)) as conn:
+        with attested_connection(path,identity=flag['db_identity'],check_path=lambda:state.guard(root),readonly=False) as (conn,check_actual):
             conn.execute('PRAGMA foreign_keys=ON');conn.execute('BEGIN IMMEDIATE')
             try:
                 ledger.initialize(conn,now=stamp)
                 row=conn.execute('SELECT plan_sha256,policy_json FROM compat_runs WHERE run_id=?',(run_id,)).fetchone()
                 if row and row!=(plan,policy): raise ValueError('RUN_PLAN_OR_POLICY_DRIFT')
-                if not row: conn.execute('INSERT INTO compat_runs VALUES(?,?,?)',(run_id,plan,policy))
+                if not row: conn.execute('INSERT INTO compat_runs(run_id,plan_sha256,policy_json) VALUES(?,?,?)',(run_id,plan,policy))
                 ledger.audit(conn)
                 existing=conn.execute('SELECT receipt_id,attempt,raw_sha256 FROM compat_requests WHERE run_id=? AND request_sha256=? AND status IN (\'ok\',\'empty\') ORDER BY attempt DESC',(run_id,request.sha256)).fetchone()
                 if existing:
                     status,body=transport.outcome(request,existing[1])
                     if status!=200 or hashlib.sha256(body).hexdigest()!=existing[2]: raise ValueError('FROZEN_RESPONSE_DRIFT')
-                    verify_offline_parent_lease(locks);state.guard(root);conn.rollback()
+                    verify_offline_parent_lease(locks);check_actual();conn.rollback()
                     return {'status':'ok' if conn.execute('SELECT COUNT(*) FROM compat_observations WHERE receipt_id=?',(existing[0],)).fetchone()[0] else 'empty','receipt_id':existing[0],'replayed':True}
-                attempts=conn.execute('SELECT COUNT(*) FROM compat_requests WHERE run_id=? AND request_sha256=?',(run_id,request.sha256)).fetchone()[0]
-                total=conn.execute('SELECT COUNT(*) FROM compat_requests WHERE run_id=?',(run_id,)).fetchone()[0]
+                total,counters=conn.execute('SELECT reserved_total,attempts_json FROM compat_runs WHERE run_id=?',(run_id,)).fetchone()
+                history=json.loads(counters);attempts=history.get(request.sha256,0)
                 provider=request.specs[0].provider
                 used=sum(1 for (text,) in conn.execute('SELECT request_json FROM compat_requests WHERE run_id=?',(run_id,)) if json.loads(text)['specs'][0]['provider']==provider)
                 if attempts>=max_attempts or total>=max_requests or used>=budgets.get(provider,128):
@@ -149,10 +150,13 @@ def acquire_fake_page(db_path,lock_dir,request,transport,*,run_id,now,max_reques
                 attempt=attempts+1; rid=canonical_digest([run_id,request.sha256,attempt])
                 body=json.dumps(asdict(request),sort_keys=True,separators=(',',':'))
                 conn.execute('INSERT INTO compat_requests VALUES(?,?,?,?,?,\'FAKE_HTTP\',\'OFFLINE_PROVIDER_CONTRACT\',\'reserved\',NULL,?,NULL,NULL)',(rid,run_id,request.sha256,body,attempt,stamp))
-                verify_offline_parent_lease(locks);state.guard(root);conn.commit()
+                history[request.sha256]=attempt
+                conn.execute('UPDATE compat_runs SET reserved_total=reserved_total+1,attempts_json=? WHERE run_id=?',
+                    (json.dumps(history,sort_keys=True,separators=(',',':')),run_id))
+                verify_offline_parent_lease(locks);check_actual();conn.commit()
             except BaseException: conn.rollback();raise
             _fault(fault,'after_reserve')
-            verify_offline_parent_lease(locks);state.guard(root)
+            verify_offline_parent_lease(locks);check_actual()
             if conn.in_transaction: raise ValueError('HTTP_UNDER_WRITE_TRANSACTION')
             code,raw=transport.fetch(request,attempt)
             raw_sha=hashlib.sha256(raw).hexdigest() if code is not None else None
@@ -181,7 +185,7 @@ def acquire_fake_page(db_path,lock_dir,request,transport,*,run_id,now,max_reques
                         if not any(r[1:5]==(s.provider,s.metric,s.symbol,s.frequency) for r in parsed): continue
                         conn.execute('INSERT INTO compat_cursors VALUES(?,?,?,?,\'forward\',?,?) ON CONFLICT(provider,metric,symbol,frequency,direction) DO UPDATE SET end_exclusive_utc=excluded.end_exclusive_utc,advanced_by_receipt=excluded.advanced_by_receipt',
                             (s.provider,s.metric,s.symbol,s.frequency,request.end,rid))
-                ledger.audit(conn);verify_offline_parent_lease(locks);state.guard(root);conn.commit()
+                ledger.audit(conn);verify_offline_parent_lease(locks);check_actual();conn.commit()
             except BaseException: conn.rollback();raise
             _fault(fault,'after_commit')
             return {'status':status,'receipt_id':rid,'replayed':False,'failure_class':error}

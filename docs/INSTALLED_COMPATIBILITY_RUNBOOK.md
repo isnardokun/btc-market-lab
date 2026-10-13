@@ -102,3 +102,23 @@ cron/systemd, deployment or publication is authorized by this PR. A future
 pilot requires source/endpoint/range/request/cost limits, DB identity, fresh
 backup/rollback and uncooperative-writer control specified for that operation.
 Neither the existing backup nor offline QA grants those permissions.
+
+## Final-review hardening
+
+Linux /proc/self/fd is required for independent actual SQLite descriptor
+attestation. A pinned no-follow FD alone is insufficient: the SQLite MAIN FD
+must match the original attested inode, and canonical main pathname must be
+unchanged before SQL. Failure to identify it blocks, never falls back to a
+pathname-only check. The same boundary protects source and both private
+backup/restore target connections. No historical backup helper is changed.
+
+Explicit naive/date acquisition timestamps fail closed until their timezone
+contract is established; only a missing capture field uses a snapshot upper
+bound. Independent run reservation totals/per-request counters cannot be
+refunded by deleting receipts. The audit reconstructs exact attempt history
+and every cursor/frontier from successful RAW-reconciled requests.
+
+Known deferred minor: native legacy acquisition-link metadata is still labeled
+UNRECONCILED; acquired_utc matching remains pending in that limited legacy
+link display and must be corrected before productive as-of lineage acceptance.
+The link never grants verified request status or productive publication.

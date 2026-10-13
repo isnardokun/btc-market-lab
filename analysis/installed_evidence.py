@@ -15,6 +15,7 @@ from analysis.package_b_evidence import EvidencePoint, EvidenceSeries, ReportSna
 from ingestion.package_a_contracts import SeriesSpec, utc, daystamp, scalar, epoch
 from scripts import package_c_state as state
 from storage.installed_schema import inspect_installed_schema
+from storage.installed_connection import attested_connection
 
 MAX_POINTS=10000
 
@@ -86,7 +87,7 @@ def _point(conn,selection,row,*,asof,cutoff,snapshot_capture):
         try: captured=dt.datetime.fromisoformat(capture.replace('Z','+00:00'))
         except ValueError as error: raise ValueError('LEGACY_CAPTURE_TIME_INVALID') from error
         if captured.tzinfo is None:
-            captured=snapshot_capture;availability='SNAPSHOT_UPPER_BOUND'
+            raise ValueError('LEGACY_CAPTURE_TIMEZONE_UNVERIFIED')
         else: captured=captured.astimezone(dt.timezone.utc)
     if captured>asof: return None
     if table=='market_derivatives':
@@ -118,10 +119,10 @@ def read_installed_snapshot(db_path,lock_dir,*,asof,snapshot_captured_utc,select
     keys=[(x.spec.provider,x.spec.metric,x.spec.symbol,x.spec.frequency) for x in selections]
     if len(set(keys))!=len(keys): raise ValueError('AMBIGUOUS_LEGACY_STREAM_SELECTION')
     from pathlib import Path
-    root,path,locks,_=state.guard(Path(db_path).parent)
+    root,path,locks,flag=state.guard(Path(db_path).parent)
     if path!=Path(db_path) or locks!=Path(lock_dir): raise ValueError('EXPLICIT_FIXTURE_PATH_MISMATCH')
     output=[]
-    with closing(sqlite3.connect(path.resolve().as_uri()+'?mode=ro',uri=True)) as conn:
+    with attested_connection(path,identity=flag['db_identity'],check_path=lambda:state.guard(root),readonly=True) as (conn,check_actual):
         conn.execute('PRAGMA query_only=ON');conn.execute('BEGIN')
         state.guard(root);structure=inspect_installed_schema(conn)
         for selection in selections:
@@ -139,6 +140,6 @@ def read_installed_snapshot(db_path,lock_dir,*,asof,snapshot_captured_utc,select
         if structure['addon_tables']:
             from storage.compatibility_ledger import read_evidence
             output=read_evidence(conn,output,asof=generated,cutoff=cutoff)
-        state.guard(root)
+        check_actual()
     snapshot=ReportSnapshot(_text(generated),_text(cutoff),tuple(sorted(output,key=lambda s:s.key)),mode='OFFLINE_INSTALLED_SCHEMA')
     return replace(snapshot,sha256=snapshot_digest(snapshot))

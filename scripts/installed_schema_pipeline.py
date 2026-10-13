@@ -30,9 +30,16 @@ from scripts.package_a_parent_lock import hold_offline_parent_lease, verify_offl
 from scripts.market_r10e11_writer_exclusion import WriterLockBusy
 from storage import compatibility_ledger as ledger
 from storage.installed_schema import inspect_installed_schema, legacy_fingerprint
+from storage.installed_connection import attested_connection
 from validation.installed_report_gate import evaluate_installed_fixture
 
 VERSION='installed-compatibility-offline-v1'
+
+
+def _connect(db):
+    root,path,_,flag=state.guard(Path(db).parent)
+    if path!=Path(db): raise ValueError('EXPLICIT_FIXTURE_PATH_MISMATCH')
+    return attested_connection(path,identity=flag['db_identity'],check_path=lambda:state.guard(root),readonly=True)
 
 
 def plan_installed_pipeline(requests=(),policy=OrchestrationPolicy()):
@@ -79,7 +86,7 @@ def prepare_installed_run(root,*,asof,snapshot_captured_utc,selections=(),reques
     root,db,locks,flag=state.guard(root)
     with hold_offline_parent_lease(locks,identity_check=lambda:state.guard(root)):
         if state.read_state(root)!={}: raise ValueError('NEW_EMPTY_INSTALLED_RUN_REQUIRED')
-        with closing(sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True)) as conn:
+        with _connect(db) as (conn,check_actual):
             conn.execute('PRAGMA query_only=ON');conn.execute('BEGIN')
             inspect_installed_schema(conn);before=legacy_fingerprint(conn)
         body={'version':VERSION,'run_id':flag['run_id'],'plan':plan,'plan_sha256':canonical_digest(plan),
@@ -109,7 +116,7 @@ def _checked(root,flag,transport):
 
 
 def _audit(db,body,requests,policy):
-    with closing(sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True)) as conn:
+    with _connect(db) as (conn,check_actual):
         conn.execute('PRAGMA query_only=ON');conn.execute('BEGIN')
         structure=inspect_installed_schema(conn);retained=legacy_fingerprint(conn)
         if retained!=body['legacy_fingerprint']: raise ValueError('LEGACY_FINGERPRINT_DRIFT')
@@ -210,7 +217,7 @@ def run_installed_pipeline(root,*,apply=False,transport=None,fault=None):
             holder.update(body=body,stage='gate' if body['status']=='COMPLETE' else STAGES[min(len(body['completed']),6)])
             # Legacy rows/schema must still match even when the previous run
             # ended before producing its validate artifact.
-            with closing(sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True)) as conn:
+            with _connect(db) as (conn,check_actual):
                 conn.execute('PRAGMA query_only=ON');conn.execute('BEGIN');inspect_installed_schema(conn)
                 if legacy_fingerprint(conn)!=body['legacy_fingerprint']: raise ValueError('LEGACY_FINGERPRINT_DRIFT')
             if body['status']=='COMPLETE': return _final(root,db,locks,body,selections,requests,policy)

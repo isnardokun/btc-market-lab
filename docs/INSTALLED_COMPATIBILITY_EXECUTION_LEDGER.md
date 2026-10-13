@@ -61,3 +61,49 @@ numeric headers added after observing split Puntos header. Final visual pending.
 
 No live APIs, productive SQL, cron, flags, source checkout or old worktrees
 modified. Next: independent whole-branch review and final verification.
+
+## Independent whole-branch review and consolidated fix pass
+
+Reviewer /root/installed_final_review, fresh-context gpt-6-astra, base
+1a224b0..e61e03f: four Important findings, zero Critical. Six targeted regressions
+failed locally (seven failures including subcases), recorded before fixes:
+future naive/date capture, swapped/foreign actual SQLite descriptor, deleted
+cursor set, deleted reserved attempt/budget refund. Initial candidate final
+runner then completed 82/82 offline PASS, RC=0; this did not resolve review P1s.
+
+Fix pass:
+- Reject ambiguous naive/date capture instead of substituting snapshot time.
+- Pin O_NOFOLLOW and independently attest actual Linux SQLite MAIN descriptor
+  before SQL; repeat path/descriptor checks through transactions. Reader,
+  acquisition, pipeline and both backup/restore ends use the same boundary.
+  Fifteen targeted tests passed locally before the execution service disconnected.
+- Reconstruct COMPLETE cursor set/frontier and continuity from reconciled
+  successful receipts; absent cursors are corruption, not fresh streams.
+- Durable independent run reservation total/per-request high-water counters
+  are committed with every reservation. Audit requires exact complete receipt
+  history and contiguous attempts; deleting even all reserved rows cannot refund.
+Final consolidated fix verification is assigned to current-SHA GitHub CI because
+exec-server transport disconnected and recovery timed out. No fake local PASS.
+
+Final: minor (deferred): legacy matching-link evidence does not check
+market_request_acquisitions.acquired_utc. It remains explicitly
+LEGACY_REQUEST_LINK_PRESENT_UNRECONCILED, never native verified acquisition.
+A future production/as-of lineage adapter must validate that timestamp before
+crediting links; no productive approval inferred.
+
+Final: Ruling: live source contracts/entitlement, complete installed DDL,
+productive migration/restore, scheduler and global production writer exclusion
+remain unjudged and blocked by separate owner permissions. Cost if wrong:
+new pilot evidence and operational integration before productive acceptance.
+
+Ruling: actual-descriptor verification requires Linux /proc/self/fd and fails
+closed when descriptor identity is unavailable. Cost if wrong: a separate
+platform implementation is required on non-Linux hosts.
+
+Ruling: keep recovery/backups fully descriptor-attested using SQLite online
+backup directly in a new private fixture folder; do not alter the historical
+trusted backup helper used by the already-closed production diagnostic order.
+Cost if wrong: revise only this offline rehearsal before productive migration.
+
+Next: current-SHA CI runner/retention/visual proof, then one final pinned Hermes
+order. PR #82 is the sole authorized integration PR and stays draft meanwhile.

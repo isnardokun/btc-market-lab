@@ -18,7 +18,9 @@ from storage.installed_schema import (ADDON_TABLES, columns, indexes, foreign_ke
 DDL=(
 '''CREATE TABLE compat_schema_migrations(version INTEGER PRIMARY KEY,applied_utc TEXT NOT NULL)''',
 '''CREATE TABLE compat_raw_payloads(sha256 TEXT PRIMARY KEY,body BLOB NOT NULL)''',
-'''CREATE TABLE compat_runs(run_id TEXT PRIMARY KEY,plan_sha256 TEXT NOT NULL,policy_json TEXT NOT NULL)''',
+'''CREATE TABLE compat_runs(run_id TEXT PRIMARY KEY,plan_sha256 TEXT NOT NULL,policy_json TEXT NOT NULL,
+ reserved_total INTEGER NOT NULL DEFAULT 0 CHECK(reserved_total BETWEEN 0 AND 128),
+ attempts_json TEXT NOT NULL DEFAULT '{}')''',
 '''CREATE TABLE compat_requests(
  receipt_id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES compat_runs(run_id),
  request_sha256 TEXT NOT NULL,request_json TEXT NOT NULL,attempt INTEGER NOT NULL CHECK(attempt BETWEEN 1 AND 3),
@@ -94,7 +96,7 @@ def audit(conn):
     assert_schema(conn)
     if conn.execute('PRAGMA foreign_key_check').fetchone(): raise ValueError('ADDON_FOREIGN_KEY_FAILURE')
     from ingestion.compatibility_acquisition import request_from_dict
-    count=0
+    count=0;histories={};providers={};frontiers={}
     for rid,run_id,request_sha,body,attempt,transport,mode,status,http,captured,raw_sha,error in conn.execute('SELECT * FROM compat_requests'):
         count+=1
         if count>256: raise ValueError('OFFLINE_RECEIPT_AUDIT_BUDGET')
@@ -102,6 +104,10 @@ def audit(conn):
         if request.sha256!=request_sha or rid!=canonical_digest([run_id,request_sha,attempt]):
             raise ValueError('REQUEST_IDENTITY_MISMATCH')
         utc(captured)
+        histories.setdefault(run_id,{}).setdefault(request_sha,[]).append((attempt,status))
+        provider=request.specs[0].provider
+        providers.setdefault(run_id,{}).setdefault(provider,0)
+        providers[run_id][provider]+=1
         if transport!='FAKE_HTTP' or mode!='OFFLINE_PROVIDER_CONTRACT':
             raise ValueError('REAL_TRANSPORT_NOT_AUTHORIZED')
         actual=[tuple(row) for row in conn.execute('SELECT * FROM compat_observations WHERE receipt_id=? ORDER BY provider,metric,symbol,frequency,observed_utc,dimension_key',(rid,))]
@@ -121,6 +127,9 @@ def audit(conn):
             for spec in request.specs:
                 points=validated_points(request,spec,payload,now=captured)
                 expected.extend(observation(spec,p,rid) for p in points)
+                if points:
+                    key=(spec.provider,spec.metric,spec.symbol,spec.frequency,'forward')
+                    frontiers.setdefault(key,[]).append((utc(request.start),utc(request.end),request.end,rid))
             if (actual!=sorted(expected,key=lambda r:r[1:7]) or
                 status!=('ok' if expected else 'empty') or http!=200 or error is not None):
                 raise ValueError('OBSERVATION_REQUEST_RAW_RECONCILIATION')
@@ -128,14 +137,44 @@ def audit(conn):
             if actual or not error or (status=='failed' and http==200) or (status=='rejected' and http!=200):
                 raise ValueError('FAILED_RECEIPT_EVIDENCE_DRIFT')
         else: raise ValueError('RECEIPT_STATUS_INVALID')
-    # Cursor truth is checked against receipt identity/window and stream data.
-    for provider,metric,symbol,freq,direction,end,rid in conn.execute('SELECT * FROM compat_cursors'):
-        row=conn.execute('SELECT request_json,status FROM compat_requests WHERE receipt_id=?',(rid,)).fetchone()
-        request=request_from_dict(json.loads(row[0])) if row else None
-        if (not row or row[1]!='ok' or request.end!=end or direction!='forward' or
-            (provider,metric,symbol,freq) not in {(s.provider,s.metric,s.symbol,s.frequency) for s in request.specs} or
-            not conn.execute('SELECT 1 FROM compat_observations WHERE receipt_id=? AND provider=? AND metric=? AND symbol=? AND frequency=?',
-                (rid,provider,metric,symbol,freq)).fetchone()): raise ValueError('CURSOR_RECEIPT_MISMATCH')
+    # Durable high-water counters are independent of surviving receipt rows.
+    # Missing even the LAST/all reserved attempts must not refund quota.
+    for run_id,plan_sha,policy_text,reserved_total,counters in conn.execute('SELECT * FROM compat_runs'):
+        policy=json.loads(policy_text);recorded=json.loads(counters)
+        if (type(policy) is not dict or set(policy)!={'max_requests','max_attempts','provider_budgets'} or
+            type(policy['max_requests']) is not int or not 1<=policy['max_requests']<=128 or
+            type(policy['max_attempts']) is not int or not 1<=policy['max_attempts']<=3 or
+            type(policy['provider_budgets']) is not dict or
+            any(p not in ('yahoo','fred','bitview','researchbitcoin','binance','bybit') or
+                type(n) is not int or not 1<=n<=128 for p,n in policy['provider_budgets'].items()) or
+            type(recorded) is not dict or type(reserved_total) is not int or
+            not isinstance(plan_sha,str) or len(plan_sha)!=64):
+            raise ValueError('RUN_ATTEMPT_POLICY_DRIFT')
+        observed=histories.get(run_id,{})
+        if (any(type(k) is not str or len(k)!=64 or type(n) is not int or
+                not 1<=n<=policy['max_attempts'] for k,n in recorded.items()) or
+            set(recorded)!=set(observed) or reserved_total!=sum(recorded.values()) or
+            reserved_total!=sum(len(rows) for rows in observed.values()) or
+            reserved_total>policy['max_requests']):
+            raise ValueError('DURABLE_ATTEMPT_HISTORY_OR_BUDGET_DRIFT')
+        for sha,n in recorded.items():
+            attempts=sorted(observed[sha])
+            if ([a for a,_ in attempts]!=list(range(1,n+1)) or
+                sum(status in ('ok','empty') for _,status in attempts)>1):
+                raise ValueError('DURABLE_ATTEMPT_SEQUENCE_DRIFT')
+        if any(n>policy['provider_budgets'].get(p,128) for p,n in providers.get(run_id,{}).items()):
+            raise ValueError('DURABLE_PROVIDER_BUDGET_DRIFT')
+    # Reconstruct the COMPLETE cursor set and final frontier, including
+    # continuity, from successful raw-reconciled receipts, not existing rows.
+    expected_cursors={}
+    for key,windows in frontiers.items():
+        windows.sort()
+        for previous,current in zip(windows,windows[1:]):
+            if current[0]!=previous[1]: raise ValueError('CURSOR_RECEIPT_CONTINUITY_DRIFT')
+        expected_cursors[key]=(windows[-1][2],windows[-1][3])
+    actual_cursors={tuple(row[:5]):tuple(row[5:]) for row in conn.execute('SELECT * FROM compat_cursors')}
+    if actual_cursors!=expected_cursors:
+        raise ValueError('CURSOR_SET_OR_FRONTIER_DRIFT')
     return {'state':'SIMULATED_ACQUISITIONS_RECONCILED','receipts':count,
         'transport':'FAKE_HTTP','production_authorized':False,'external_history_verified':False}
 
