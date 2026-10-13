@@ -37,11 +37,13 @@ h3{font:700 18px var(--serif);margin:0 0 12px;color:var(--deep)}
 .note{color:var(--muted);font-size:12px}.quality{font:11px var(--mono);color:var(--sea)}
 .sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;background:#F3F6FA;color:var(--deep);font-weight:600}
+th.num{white-space:nowrap}
 th,td{padding:8px 9px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.num{text-align:right;font-family:var(--mono)}
 .table-wrap{overflow-x:auto;margin:12px 0}.table-wrap table{min-width:570px}.table-wrap .num{white-space:nowrap}.table-help{font-size:11px;color:var(--muted)}
 .digest{font:10px var(--mono);overflow-wrap:anywhere;word-break:break-all}.footer{border-top:1px solid var(--line);padding-top:13px;margin-top:22px;font-size:10px;color:var(--muted)}
 .methods{display:grid;grid-template-columns:65px minmax(0,1fr);gap:4px 10px}.methods dd{margin:0}
 .blocked{border:2px solid var(--dn);padding:18px;color:var(--dn)}a{color:var(--sea)}
+tfoot td{border-bottom:0}tfoot .footer{margin-top:6px;padding-top:6px}
 @media(max-width:600px){.report{padding:10px}.page{padding:22px 16px;margin-bottom:14px}h1{font-size:33px}h2{font-size:24px}.grid,.scenarios,.sources{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis .metric{padding:10px}.value{font-size:23px}th,td{padding:6px;font-size:11px}}
 @page{size:A4;margin:13mm 12mm}
 @media print{body{background:white;font-size:11px}.report{padding:0;max-width:none}.page{border:0;border-radius:0;padding:0;margin:0;break-after:page;box-shadow:none}.page:last-child{break-after:auto}.chart{padding:8px;overflow:visible;break-inside:avoid}.chart svg{min-width:0}h1{font-size:37px}.grid{margin:17px 0}.metric{padding:12px;break-inside:avoid}.panel{padding:8px;break-inside:avoid}.panel h3{margin-bottom:6px}.scenarios{gap:10px}.scenario{padding:12px;font-size:10px}th,td{padding:5px 7px;font-size:10px}.footer{font-size:9px;break-before:avoid;break-inside:avoid}.digest{font-size:8px}.table-wrap{overflow:visible;margin:6px 0}.table-wrap table{min-width:0}thead{display:table-header-group}tr{break-inside:avoid}h2,h3{break-after:avoid}.table-help{display:none}}
@@ -95,7 +97,7 @@ def _source_row(series,quality):
     state=quality.get(series.key,'UNVERIFIED')
     label_quality={'WITHIN_LOCAL_FRESHNESS_BUDGET':'Dentro del umbral local',
                    'STALE':'STALE · dato antiguo','FUTURE':'FUTURE · dato posterior'}.get(state,state)
-    vintage='<br><span class="note">Vintage '+escape(p.dimension)+'</span>' if series.provider=='fred' else ''
+    vintage=('<br><span class="note">'+('Vintage '+escape(p.dimension) if p.dimension else 'VINTAGE_UNKNOWN')+'</span>') if series.provider=='fred' else ''
     return (f'<tr data-series-sha256="{series.sha256}"><td><a href="#evidence-{series.sha256}">{escape(label)}</a></td>'
             f'<td class="num">{escape(raw_value)}</td><td>{escape(unit)}</td>'
             f'<td>{escape(p.observed_utc[:16].replace("T"," "))} UTC{vintage}<br><span class="quality" data-freshness="{escape(state)}">{escape(label_quality)}</span></td></tr>')
@@ -108,6 +110,7 @@ def _section_table(series,quality):
 
 def render_report(model):
     snapshot=model.snapshot
+    installed=snapshot.mode=='OFFLINE_INSTALLED_SCHEMA'
     closes={s.symbol:s for s in snapshot.series if s.provider=='yahoo' and s.metric=='close' and s.frequency=='d1'}
     quality={q.key:q.freshness for q in model.source_quality}
     generated=utc(snapshot.asof_utc).strftime('%Y-%m-%d %H:%M')
@@ -137,12 +140,15 @@ def render_report(model):
         content='<section class="page"><div class="brand">MERCADO / '+escape(asset.symbol)+'</div><h2 class="section-title">'+escape(asset.instrument)+'</h2>'
         if asset.errors:
             content+='<div class="blocked">BLOCKED · '+escape('; '.join(asset.errors))+'</div>'
+            if asset.quality=='PARTIAL_CLOSE_ONLY':
+                content+='<p class="note">Solo cierres disponibles; OHLCV, ATR y escenarios: NO_DATA.</p>'+_chart(asset)
+                content+='<div class="kpis">'+_metric('RSI(14)',asset.rsi,rsi_zone(asset.rsi),1)+_metric('SMA 20',asset.sma20,'USD')+_metric('SMA 200',asset.sma200,'USD')+_metric('ATR 14',None,'NO_DATA')+'</div>'
         else:
             content+='<div class="price-row"><span class="big-price">'+number(asset.close,2,'$')+'</span><span class="note">USD por '+('BTC' if asset.symbol=='BTC-USD' else 'participación')+' · '+escape(asset.observed_utc[:10])+' UTC</span></div>'
             content+=_chart(asset)
             content+='<div class="kpis">'+_metric('RSI(14)',asset.rsi,rsi_zone(asset.rsi),1)+_metric('SMA 20',asset.sma20,'USD')+_metric('SMA 200',asset.sma200,'USD')+_metric('ATR 14',asset.atr14,'USD · media true range')+'</div>'
             content+='<div class="scenarios">'+''.join('<div class="scenario '+cls+'"><h3>'+title+'</h3><p>'+escape(text)+'</p></div>' for cls,title,text in zip(('s-bull','s-base','s-bear'),('Alcista','Base','Bajista'),asset.scenarios))+'</div>'
-        content+='<p class="caption">Fuente local: Yahoo / '+escape(asset.symbol)+' / OHLCV d1. Instrumento y sesiones conservados; calendario bursátil externo sin verificar.</p>'
+        content+='<p class="caption">Fuente local: Yahoo / '+escape(asset.symbol)+' / '+('cierres d1, OHLCV ausente' if asset.quality=='PARTIAL_CLOSE_ONLY' else 'OHLCV d1')+'. Instrumento y sesiones conservados; calendario bursátil externo sin verificar.</p>'
         if asset.symbol in closes:
             content+='<p class="caption"><a href="#evidence-'+closes[asset.symbol].sha256+'">Consultar la serie y su evidencia</a></p>'
         content+=foot+'</section>'
@@ -163,12 +169,18 @@ def render_report(model):
             _section_table(series,quality)+'<p class="quality">UNVERIFIED · unidades/metodología externas. Disponibilidad local no prueba entitlement ni historia completa.</p>'+foot+'</section>')
     source_rows=[]
     for s in snapshot.series:
-        source_rows.append('<tr id="evidence-'+s.sha256+'" data-evidence-series-sha256="'+s.sha256+'"><td>'+escape(s.provider+' / '+s.metric+' / '+s.symbol)+'</td><td class="num">'+str(len(s.points))+'</td><td>'+escape(s.points[0].observed_utc[:10]+' → '+s.points[-1].observed_utc[:10])+'</td><td class="digest">'+s.sha256+'</td></tr>')
+        provenance=', '.join(sorted({p.provenance for p in s.points}))
+        provenance_label={'SIMULATED_REQUEST_VERIFIED':'Petición simulada',
+            'LEGACY_NO_REQUEST':'Receipt ausente',
+            'LEGACY_NO_REQUEST_VINTAGE_UNKNOWN':'Receipt/vintage ausentes',
+            'LEGACY_RAW_WITHOUT_ACQUISITION':'RAW sin acquisition',
+            'LEGACY_REQUEST_LINK_PRESENT_UNRECONCILED':'Link sin reconciliar'}.get(provenance,provenance)
+        source_rows.append('<tr id="evidence-'+s.sha256+'" data-evidence-series-sha256="'+s.sha256+'"><td>'+escape(s.provider+' / '+s.metric+' / '+s.symbol)+(('<br><span class="quality" data-provenance="'+escape(provenance)+'">'+escape(provenance_label)+'</span>') if installed else '')+'</td><td class="num">'+str(len(s.points))+'</td><td>'+escape(s.points[0].observed_utc[:10]+' → '+s.points[-1].observed_utc[:10])+'</td><td class="digest">'+s.sha256+'</td></tr>')
     pages.append('<section class="page"><div class="brand">METODOLOGÍA / EVIDENCIA</div><h2>Fuentes y trazabilidad</h2>'
-        '<p class="note">Un snapshot SQLite read-only reúne RAW/SHA, native request provenance, observaciones, cohortes y revisiones. Todos los gráficos/tablas usan este mismo conjunto.</p>'
+        '<p class="note">'+('Fixture de esquema instalado: procedencia heredada explícita; receipts ausentes no se reconstruyen. Adquisiciones nuevas son FAKE_HTTP. Vintages ausentes: VINTAGE_UNKNOWN. ' if installed else 'Un snapshot SQLite read-only reúne RAW/SHA, native request provenance, observaciones, cohortes y revisiones. ')+'Todos los gráficos/tablas usan este mismo conjunto.</p>'
         '<p class="digest">Snapshot SHA-256: '+snapshot.sha256+'</p><p class="note">Cálculos: '+escape(model.calculation_version)+'; RSI '+escape(btc.rsi_method)+'. ATR: '+escape(btc.atr_method)+'.</p>'
         '<dl class="note methods">'+''.join('<dt>'+escape(name)+'</dt><dd>'+escape(parameters)+'</dd>' for name,parameters in model.calculation_parameters)+'</dl>'
-        '<table><thead><tr><th>Serie / fuente</th><th class="num">Puntos</th><th>Rango observado</th><th>SHA de serie</th></tr></thead><tbody>'+''.join(source_rows)+'</tbody></table>'+foot+'</section>')
+        '<table><thead><tr><th>Serie / fuente</th><th class="num">Puntos</th><th>Rango observado</th><th>SHA de serie</th></tr></thead><tbody>'+''.join(source_rows)+'</tbody>'+('<tfoot><tr><td colspan="4">'+foot+'</td></tr></tfoot>' if installed else '')+'</table>'+('' if installed else foot)+'</section>')
     return ('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
         '<meta name="market-design-system" content="'+STYLE+'"><title>Mercados Research Studio · ejemplo sintético</title>'
         '<style>'+CSS+'</style></head><body data-b-report-version="v1" data-snapshot-sha256="'+snapshot.sha256+'"><main class="report">'+''.join(pages)+'</main></body></html>')

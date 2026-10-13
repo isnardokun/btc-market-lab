@@ -92,6 +92,16 @@ def _asset(snapshot,symbol,instrument,max_age,tag):
                 errors.append(symbol+':INVALID_OHLCV_BAR')
                 break
     if errors:
+        if snapshot.mode=='OFFLINE_INSTALLED_SCHEMA' and closes and 'close' in streams:
+            stream=streams['close']
+            if (stream.unit=='USD' and stream.raw_scale=='native' and len(closes)>=2 and
+                all(math.isfinite(v) and v>0 for _,v in closes) and
+                0<=(utc(snapshot.asof_utc)-utc(stamp)).total_seconds()/3600<=max_age):
+                numbers=[v for _,v in closes]
+                return AssetAnalysis(symbol,instrument,snapshot.sha256,stamp,closes,
+                    numbers[-1],(numbers[-1]/numbers[-2]-1)*100,compute_rsi(numbers),
+                    compute_ma(numbers,20),compute_ma(numbers,50),compute_ma(numbers,200),
+                    compute_macd(numbers)[2],None,(),'PARTIAL_CLOSE_ONLY',tuple(sorted(set(errors))))
         return AssetAnalysis(symbol,instrument,snapshot.sha256,stamp,(),
                              None,None,None,None,None,None,None,None,(),
                              'BLOCKED',tuple(sorted(set(errors))))
@@ -111,15 +121,20 @@ def _asset(snapshot,symbol,instrument,max_age,tag):
     return AssetAnalysis(symbol,instrument,snapshot.sha256,stamp,closes,
         latest,(latest/numbers[-2]-1)*100,rsi,compute_ma(numbers,20),
         compute_ma(numbers,50),compute_ma(numbers,200),macd,atr_value,
-        scenarios,'LOCAL_SYNTHETIC_EVIDENCE',())
+        scenarios,('LOCAL_SYNTHETIC_EVIDENCE' if snapshot.mode=='OFFLINE_SYNTHETIC' else
+                   'LOCAL_SIMULATED_ACQUISITION'),())
 
 
 def analyze_snapshot(snapshot):
     if not isinstance(snapshot,ReportSnapshot) or snapshot.sha256!=snapshot_digest(snapshot):
         raise ValueError('BLOCKED_REPORT_SNAPSHOT_DIGEST_MISMATCH')
+    if (snapshot.mode not in ('OFFLINE_SYNTHETIC','OFFLINE_INSTALLED_SCHEMA') or
+        snapshot.dataset_origin!='SYNTHETIC' or snapshot.production_authorized or snapshot.real_history_verified):
+        raise ValueError('BLOCKED_UNAUTHORIZED_REPORT_PROFILE')
     assets=tuple(_asset(snapshot,*profile) for profile in PROFILES)
     qualities=[]
     for series in snapshot.series:
+        if not series.points: raise ValueError('BLOCKED_EMPTY_EVIDENCE_SERIES')
         # Conservative operational freshness budgets, not externally proven
         # source calendars. FRED holidays/release timing remain unverified.
         limit=({'5m':1,'event':36,'d1':120,'weekly':14*24,'monthly':62*24}
