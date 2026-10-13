@@ -115,5 +115,34 @@ class InstalledEvidenceTests(unittest.TestCase):
             db.execute("UPDATE onchain_external_observations SET fetched_at_utc='2026-10-13T01:00:00+01:00'")
         self.assertFalse(self.read([selection]).series)
 
+    def test_future_naive_and_date_capture_fail_closed(self):
+        selection=self.selection('researchbitcoin','sopr_sth','BTC','d1','ratio','onchain_external_observations','sopr_sth')
+        for capture in ('2026-10-13T00:00:00','2026-10-13'):
+            with self.subTest(capture=capture):
+                with sqlite3.connect(self.path) as db: db.execute('UPDATE onchain_external_observations SET fetched_at_utc=?',(capture,))
+                try: snapshot=self.read([selection])
+                except ValueError: continue
+                self.assertFalse(snapshot.series,'Ambiguous future capture was credited')
+
+    def test_actual_sqlite_descriptor_cannot_read_swapped_foreign_inode(self):
+        selection=self.close(); other,foreign,_=new_fixture(self)
+        with sqlite3.connect(foreign) as db: db.execute('UPDATE price_btc SET price=999999')
+        real=sqlite3.connect
+        def racing_connect(*args,**kwargs):
+            if args[0]==':memory:': return real(*args,**kwargs)
+            held=self.root/'held.db';self.path.rename(held);foreign.rename(self.path)
+            try: return real(*args,**kwargs)
+            finally: self.path.rename(foreign);held.rename(self.path)
+        with patch('analysis.installed_evidence.sqlite3.connect',side_effect=racing_connect):
+            try: snapshot=self.read([selection])
+            except ValueError: return
+        self.assertEqual([p.value for p in snapshot.series[0].points],[80000,81000,80500])
+
+    def test_returned_foreign_connection_is_rejected_even_if_path_restored(self):
+        selection=self.close(); other,foreign,_=new_fixture(self)
+        real=sqlite3.connect
+        with patch('analysis.installed_evidence.sqlite3.connect',side_effect=lambda *a,**kw:real(foreign.resolve().as_uri()+'?mode=ro',uri=True)):
+            with self.assertRaisesRegex(ValueError,'SQLITE.*IDENTITY'): self.read([selection])
+
 
 if __name__=='__main__': unittest.main()

@@ -179,5 +179,31 @@ class CompatibilityAcquisitionTests(unittest.TestCase):
             self.assertEqual(result['backup_fingerprint']['tables']['meta']['rows'],2)
             self.assertTrue(before)
 
+    def test_deleted_reservation_does_not_refund_budget(self):
+        m=self.module();jobs=example_jobs()[:2];requests=[m.request_from_job(j) for j in jobs]
+        t=m.FakeTransport({r.sha256:((200,j.raw_bytes),) for r,j in zip(requests,jobs)})
+        kw=dict(run_id='budget-delete',now=ASOF,max_requests=2,max_attempts=3,plan_sha='a'*64)
+        with self.assertRaises(m.InjectedCrash): m.acquire_fake_page(self.path,self.locks,requests[0],t,fault='after_reserve',**kw)
+        m.acquire_fake_page(self.path,self.locks,requests[0],t,**kw)
+        with sqlite3.connect(self.path) as db: db.execute("DELETE FROM compat_requests WHERE status='reserved'")
+        with self.assertRaisesRegex(ValueError,'ATTEMPT|BUDGET'):
+            m.acquire_fake_page(self.path,self.locks,requests[1],t,**kw)
+
+    def test_sqlite_writer_rejects_foreign_actual_descriptor_before_mutation(self):
+        m=self.module();other,foreign,_=new_fixture(self);real=sqlite3.connect
+        def wrong(*args,**kwargs):
+            if args[0]==':memory:':return real(*args,**kwargs)
+            return real(foreign,isolation_level=None)
+        with patch('ingestion.compatibility_acquisition.sqlite3.connect',side_effect=wrong):
+            with self.assertRaisesRegex(ValueError,'SQLITE.*IDENTITY'): self.apply()
+        with real(foreign) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'compat_%'").fetchone()[0],0)
+
+    def test_deleting_entire_reserved_history_cannot_refund_high_water_budget(self):
+        m=self.module()
+        with self.assertRaises(m.InjectedCrash): self.apply(fault='after_reserve',max_requests=1)
+        with sqlite3.connect(self.path) as db: db.execute('DELETE FROM compat_requests')
+        with self.assertRaisesRegex(ValueError,'ATTEMPT|BUDGET'): self.apply(max_requests=1)
+
 
 if __name__=='__main__': unittest.main()

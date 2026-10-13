@@ -180,5 +180,13 @@ p.run_installed_pipeline(Path(sys.argv[1]),apply=True,transport=t)
         changed=evaluate_installed_fixture(document.replace('stroke-width="2.6"','stroke-width="9"'),db_path=path,lock_dir=locks,asof=ASOF,snapshot_captured_utc=CAPTURE,selections=selections)
         self.assertFalse(changed['pass']);self.assertGreater(changed['critical_count'],0)
 
+    def test_deleted_cursors_block_completed_run_and_further_acquisition(self):
+        root,path,locks,t=self.prepared();m=self.module()
+        self.assertEqual(m.run_installed_pipeline(root,apply=True,transport=t)['state'],'COMPLETE_OFFLINE_COMPATIBILITY')
+        with sqlite3.connect(path) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM compat_cursors').fetchone()[0],15)
+            db.execute('DELETE FROM compat_cursors')
+        self.assertEqual(m.run_installed_pipeline(root,apply=True,transport=t)['state'],'BLOCKED')
+
 
 if __name__=='__main__': unittest.main()
