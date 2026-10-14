@@ -9,7 +9,7 @@ import datetime as dt
 import math
 
 from ingestion.researchbitcoin_catalog import CATALOG
-from ingestion.bitview_history import EPOCH
+from ingestion.bitview_contract import EPOCH
 
 UTC = dt.timezone.utc
 PROVIDERS = frozenset({"binance", "bybit", "bitview", "researchbitcoin", "fred", "yahoo"})

@@ -92,7 +92,7 @@ class ValidatedGrant:
     def verify(self,operation,*,now=None):
         if self._seal is not _SEAL:raise ValueError('RUNTIME_CAPABILITY_REQUIRED')
         current=(utc(self.validated_utc) if self.grant.target_kind=='FIXTURE_TEST' else
-                 dt.datetime.now(dt.timezone.utc)) if now is None else utc(now)
+                 dt.datetime.now(dt.timezone.utc).replace(microsecond=0)) if now is None else utc(now)
         if operation not in self.grant.allowed_operations or operation not in OPERATIONS:
             raise ValueError('RUNTIME_OPERATION_NOT_APPROVED')
         if not utc(self.grant.issued_utc)<=current<utc(self.grant.expires_utc):
@@ -126,7 +126,7 @@ def validate_runtime_grant(grant,*,code_sha,plan_sha,now,operation,approved_arti
         if type(value) is not tuple or (len(value)!=2 and not
             (grant.target_kind=='LIVE_PRIVATE_PILOT' and value==())) or any(type(x) is not int or x<0 for x in value):
             raise ValueError('PHYSICAL_IDENTITIES_REQUIRED')
-    if grant.root_identity==() and (type(grant.creation_parent_identity) is not tuple or
+    if grant.target_kind=='LIVE_PRIVATE_PILOT' and (type(grant.creation_parent_identity) is not tuple or
        len(grant.creation_parent_identity)!=2):raise ValueError('CREATION_PARENT_IDENTITY_REQUIRED')
     if (type(grant.allowed_operations) is not tuple or not grant.allowed_operations or
         not set(grant.allowed_operations)<=OPERATIONS or len(set(grant.allowed_operations))!=len(grant.allowed_operations)):

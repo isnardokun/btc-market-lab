@@ -1,6 +1,9 @@
 from dataclasses import replace
 import importlib.util
 import os
+import datetime as dt
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -71,5 +74,33 @@ class LivePolicyTests(unittest.TestCase):
         self.module();from scripts.installed_live_guard import hold_runtime_session
         with self.assertRaises(ValueError):
             with hold_runtime_session(True):pass
+    def test_real_clock_is_canonical_and_private_target_is_new_and_bound(self):
+        p=self.module();g=self.grant();now=dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        new=self.root/'new-private'
+        g=replace(g,target_kind='LIVE_PRIVATE_PILOT',approval_reference='https://github.com/isnardokun/btc-market-lab/issues/60#issuecomment-1',
+            root=str(new),db=str(new/'pilot.db'),lock=str(new/'locks'),root_identity=(),db_identity=(),lock_identity=(),
+            creation_parent_identity=(self.root.stat().st_dev,self.root.stat().st_ino),
+            issued_utc=(now-dt.timedelta(seconds=5)).isoformat(),expires_utc=(now+dt.timedelta(minutes=5)).isoformat(),approval_artifact_sha='')
+        g=replace(g,approval_artifact_sha=g.artifact_sha)
+        cap=self.validate(g,now=now.isoformat())
+        self.assertEqual(cap.verify('read').microsecond,0)
+        from scripts.installed_live_guard import hold_runtime_session
+        with hold_runtime_session(cap) as session:first=session.identities
+        with hold_runtime_session(cap) as session:self.assertEqual(first,session.identities)
+    def test_default_imports_do_not_read_source_credentials(self):
+        self.module()
+        program="""import os
+original=os._Environ.get
+def denied(self,key,*args):
+ if key in ('FRED_API_KEY','RESEARCHBITCOIN_API_TOKEN'):raise AssertionError('credential read at import')
+ return original(self,key,*args)
+os._Environ.get=denied
+import scripts.installed_live_policy
+import ingestion.installed_live_sources
+import ingestion.installed_live_transport
+ingestion.installed_live_transport.BoundedHttpTransport()
+"""
+        result=subprocess.run([sys.executable,'-c',program],capture_output=True,text=True)
+        self.assertEqual(result.returncode,0,result.stderr)
 
 if __name__=='__main__':unittest.main()

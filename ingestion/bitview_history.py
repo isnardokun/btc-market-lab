@@ -21,7 +21,7 @@ from ingestion.ingest import fetch_series
 from storage.archive_schema import archive_schema_installed, save_window, register_dataset
 from scripts.package_a_writer_guard import run_with_optional_writer_lock
 
-EPOCH = dt.date(2009, 1, 1)
+from ingestion.bitview_contract import EPOCH
 LEDGER = """
 CREATE TABLE IF NOT EXISTS historical_fetch_windows (
  provider TEXT NOT NULL, metric TEXT NOT NULL,

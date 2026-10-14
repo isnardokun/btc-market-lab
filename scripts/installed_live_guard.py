@@ -114,8 +114,10 @@ class RuntimeSession:
 def hold_runtime_session(capability):
     if type(capability) is not ValidatedGrant:raise ValueError('RUNTIME_CAPABILITY_REQUIRED')
     capability.verify('read');g=capability.grant
-    identities=(_private_binding(capability) if g.root_identity==() else
+    identities=(_private_binding(capability) if g.target_kind=='LIVE_PRIVATE_PILOT' else
                 (g.root_identity,g.db_identity,g.lock_identity))
+    if g.target_kind=='LIVE_PRIVATE_PILOT' and any(wanted and wanted!=actual for wanted,actual in zip((g.root_identity,g.db_identity,g.lock_identity),identities)):
+        raise ValueError('PRIVATE_DECLARED_IDENTITY_DRIFT')
     session=RuntimeSession(capability,identities)
     session._paths()
     with hold_offline_parent_lease(session.lock,identity_check=session._paths):

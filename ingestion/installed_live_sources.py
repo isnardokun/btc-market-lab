@@ -4,8 +4,7 @@ import datetime as dt
 import json
 import math
 from urllib.parse import quote
-from ingestion.package_a_contracts import SeriesSpec,utc
-from ingestion.package_a_legacy_bridge import reconciled_fixture_points
+from ingestion.package_a_contracts import SeriesSpec,utc,parse_fixture
 from ingestion.researchbitcoin_catalog import CATALOG
 from scripts.installed_live_policy import ORIGINS,digest
 
@@ -119,7 +118,7 @@ def normalize_live_page(request,body,*,captured_utc):
                 raise ValueError('NATIVE_BYBIT_SCOPE_REQUIRED')
         if spec.provider=='binance' and (type(payload) is not list or any(row.get('symbol')!=spec.symbol for row in payload)):
             raise ValueError('NATIVE_BINANCE_SCOPE_REQUIRED')
-        points=reconciled_fixture_points(spec,payload,start=request.start,end=request.end,now=captured_utc)
+        points=parse_fixture(spec,payload,start=request.start,end=request.end)
         if any(utc(p.timestamp)>captured or (spec.provider=='fred' and utc(p.dimension+'T00:00:00Z')>captured) for p in points):
             raise ValueError('FUTURE_SOURCE_OR_VINTAGE')
         if points and ((spec.provider in ('researchbitcoin','bitview')) or (spec.provider=='yahoo' and spec.symbol=='BTC-USD')):
