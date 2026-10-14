@@ -1,4 +1,4 @@
-"""Guarantee the default 56-suite registry cannot access the live pipeline DB.
+"""Guarantee the default 89-suite registry cannot access the live pipeline DB.
 
 Static checks only: NEVER import tests.integration.test_pipeline (its import
 itself reads the hard-coded production SQLite path).
@@ -27,9 +27,9 @@ class TestPackageAOfflineRunnerSafety(unittest.TestCase):
 
     def test_registry_contains_every_suite_once(self):
         self.assertEqual(len(self.entries),1)
-        self.assertEqual(len(self.entries[0]),83)
-        self.assertEqual(len({n for n,c in self.entries[0]}),83)
-        self.assertEqual(len({c for n,c in self.entries[0]}),83)
+        self.assertEqual(len(self.entries[0]),89)
+        self.assertEqual(len({n for n,c in self.entries[0]}),89)
+        self.assertEqual(len({c for n,c in self.entries[0]}),89)
 
     def test_pipeline_is_explicitly_designated_live_only(self):
         self.assertEqual(len(self.live),1)

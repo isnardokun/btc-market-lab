@@ -48,6 +48,10 @@ class LivePipelineTests(unittest.TestCase):
         again=m.run_live_pipeline(plan,capability=cap,apply=True,transport=client)
         self.assertEqual(again,result);self.assertEqual(client.calls,before)
         for p in (root/'live-run-native-test').iterdir():self.assertEqual(p.stat().st_mode&0o777,0o600)
+        probe=subprocess.run(['node','scripts/package_b_visual_qa.cjs','--html',str(root/'live-run-native-test'/'report.html'),'--gate',str(root/'live-run-native-test'/'gate.json'),'--output-dir',str(root/'visual-probe'),'--playwright-module',str(root/'absent-local-playwright')],capture_output=True,text=True)
+        self.assertNotIn('Unapproved or mismatched',probe.stderr)
+        self.assertIn('Cannot find module',probe.stderr)
+
     def test_incomplete_pilot_remains_private_diagnosis(self):
         m,root,path,plan,cap,client=self.fixture()
         result=m.run_live_pipeline(plan,capability=cap,apply=True,transport=client)

@@ -21,8 +21,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 -c 'import sys, sqlite3; print(sys.version); print(sqlite3.sqlite_version)'
-          python3 -m unittest -v tests.unit.test_installed_schema tests.unit.test_installed_evidence tests.unit.test_compatibility_acquisition tests.unit.test_installed_pipeline
+          python3 -m unittest -v tests.unit.test_installed_schema tests.unit.test_installed_evidence tests.unit.test_compatibility_acquisition tests.unit.test_installed_pipeline tests.unit.test_installed_live_policy tests.unit.test_installed_live_transport tests.unit.test_installed_live_storage tests.unit.test_installed_live_recovery tests.unit.test_installed_live_evidence tests.unit.test_installed_live_pipeline
           python3 scripts/installed_schema_pipeline.py
+          python3 -m scripts.installed_live_pipeline --plan
   unit-portable:
     runs-on: ubuntu-latest
     steps:
@@ -44,15 +45,15 @@ jobs:
             exit 1
           fi
           echo "No generated portable HTML, manifest, Telegram receipts, or dashboard snapshot tracked."
-      - name: Complete 83-registered-suite OFFLINE regression (1 live blocked)
+      - name: Complete 89-registered-suite OFFLINE regression (1 live blocked)
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           BTC_RESEARCH_HOME: ${{ github.workspace }}
         run: |
           set -euo pipefail
           python3 tests/run_all.py | tee "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_EXECUTED=82$' "$RUNNER_TEMP/package_a_offline_runner.log"
-          grep -q '^OFFLINE_SUITES_PASSED=82$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_EXECUTED=88$' "$RUNNER_TEMP/package_a_offline_runner.log"
+          grep -q '^OFFLINE_SUITES_PASSED=88$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_SUITES_SKIPPED=1$' "$RUNNER_TEMP/package_a_offline_runner.log"
           grep -q '^LIVE_STATUS=NOT_TESTED_NOT_AUTHORIZED$' "$RUNNER_TEMP/package_a_offline_runner.log"
       - name: Isolated worktree runtime retention regression
@@ -103,4 +104,16 @@ jobs:
             --html "$RUNNER_TEMP/installed-report/report.html" \
             --gate "$RUNNER_TEMP/installed-report/gate.json" \
             --output-dir "$RUNNER_TEMP/installed-visual-evidence" \
+            --playwright-module "$RUNNER_TEMP/b-visual-tools/node_modules/playwright"
+      - name: Native live binding synthetic report responsive and A4 acceptance
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          BTC_RESEARCH_HOME: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          python3 tests/fixtures/live_report_example.py --output-dir "$RUNNER_TEMP/live-report"
+          node scripts/package_b_visual_qa.cjs \
+            --html "$RUNNER_TEMP/live-report/report.html" \
+            --gate "$RUNNER_TEMP/live-report/gate.json" \
+            --output-dir "$RUNNER_TEMP/live-visual-evidence" \
             --playwright-module "$RUNNER_TEMP/b-visual-tools/node_modules/playwright"

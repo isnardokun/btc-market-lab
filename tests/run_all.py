@@ -93,6 +93,12 @@ TESTS = [
     ("Unit: Installed Legacy Evidence and Close Contracts", "python3 -m unittest -v tests.unit.test_installed_evidence"),
     ("Unit: Installed Additive Acquisition and WAL Restore", "python3 -m unittest -v tests.unit.test_compatibility_acquisition"),
     ("Unit: Installed Recoverable Pipeline and Private Gates", "python3 -m unittest -v tests.unit.test_installed_pipeline"),
+    ("Unit: Native Live Permission and Physical Boundary", "python3 -m unittest -v tests.unit.test_installed_live_policy"),
+    ("Unit: Native Live Bounded Source Transport", "python3 -m unittest -v tests.unit.test_installed_live_transport"),
+    ("Unit: Native Live Scalable Preservation and Migration", "python3 -m unittest -v tests.unit.test_installed_live_storage"),
+    ("Unit: Native Live Durable Acquisition and Recovery", "python3 -m unittest -v tests.unit.test_installed_live_recovery"),
+    ("Unit: Native Live Temporal Private Evidence", "python3 -m unittest -v tests.unit.test_installed_live_evidence"),
+    ("Unit: Native Live Seven-Stage Pipeline and Readiness", "python3 -m unittest -v tests.unit.test_installed_live_pipeline"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 
