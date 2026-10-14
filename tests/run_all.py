@@ -89,6 +89,10 @@ TESTS = [
     ("Unit: Package C Native Jobs and Shared Parent Lease", "python3 -m unittest -v tests.unit.test_package_c_source_jobs"),
     ("Unit: Package C Durable Pipeline, Gates and Explicit CLI", "python3 -m unittest -v tests.unit.test_package_c_pipeline"),
     ("Unit: Package C Crash, Retry, Corruption and Concurrency", "python3 -m unittest -v tests.unit.test_package_c_recovery"),
+    ("Unit: Installed Schema Drift and Legacy Fingerprints", "python3 -m unittest -v tests.unit.test_installed_schema"),
+    ("Unit: Installed Legacy Evidence and Close Contracts", "python3 -m unittest -v tests.unit.test_installed_evidence"),
+    ("Unit: Installed Additive Acquisition and WAL Restore", "python3 -m unittest -v tests.unit.test_compatibility_acquisition"),
+    ("Unit: Installed Recoverable Pipeline and Private Gates", "python3 -m unittest -v tests.unit.test_installed_pipeline"),
     ("Integration: Pipeline", "python3 tests/integration/test_pipeline.py"),
 ]
 

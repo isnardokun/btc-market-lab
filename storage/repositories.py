@@ -41,6 +41,10 @@ def get_btc_ohlc(days=252):
     """OHLCV diario de BTC-USD desde Yahoo Finance (price_btc)."""
     db = _get_db()
     cur = db.cursor()
+    columns = {row[1] for row in cur.execute('PRAGMA table_info(price_btc)')}
+    if not {'open', 'high', 'low', 'close', 'volume'}.issubset(columns):
+        db.close()
+        raise ValueError('OHLCV_UNAVAILABLE: price_btc contains closes only')
     cur.execute(
         "SELECT ts, open, high, low, close, volume FROM price_btc "
         "ORDER BY ts DESC LIMIT ?",
@@ -55,7 +59,7 @@ def get_btc_latest_price():
     """Precio de cierre mas reciente del BTC."""
     db = _get_db()
     cur = db.cursor()
-    cur.execute("SELECT ts, close FROM price_btc ORDER BY ts DESC LIMIT 1")
+    cur.execute("SELECT ts, price FROM price_btc ORDER BY ts DESC LIMIT 1")
     r = cur.fetchone()
     db.close()
     return (r[0], r[1]) if r else (None, None)

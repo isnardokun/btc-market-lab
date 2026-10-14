@@ -22,10 +22,13 @@ class EvidencePoint:
     dimension: str
     value: float
     row_sha256: str
-    receipt_id: str
-    raw_sha256: str
-    request_sha256: str
+    receipt_id: str | None
+    raw_sha256: str | None
+    request_sha256: str | None
     captured_utc: str
+    provenance: str = 'FROZEN_OFFLINE'
+    source_table: str | None = None
+    availability: str = 'RECORDED_CAPTURE'
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,7 @@ class ReportSnapshot:
     real_history_verified: bool = False
     production_authorized: bool = False
     mode: str = 'OFFLINE_SYNTHETIC'
+    dataset_origin: str = 'SYNTHETIC'
 
 
 def canonical_digest(value):

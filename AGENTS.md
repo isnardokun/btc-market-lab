@@ -12,6 +12,12 @@ This repository is managed under the [Integrated Delivery Program A/B/C](docs/IN
 
 Deliver only three substantial packages unless the owner explicitly changes this policy:
 
+Owner exception, 2026-10-12 21:45 America/Bogota: ONE additional integrated
+offline compatibility PR for the installed schema and A/B/C, authorized after
+Issue #60 comment #6137030693; authorization recorded in #6137088170.
+Preserve the same roles and final SHA/CI/QA gates. This does not authorize
+API traffic, production DB access/migration/restore, cron, flags or deployment.
+
 - **A — Historical data and integrated ingestion**: [Issue #76](https://github.com/isnardokun/btc-market-lab/issues/76).
 - **B — Analytics, design system and professional reporting**: [Issue #77](https://github.com/isnardokun/btc-market-lab/issues/77).
 - **C — Orchestration, resilience and controlled rollout**: [Issue #78](https://github.com/isnardokun/btc-market-lab/issues/78).
