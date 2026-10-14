@@ -97,14 +97,17 @@ def _point(conn,selection,row,*,asof,cutoff,snapshot_capture):
             raise ValueError('LEGACY_RAW_SHA_MISMATCH')
         provenance='LEGACY_RAW_WITHOUT_ACQUISITION'
         # Link presence is weaker than a request/row reconstruction audit.
-        matches=conn.execute('SELECT l.request_id,l.attempted_utc,l.ended_utc FROM market_request_lineage l '
+        matches=conn.execute('SELECT l.request_id,l.attempted_utc,l.ended_utc,a.acquired_utc FROM market_request_lineage l '
             'JOIN market_request_acquisitions a ON a.request_id=l.request_id '
             'WHERE l.provider=? AND a.provider=l.provider AND l.stream=? AND l.symbol=? '
             'AND l.interval_label=? AND l.raw_sha256=? AND a.raw_sha256=l.raw_sha256 '
             'AND l.endpoint_path=? AND a.endpoint_path=l.endpoint_path AND l.status=\'success\' '
             'AND l.first_observed_utc<=? AND l.last_observed_utc>=?',
             (s.provider,s.metric,s.symbol,s.frequency,raw_sha,row['source_endpoint'],_text(stamp),_text(stamp))).fetchall()
-        if len(matches)==1 and utc(matches[0][2])<=asof:
+        if len(matches)==1:
+            attempted,ended,acquired=(utc(v) for v in matches[0][1:])
+            if not attempted<=ended<=acquired:raise ValueError('LEGACY_ACQUISITION_TIME_INCOHERENT')
+        if len(matches)==1 and acquired<=asof:
             receipt=matches[0][0];request_sha=canonical_digest(list(matches[0]))
             provenance='LEGACY_REQUEST_LINK_PRESENT_UNRECONCILED'
     return EvidencePoint(_text(stamp),dimension,value,canonical_digest({'table':table,'row':row}),

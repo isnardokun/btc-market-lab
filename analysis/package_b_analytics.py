@@ -92,7 +92,7 @@ def _asset(snapshot,symbol,instrument,max_age,tag):
                 errors.append(symbol+':INVALID_OHLCV_BAR')
                 break
     if errors:
-        if snapshot.mode=='OFFLINE_INSTALLED_SCHEMA' and closes and 'close' in streams:
+        if snapshot.mode in ('OFFLINE_INSTALLED_SCHEMA','OFFLINE_LIVE_BINDING','PRIVATE_LIVE_EVIDENCE') and closes and 'close' in streams:
             stream=streams['close']
             if (stream.unit=='USD' and stream.raw_scale=='native' and len(closes)>=2 and
                 all(math.isfinite(v) and v>0 for _,v in closes) and
@@ -122,15 +122,18 @@ def _asset(snapshot,symbol,instrument,max_age,tag):
         latest,(latest/numbers[-2]-1)*100,rsi,compute_ma(numbers,20),
         compute_ma(numbers,50),compute_ma(numbers,200),macd,atr_value,
         scenarios,('LOCAL_SYNTHETIC_EVIDENCE' if snapshot.mode=='OFFLINE_SYNTHETIC' else
-                   'LOCAL_SIMULATED_ACQUISITION'),())
+                   'LOCAL_HTTP_ACQUISITION' if snapshot.mode=='PRIVATE_LIVE_EVIDENCE' else 'LOCAL_SIMULATED_ACQUISITION'),())
 
 
 def analyze_snapshot(snapshot):
     if not isinstance(snapshot,ReportSnapshot) or snapshot.sha256!=snapshot_digest(snapshot):
         raise ValueError('BLOCKED_REPORT_SNAPSHOT_DIGEST_MISMATCH')
-    if (snapshot.mode not in ('OFFLINE_SYNTHETIC','OFFLINE_INSTALLED_SCHEMA') or
-        snapshot.dataset_origin!='SYNTHETIC' or snapshot.production_authorized or snapshot.real_history_verified):
+    real=snapshot.mode=='PRIVATE_LIVE_EVIDENCE'
+    if (snapshot.mode not in ('OFFLINE_SYNTHETIC','OFFLINE_INSTALLED_SCHEMA','OFFLINE_LIVE_BINDING','PRIVATE_LIVE_EVIDENCE') or
+        snapshot.dataset_origin not in (('LIVE_PRIVATE','INSTALLED') if real else ('SYNTHETIC',)) or snapshot.production_authorized or snapshot.real_history_verified):
         raise ValueError('BLOCKED_UNAUTHORIZED_REPORT_PROFILE')
+    if real and any(p.provenance not in ('HTTP_REQUEST_VERIFIED','LEGACY_NO_REQUEST','LEGACY_NO_REQUEST_VINTAGE_UNKNOWN','LEGACY_RAW_WITHOUT_ACQUISITION','LEGACY_REQUEST_LINK_PRESENT_UNRECONCILED') for s in snapshot.series for p in s.points):
+        raise ValueError('SIMULATED_NOT_REAL_EVIDENCE')
     assets=tuple(_asset(snapshot,*profile) for profile in PROFILES)
     qualities=[]
     for series in snapshot.series:

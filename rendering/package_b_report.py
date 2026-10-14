@@ -110,11 +110,12 @@ def _section_table(series,quality):
 
 def render_report(model):
     snapshot=model.snapshot
-    installed=snapshot.mode=='OFFLINE_INSTALLED_SCHEMA'
+    installed=snapshot.mode in ('OFFLINE_INSTALLED_SCHEMA','OFFLINE_LIVE_BINDING','PRIVATE_LIVE_EVIDENCE')
+    real=snapshot.mode=='PRIVATE_LIVE_EVIDENCE'
     closes={s.symbol:s for s in snapshot.series if s.provider=='yahoo' and s.metric=='close' and s.frequency=='d1'}
     quality={q.key:q.freshness for q in model.source_quality}
     generated=utc(snapshot.asof_utc).strftime('%Y-%m-%d %H:%M')
-    foot='<div class="footer">Mercados Daily Pro / Research Studio · ejemplo sintético · verificación externa pendiente</div>'
+    foot='<div class="footer">Mercados Daily Pro / Research Studio · '+('diagnóstico privado · publicación no autorizada' if real else 'ejemplo sintético')+' · verificación externa pendiente</div>'
     tickers=[]
     for asset in model.assets:
         label='BTC/USD' if asset.symbol=='BTC-USD' else asset.symbol
@@ -128,8 +129,8 @@ def render_report(model):
     reading=('BTC '+('por encima' if btc.close>=btc.sma20 else 'por debajo')+' de SMA 20, '
              +rsi_zone(btc.rsi)+'. Son relaciones descriptivas sobre estas series, no causalidad.') if btc.close is not None and btc.sma20 is not None else 'NO_DATA · no se confirma lectura técnica sin inputs suficientes.'
     pages=['<section class="page cover"><div class="brand">MERCADOS DAILY PRO / RESEARCH STUDIO</div>'
-        '<h1>El mercado,<br>con evidencia.</h1><p class="sub">Bitcoin · renta variable · oro · macro · on-chain</p>'
-        '<div class="demo">EJEMPLO SINTÉTICO — no representa precios reales</div>'
+        '<h1>El mercado,<br>con evidencia.</h1><p class="sub">Bitcoin · renta variable · oro · macro · on-chain</p>'+
+        ('<div class="demo">DATOS REALES · DIAGNÓSTICO PRIVADO</div>' if real else '<div class="demo">EJEMPLO SINTÉTICO — no representa precios reales</div>')+
         '<p class="note">Generado '+escape(generated)+' UTC · corte de observaciones '+escape(snapshot.cutoff_utc[:10])+' UTC</p>'
         '<div class="grid">'+''.join(tickers)+'</div>'
         '<div id="executive-brief"><h2>Hechos observados</h2><div class="fact">'+escape(facts)+'</div>'
@@ -171,18 +172,20 @@ def render_report(model):
     for s in snapshot.series:
         provenance=', '.join(sorted({p.provenance for p in s.points}))
         provenance_label={'SIMULATED_REQUEST_VERIFIED':'Petición simulada',
+            'SIMULATED_HTTP_REQUEST_VERIFIED':'Petición HTTP simulada',
+            'HTTP_REQUEST_VERIFIED':'Petición HTTP reconciliada',
             'LEGACY_NO_REQUEST':'Receipt ausente',
             'LEGACY_NO_REQUEST_VINTAGE_UNKNOWN':'Receipt/vintage ausentes',
             'LEGACY_RAW_WITHOUT_ACQUISITION':'RAW sin acquisition',
             'LEGACY_REQUEST_LINK_PRESENT_UNRECONCILED':'Link sin reconciliar'}.get(provenance,provenance)
         source_rows.append('<tr id="evidence-'+s.sha256+'" data-evidence-series-sha256="'+s.sha256+'"><td>'+escape(s.provider+' / '+s.metric+' / '+s.symbol)+(('<br><span class="quality" data-provenance="'+escape(provenance)+'">'+escape(provenance_label)+'</span>') if installed else '')+'</td><td class="num">'+str(len(s.points))+'</td><td>'+escape(s.points[0].observed_utc[:10]+' → '+s.points[-1].observed_utc[:10])+'</td><td class="digest">'+s.sha256+'</td></tr>')
     pages.append('<section class="page"><div class="brand">METODOLOGÍA / EVIDENCIA</div><h2>Fuentes y trazabilidad</h2>'
-        '<p class="note">'+('Fixture de esquema instalado: procedencia heredada explícita; receipts ausentes no se reconstruyen. Adquisiciones nuevas son FAKE_HTTP. Vintages ausentes: VINTAGE_UNKNOWN. ' if installed else 'Un snapshot SQLite read-only reúne RAW/SHA, native request provenance, observaciones, cohortes y revisiones. ')+'Todos los gráficos/tablas usan este mismo conjunto.</p>'
+        '<p class="note">'+('Evidencia privada: adquisiciones HTTP reconciliadas, procedencia heredada explícita; permisos externos e historia completa sin verificar. ' if real else 'Fixture de esquema instalado: procedencia heredada explícita; receipts ausentes no se reconstruyen. Adquisiciones nuevas son FAKE_HTTP. Vintages ausentes: VINTAGE_UNKNOWN. ' if installed else 'Un snapshot SQLite read-only reúne RAW/SHA, native request provenance, observaciones, cohortes y revisiones. ')+'Todos los gráficos/tablas usan este mismo conjunto.</p>'
         '<p class="digest">Snapshot SHA-256: '+snapshot.sha256+'</p><p class="note">Cálculos: '+escape(model.calculation_version)+'; RSI '+escape(btc.rsi_method)+'. ATR: '+escape(btc.atr_method)+'.</p>'
         '<dl class="note methods">'+''.join('<dt>'+escape(name)+'</dt><dd>'+escape(parameters)+'</dd>' for name,parameters in model.calculation_parameters)+'</dl>'
         '<table><thead><tr><th>Serie / fuente</th><th class="num">Puntos</th><th>Rango observado</th><th>SHA de serie</th></tr></thead><tbody>'+''.join(source_rows)+'</tbody>'+('<tfoot><tr><td colspan="4">'+foot+'</td></tr></tfoot>' if installed else '')+'</table>'+('' if installed else foot)+'</section>')
     return ('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta name="market-design-system" content="'+STYLE+'"><title>Mercados Research Studio · ejemplo sintético</title>'
+        '<meta name="market-design-system" content="'+STYLE+'"><title>Mercados Research Studio · '+('diagnóstico privado' if real else 'ejemplo sintético')+'</title>'
         '<style>'+CSS+'</style></head><body data-b-report-version="v1" data-snapshot-sha256="'+snapshot.sha256+'"><main class="report">'+''.join(pages)+'</main></body></html>')
 
 

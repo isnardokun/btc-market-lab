@@ -18,6 +18,12 @@ Issue #60 comment #6137030693; authorization recorded in #6137088170.
 Preserve the same roles and final SHA/CI/QA gates. This does not authorize
 API traffic, production DB access/migration/restore, cron, flags or deployment.
 
+Owner exception, 2026-10-13 20:52 America/Bogota: ONE further integrated
+offline engineering PR for production bindings, approved proposal #6159072770
+and authorization #6159129314. Design/plan: 2026-10-14-production-integration.
+ChatGPT implements natively; Hermes final pinned QA only. No live pilot,
+API quota, installed DB/backup/migration/restore, cron/deploy/publication granted.
+
 - **A — Historical data and integrated ingestion**: [Issue #76](https://github.com/isnardokun/btc-market-lab/issues/76).
 - **B — Analytics, design system and professional reporting**: [Issue #77](https://github.com/isnardokun/btc-market-lab/issues/77).
 - **C — Orchestration, resilience and controlled rollout**: [Issue #78](https://github.com/isnardokun/btc-market-lab/issues/78).

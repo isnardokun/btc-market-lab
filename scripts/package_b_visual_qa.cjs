@@ -25,10 +25,16 @@ async function main() {
   const document = fs.readFileSync(htmlPath);
   const reportSHA = digest(document);
   const gate = JSON.parse(fs.readFileSync(options['--gate'], 'utf8'));
-  if (gate.html_sha256 !== reportSHA || gate.publication_gate?.pass !== true ||
-      gate.publication_gate.report_sha256 !== reportSHA || gate.publication_gate.critical_count !== 0 ||
-      typeof gate.publication_gate.score_total !== 'number' || !Number.isFinite(gate.publication_gate.score_total) ||
-      gate.publication_gate.score_total < 95 || gate.production_publication_authorized !== false) throw Error('Unapproved or mismatched synthetic HTML/gate');
+  const nativeApproved = gate.state === 'OFFLINE_LIVE_BINDING_LOCAL_PASS' &&
+      gate.full_report_ready === true && gate.series_count === 57 && gate.score >= 95 &&
+      Array.isArray(gate.failures) && gate.failures.length === 0 &&
+      Array.isArray(gate.stale_source_series) && gate.stale_source_series.length === 0;
+  const previousApproved = gate.publication_gate?.pass === true &&
+      gate.publication_gate.report_sha256 === reportSHA && gate.publication_gate.critical_count === 0 &&
+      typeof gate.publication_gate.score_total === 'number' && Number.isFinite(gate.publication_gate.score_total) &&
+      gate.publication_gate.score_total >= 95;
+  if (gate.html_sha256 !== reportSHA || (!nativeApproved && !previousApproved) ||
+      gate.production_publication_authorized !== false) throw Error('Unapproved or mismatched synthetic HTML/gate');
   if (!document.includes('data-b-report-version="v1"') || !document.includes('EJEMPLO SINTÉTICO')) throw Error('Only Package B synthetic reports allowed');
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname,'../tests/fixtures/package_b_visual_contract.json'),'utf8'));
   const {chromium} = require(options['--playwright-module'] || 'playwright');
