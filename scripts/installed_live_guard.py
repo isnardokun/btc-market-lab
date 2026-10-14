@@ -92,6 +92,15 @@ class RuntimeSession:
                 value=json.loads(data)
                 if value.get('code_sha')!=g.code_sha or value.get('db_identity')!=list(self.identities[1]):
                     raise ValueError('INSTALLED_OPERATIONAL_IDENTITY_DRIFT')
+                if name=='.live-writer-window.json':
+                    from scripts.installed_live_readiness import assess_writer_readiness
+                    manifest=value.get('manifest',{});observations=value.get('observations',{})
+                    if (manifest.get('code_sha')!=g.code_sha or manifest.get('lock')!=str(self.lock) or
+                        assess_writer_readiness(manifest,observations)['state']!='CONTROLLED_WRITER_WINDOW_OBSERVED'):
+                        raise ValueError('INSTALLED_WRITER_READINESS_BLOCKED')
+                    from ingestion.package_a_contracts import utc
+                    current=self.capability.verify('read')
+                    if not utc(manifest['window_start'])<=current<utc(manifest['window_end']):raise ValueError('INSTALLED_WRITER_WINDOW_EXPIRED')
                 from ingestion.package_a_contracts import utc
                 if self.capability.verify('read')>=utc(value['expires_utc']):
                     raise ValueError('INSTALLED_OPERATIONAL_RECEIPT_EXPIRED')
@@ -104,8 +113,10 @@ class RuntimeSession:
         self._paths();verify_offline_parent_lease(self.lock)
 
     @contextmanager
-    def connect(self,*,readonly):
-        self.verify('read' if readonly else 'migrate')
+    def connect(self,*,readonly,operation=None):
+        wanted='read' if readonly else operation or 'migrate'
+        if wanted not in (('read',) if readonly else ('migrate','ingest')):raise ValueError('RUNTIME_CONNECTION_OPERATION_REQUIRED')
+        self.verify(wanted)
         with attested_connection(self.db,identity=self.identities[1],check_path=self.verify,readonly=readonly) as pair:
             yield pair
 

@@ -2,6 +2,11 @@
 from dataclasses import dataclass
 import datetime as dt
 import os
+import base64
+import ctypes
+import json
+import select
+import signal
 import socket
 import time
 from urllib.error import HTTPError,URLError
@@ -31,6 +36,54 @@ def validate_request_capability(request,capability,*,deadline):
         raise ValueError('HTTP_REQUEST_NOT_APPROVED')
 
 
+def bounded_child(operation, *, deadline, max_bytes):
+    """Linux child has a hard wall deadline and dies if its supervisor dies.
+
+    Only bounded bytes cross the pipe; parent drains while child writes. There
+    is no surviving HTTP thread, and errors never expose URL credentials.
+    """
+    if not hasattr(os,'fork') or not os.path.isdir('/proc/self/fd'):
+        raise ValueError('LINUX_HTTP_SUPERVISOR_REQUIRED')
+    if not 0 < max_bytes <= 6000000:raise ValueError('CHILD_RESULT_BUDGET')
+    parent=os.getpid();read_fd,write_fd=os.pipe();pid=os.fork()
+    if pid==0:
+        os.close(read_fd)
+        try:
+            if ctypes.CDLL(None,use_errno=True).prctl(1,signal.SIGKILL,0,0,0)!=0 or os.getppid()!=parent:
+                os._exit(71)
+            try:
+                data=operation()
+                if type(data) is not bytes or len(data)>max_bytes:raise ValueError('budget')
+                data=b'0'+data
+            except BaseException:
+                data=b'1'
+            view=memoryview(data)
+            while view:
+                n=os.write(write_fd,view[:65536]);view=view[n:]
+            os.close(write_fd);os._exit(0)
+        except BaseException:os._exit(72)
+    os.close(write_fd);result=bytearray();reaped=False
+    try:
+        while True:
+            left=deadline-time.monotonic()
+            if left<=0:raise TimeoutError('HTTP_TOTAL_DEADLINE_EXCEEDED')
+            ready,_,_=select.select([read_fd],[],[],left)
+            if not ready:raise TimeoutError('HTTP_TOTAL_DEADLINE_EXCEEDED')
+            part=os.read(read_fd,min(65536,max_bytes+2-len(result)))
+            if not part:break
+            result.extend(part)
+            if len(result)>max_bytes+1:raise ValueError('CHILD_RESULT_BUDGET')
+        _,status=os.waitpid(pid,0);reaped=True
+        if status!=0 or not result or result[0]!=48:raise ValueError('CHILD_RESULT_REJECTED')
+        return bytes(result[1:])
+    finally:
+        os.close(read_fd)
+        if not reaped:
+            try:os.kill(pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+            os.waitpid(pid,0)
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
@@ -43,6 +96,28 @@ class BoundedHttpTransport:
         g=capability.grant
         if g.target_kind!='FIXTURE_TEST' and self._opener is not None:raise ValueError('SIMULATED_TRANSPORT_NOT_REAL_CUSTODY')
         if g.target_kind=='FIXTURE_TEST' and self._opener is None:raise ValueError('FIXTURE_HTTP_OPENER_REQUIRED')
+        if g.target_kind=='FIXTURE_TEST':
+            return self._direct(request,capability,deadline=deadline)
+        started=capability.verify('ingest').isoformat().replace('+00:00','Z')
+        def operation():
+            result=self._direct(request,capability,deadline=deadline)
+            data={'body':None if result.body is None else base64.b64encode(result.body).decode(),
+                  'status':result.http_status,'attempted':result.attempted_utc,'received':result.received_utc,
+                  'metadata':result.response_metadata}
+            return json.dumps(data,separators=(',',':')).encode()
+        try:
+            data=json.loads(bounded_child(operation,deadline=deadline,max_bytes=6000000))
+        except TimeoutError:
+            # Deadline may still be inside the grant. Final SQL commit checks
+            # the run/grant again; an expired grant leaves a consumed reserve.
+            ended=dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z')
+            return TransportResult(None,None,started,ended,(('error_class','HTTP_TOTAL_DEADLINE'),),'HTTP')
+        validate_request_capability(request,capability,deadline=deadline)
+        return TransportResult(None if data['body'] is None else base64.b64decode(data['body'],validate=True),
+            data['status'],data['attempted'],data['received'],tuple(tuple(x) for x in data['metadata']),'HTTP')
+
+    def _direct(self,request,capability,*,deadline):
+        g=capability.grant
         params=dict(request.params);headers={'Accept':'application/json','User-Agent':'BTCMarketLab/installed-live-v1'}
         if g.target_kind!='FIXTURE_TEST':
             key_name={'researchbitcoin':'RESEARCHBITCOIN_API_TOKEN','fred':'FRED_API_KEY'}.get(request.specs[0].provider)
@@ -79,7 +154,7 @@ class BoundedHttpTransport:
 class FrozenLiveTransport:
     """Explicit test byte custody; never claims that HTTP was executed."""
     def __init__(self,outcomes):
-        self.outcomes=dict(outcomes);self.calls=0
+        self.outcomes=dict(outcomes);self.calls=0;self.attempts={}
         for values in self.outcomes.values():
             if type(values) is not tuple or not 1<=len(values)<=3 or any(type(x) is not tuple or len(x)!=2 or type(x[1]) is not bytes or len(x[1])>4000000 for x in values):
                 raise ValueError('BOUNDED_TEST_OUTCOMES_REQUIRED')
@@ -88,6 +163,7 @@ class FrozenLiveTransport:
         if capability.grant.target_kind!='FIXTURE_TEST':raise ValueError('SIMULATED_TRANSPORT_NOT_REAL_CUSTODY')
         values=self.outcomes.get(request.sha256)
         if not values:raise ValueError('FROZEN_REQUEST_MISSING')
-        item=values[min(self.calls,len(values)-1)];self.calls+=1
+        index=self.attempts.get(request.sha256,0)
+        item=values[min(index,len(values)-1)];self.calls+=1;self.attempts[request.sha256]=index+1
         now=capability.verify('ingest').isoformat().replace('+00:00','Z')
         return TransportResult(item[1] if item[0] is not None else None,item[0],now,now,(),'SIMULATED_HTTP')

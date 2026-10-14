@@ -94,4 +94,79 @@ class LiveTransportTests(unittest.TestCase):
         self.assertEqual(dict(r.params)['limit'],100)
         with self.assertRaises(ValueError):s.native_request(job.specs,job.start,job.end,page_limit=1001)
 
+class HardDeadlineTests(unittest.TestCase):
+    def test_stalled_child_is_killed_and_reaped_at_total_deadline(self):
+        from ingestion import installed_live_transport as t
+        self.assertTrue(hasattr(t,'bounded_child'), 'hard process supervisor missing')
+        import os
+        started=time.monotonic()
+        with self.assertRaisesRegex(TimeoutError,'TOTAL_DEADLINE'):
+            t.bounded_child(lambda: (time.sleep(5),b'late')[1],deadline=started+.12,max_bytes=1024)
+        self.assertLess(time.monotonic()-started,1)
+        with self.assertRaises(ChildProcessError):os.waitpid(-1,os.WNOHANG)
+    def test_large_ipc_is_drained_and_bounded(self):
+        from ingestion import installed_live_transport as t
+        self.assertTrue(hasattr(t,'bounded_child'), 'hard process supervisor missing')
+        data=b'x'*1000000
+        self.assertEqual(t.bounded_child(lambda:data,deadline=time.monotonic()+3,max_bytes=len(data)),data)
+        with self.assertRaisesRegex(ValueError,'CHILD_RESULT'):
+            t.bounded_child(lambda:data,deadline=time.monotonic()+3,max_bytes=8)
+    def test_retry_outcomes_are_per_request_not_global_call_index(self):
+        from ingestion.installed_live_transport import FrozenLiveTransport
+        from ingestion.installed_live_sources import request_from_example
+        from scripts.installed_live_guard import hold_runtime_session
+        root,path,locks=new_fixture(self);a,b=map(request_from_example,example_jobs()[:2])
+        cap=capability(grant_for(root,path,locks,requests=(a,b)))
+        client=FrozenLiveTransport({a.sha256:((503,b'bad'),(200,b'good')),b.sha256:((503,b'first'),(200,b'second'))})
+        with hold_runtime_session(cap):
+            client.fetch(a,cap,deadline=time.monotonic()+2)
+            got=client.fetch(b,cap,deadline=time.monotonic()+2)
+        self.assertEqual(got.body,b'first')
+
+    def test_real_transport_uses_bounded_child_without_real_network(self):
+        from ingestion import installed_live_transport as t
+        from ingestion.installed_live_sources import request_from_example
+        from scripts.installed_live_policy import validate_runtime_grant
+        from scripts.package_a_parent_lock import hold_offline_parent_lease
+        from unittest.mock import patch
+        import datetime as dt,base64
+        root,path,locks=new_fixture(self);r=request_from_example(next(j for j in example_jobs() if j.specs[0].provider=='binance'))
+        now=dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+        g=grant_for(root,path,locks,requests=(r,));g=replace(g,target_kind='INSTALLED_DB',approval_reference='https://github.com/isnardokun/btc-market-lab/issues/60#issuecomment-1',issued_utc=(now-dt.timedelta(seconds=30)).isoformat(),expires_utc=(now+dt.timedelta(minutes=10)).isoformat(),installed_schema_sha='c'*64,writer_window_sha='d'*64,backup_manifest_sha='e'*64,approval_artifact_sha='');g=replace(g,approval_artifact_sha=g.artifact_sha)
+        cap=validate_runtime_grant(g,code_sha=g.code_sha,plan_sha=g.plan_sha,now=now.isoformat(),operation='read',approved_artifact_sha=g.artifact_sha)
+        data=json.dumps({'body':base64.b64encode(b'[]').decode(),'status':200,'attempted':now.isoformat(),'received':now.isoformat(),'metadata':[]}).encode()
+        with hold_offline_parent_lease(locks),patch.object(t,'bounded_child',return_value=data) as supervisor,patch.object(t.BoundedHttpTransport,'_direct',side_effect=AssertionError('must not call real HTTP in test')):
+            result=t.BoundedHttpTransport().fetch(r,cap,deadline=time.monotonic()+5)
+        self.assertEqual(supervisor.call_count,1);self.assertEqual(result.custody_mode,'HTTP');self.assertEqual(result.body,b'[]')
+
+    def test_http_child_dies_when_supervisor_is_sigkilled(self):
+        import os,signal,subprocess,sys,tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            marker=Path(temp)/'child.pid'
+            script="""
+import os,time,sys
+from pathlib import Path
+from ingestion.installed_live_transport import bounded_child
+def operation():
+    Path(sys.argv[1]).write_text(str(os.getpid()))
+    time.sleep(10)
+    return b'late'
+bounded_child(operation,deadline=time.monotonic()+15,max_bytes=1024)
+"""
+            parent=subprocess.Popen([sys.executable,'-c',script,str(marker)],cwd=Path(__file__).absolute().parents[2])
+            try:
+                until=time.monotonic()+3
+                while not marker.exists() and time.monotonic()<until:time.sleep(.01)
+                self.assertTrue(marker.exists());child=int(marker.read_text())
+                parent.kill();parent.wait(timeout=3)
+                until=time.monotonic()+3
+                while time.monotonic()<until:
+                    proc=Path('/proc')/str(child)/'stat'
+                    if not proc.exists() or proc.read_text().split(') ')[1].startswith('Z'):break
+                    time.sleep(.01)
+                else:self.fail('HTTP child survived dead supervisor')
+            finally:
+                if parent.poll() is None:parent.kill();parent.wait(timeout=3)
+
 if __name__=='__main__':unittest.main()

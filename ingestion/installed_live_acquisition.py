@@ -25,13 +25,14 @@ def acquire_live_page(session,request,transport,*,run_id,now,fault=None):
     if type(transport) not in (BoundedHttpTransport,FrozenLiveTransport):raise ValueError('TYPED_CUSTODY_TRANSPORT_REQUIRED')
     if type(run_id) is not str or not 1<=len(run_id)<=64 or fault not in (None,'after_reserve','after_raw','after_observations','after_commit'):
         raise ValueError('BOUNDED_LIVE_RUN_REQUIRED')
-    if utc(now)!=cap.verify('ingest'):raise ValueError('LIVE_OPERATION_TIME_DRIFT')
+    current=cap.verify('ingest')
+    if utc(now)>current or (current-utc(now)).total_seconds()>1:raise ValueError('LIVE_OPERATION_TIME_DRIFT')
     stamp=utc(now).isoformat().replace('+00:00','Z');gsha=g.artifact_sha
     mode='SIMULATED_HTTP' if session.target_kind=='FIXTURE_TEST' else 'HTTP'
-    with session.connect(readonly=False) as (db,verify):
+    with session.connect(readonly=False,operation='ingest') as (db,verify):
         db.execute('PRAGMA foreign_keys=ON');db.execute('BEGIN IMMEDIATE')
         try:
-            if session.target_kind=='INSTALLED_DB':ledger.assert_live_schema(db)
+            if session.target_kind=='INSTALLED_DB' or db.execute("SELECT 1 FROM sqlite_master WHERE name='live_schema_migrations'").fetchone():ledger.assert_live_schema(db)
             else:ledger.initialize_live(db,session=session,now=stamp)
             grant_body=json.dumps(g.public,sort_keys=True,separators=(',',':'))
             db.execute("INSERT OR IGNORE INTO live_authorizations VALUES(?,?,0,0,'{}')",(gsha,grant_body))
