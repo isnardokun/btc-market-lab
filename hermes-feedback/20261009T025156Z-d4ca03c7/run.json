@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "run_id": "20261009T025156Z-d4ca03c7",
+  "timestamp_utc": "2026-10-09T02:51:56.815263+00:00",
+  "exit_code": 0,
+  "result": "PASS",
+  "machine": {
+    "distribution": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+    "architecture": "x86_64",
+    "python": "3.14.7",
+    "sqlite_version": "3.53.1",
+    "git_branch": "master",
+    "git_commit": "7c1eb91d72f1449e8c090524528abbf21f140ea5",
+    "cpu": "Intel(R) Core(TM) i5-9400F CPU @ 2.90GHz",
+    "ram_gib": 15.55,
+    "db_present": true,
+    "db_gib": 0.634,
+    "db_tables": [
+      "blocks",
+      "daily",
+      "daily_metrics",
+      "ingest_instruments",
+      "macro_fred",
+      "macro_fred_old",
+      "market_levels",
+      "meta",
+      "metrics_latest",
+      "prediction_scores",
+      "predictions",
+      "price_btc",
+      "reports",
+      "series"
+    ]
+  },
+  "gate": {
+    "available": true,
+    "date": "2026-10-08",
+    "pass": true,
+    "score_total": 99.0,
+    "critical_count": 0,
+    "issues": [
+      "  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index",
+      "  🟡 Solo 47 métricas archivadas hoy — verificar completitud."
+    ],
+    "mtime_utc": "2026-10-09T02:51:56.522652+00:00"
+  },
+  "report": {
+    "kind": "approved_portable",
+    "included": true,
+    "filename": "daily_report_2026-10-08.html",
+    "source_mtime_utc": "2026-10-09T02:51:56.575932+00:00",
+    "source_sha256": "16172dd47ec347ed755f1463c34116b57d4cebb6da09ccdb5401c96b9be49714"
+  },
+  "visibility": "PUBLIC only if explicitly published"
+}

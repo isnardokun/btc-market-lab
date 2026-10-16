@@ -1,0 +1,1857 @@
+=== Mercados Daily Pro / Hermes ===
+Repositorio: /home/[USER]/btc-research
+Rama: master
+Commit inicial: 7c1eb91
+Commit ejecutado: 7c1eb91
+SKILL INSTALADO: /home/[USER]/.hermes/skills/finance/mercados-daily-pro/SKILL.md
+Comprueba con: hermes skills list
+Para activar en una sesión nueva, usa /mercados-daily-pro
+=== Verificaciones estáticas ===
+[PASS] bash -n y compileall
+=== Tests offline unitarios ===
+......
+----------------------------------------------------------------------
+Ran 6 tests in 0.015s
+
+OK
+=== Suite completa (incluye integración SQLite) ===
+
+============================================================
+  Unit: Indicators
+============================================================
+✅ PASS
+
+============================================================
+  Unit: Metric Registry
+============================================================
+✅ PASS
+
+============================================================
+  Unit: Portable HTML / Telegram
+============================================================
+✅ PASS
+
+============================================================
+  Unit: Hermes Skill
+============================================================
+✅ PASS
+
+============================================================
+  Unit: Hermes Bridge
+============================================================
+✅ PASS
+
+============================================================
+  Integration: Pipeline
+============================================================
+✅ PASS
+
+============================================================
+  RESULTS
+============================================================
+  ✅ PASS  Unit: Indicators
+  ✅ PASS  Unit: Metric Registry
+  ✅ PASS  Unit: Portable HTML / Telegram
+  ✅ PASS  Unit: Hermes Skill
+  ✅ PASS  Unit: Hermes Bridge
+  ✅ PASS  Integration: Pipeline
+
+✅ All tests passed
+=== Pipeline real SIN envío por Telegram ===
+DRY RUN OK: daily_report_2026-10-08.html, 68526 bytes, SHA256 16172dd47ec347ed755f1463c34116b57d4cebb6da09ccdb5401c96b9be49714
+[PASS] pipeline real y HTML portátil
+=== RESULTADO ===
+[PASS] Actualización/comprobación finalizada (commit 7c1eb91)
+Telegram: NO enviado.
+
+
+=== cron.log (última sección, puede incluir ejecuciones anteriores) ===
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: ya actualizado (ultimo: 2026-10-08)
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 5 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 47
+SPY: $777.22 -0.24% | RSI: 60
+Gold: $4172 +0.77% | RSI: 38
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | DXY=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 5 | Stocks 5 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 81665.8515625 USD
+  rsi_14: 46.82785871665399 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+  Uso: python archive_report.py --html <path> --date YYYY-MM-DD --asset BTC
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_192654.json
+  data_hash: {'price_btc': '47da8a918683fdd5', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': 'f2714b5b49f294d3'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: file:2026-10-08T19:10:05.247360
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-09.html
+Done at 2026-10-09 00:26 UTC
+=== 2026-10-09 00:26 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 00:26 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,555
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: ya actualizado (ultimo: 2026-10-08)
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 5 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 47
+SPY: $777.22 -0.24% | RSI: 60
+Gold: $4173 +0.78% | RSI: 38
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | DXY=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 5 | Stocks 5 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 81661.671875 USD
+  rsi_14: 46.814039355652184 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+  Uso: python archive_report.py --html <path> --date YYYY-MM-DD --asset BTC
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_192729.json
+  data_hash: {'price_btc': '884ac11a35209879', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': '64b106f1da6908ed'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: file:2026-10-08T19:10:05.247360
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-09.html
+Done at 2026-10-09 00:27 UTC
+=== 2026-10-09 01:48 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:48 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:48 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:48 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:48 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:48 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:49 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:49 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:49 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:49 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:49 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:49 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+ERROR: configura FRED_API_KEY en el entorno de Hermes
+  [FAIL] ingest_fred — aborting
+=== 2026-10-09 01:56 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:56 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos; reconciliando últimas observaciones
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos; reconciliando últimas observaciones
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos; reconciliando últimas observaciones
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos; reconciliando últimas observaciones
+  CPIAUCSL: trayendo desde 2026-08-02
+  CPIAUCSL: 1 filas nuevas, reconciliando ultimos 60 días...
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: sin fechas nuevas; revisando cambios recientes
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos; reconciliando últimas observaciones
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 6 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 48
+SPY: $773.93 -0.42% | RSI: 56
+Gold: $4195 +1.31% | RSI: 41
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | USD Broad=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 5 | Stocks 5 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 81912.6171875 USD
+  rsi_14: 47.658460198727994 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+HTML PORTÁTIL APROBADO: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  [OK] HTML portátil: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  Archived: ALL daily v13 (id=13) — /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  HTML archivado: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_205713.json
+  data_hash: {'price_btc': '666f13dd647f01fc', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': 'b2deeff856d572ea'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: 4ecb925
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+Done at 2026-10-09 01:57 UTC
+=== 2026-10-09 01:57 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 01:57 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,568
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos; reconciliando últimas observaciones
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos; reconciliando últimas observaciones
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos; reconciliando últimas observaciones
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos; reconciliando últimas observaciones
+  CPIAUCSL: trayendo desde 2026-08-02
+  CPIAUCSL: 1 filas nuevas, reconciliando ultimos 60 días...
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: sin fechas nuevas; revisando cambios recientes
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos; reconciliando últimas observaciones
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 6 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 48
+SPY: $773.93 -0.42% | RSI: 56
+Gold: $4198 +1.38% | RSI: 41
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | USD Broad=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 5 | Stocks 5 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 81897.78125 USD
+  rsi_14: 47.607691520195054 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+HTML PORTÁTIL APROBADO: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  [OK] HTML portátil: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  Archived: ALL daily v14 (id=14) — /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  HTML archivado: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_205749.json
+  data_hash: {'price_btc': 'f80cd2698d31f886', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': '5628b7bda14aeb84'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: 4ecb925
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+Done at 2026-10-09 01:57 UTC
+=== 2026-10-09 02:01 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 02:01 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,569
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos; reconciliando últimas observaciones
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos; reconciliando últimas observaciones
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos; reconciliando últimas observaciones
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos; reconciliando últimas observaciones
+  CPIAUCSL: trayendo desde 2026-08-02
+  CPIAUCSL: 1 filas nuevas, reconciliando ultimos 60 días...
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: sin fechas nuevas; revisando cambios recientes
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos; reconciliando últimas observaciones
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 6 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+[news_pipeline] SPY: 0 noticias válidas
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 48
+SPY: $773.93 -0.42% | RSI: 56
+Gold: $4198 +1.37% | RSI: 41
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | USD Broad=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 5 | Stocks 0 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 81931.296875 USD
+  rsi_14: 47.722536416013504 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+HTML PORTÁTIL APROBADO: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  [OK] HTML portátil: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  Archived: ALL daily v15 (id=15) — /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  HTML archivado: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_210155.json
+  data_hash: {'price_btc': '44076e6763b26ca1', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': 'a758e64aea807161'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: 8afbe5d
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+Done at 2026-10-09 02:01 UTC
+=== 2026-10-09 02:51 UTC ===
+Fase 1: ingestión de datos...
+price_btc: 730 updated
+  [OK] ingest_price
+/home/[USER]/btc-research/ingestion/ingest.py:283: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(f"BTC Research Ingestion  {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+/home/[USER]/btc-research/ingestion/ingest.py:150: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+/home/[USER]/btc-research/ingestion/ingest.py:169: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  end_date   = datetime.utcnow().strftime("%Y-%m-%d")
+
+============================================================
+BTC Research Ingestion  2026-10-09 02:51 UTC
+DB: /home/[USER]/btc-research/db/btc_research.db
+============================================================
+
+Tip height: 970,574
+
+
+Ingesting: price (price/1d)
+  [WARN] price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ath (price_ath/1d)
+  [WARN] price_ath: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_open (price_open/1d)
+  [WARN] price_open: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_high (price_high/1d)
+  [WARN] price_high: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_low (price_low/1d)
+  [WARN] price_low: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_sma_200d (price_sma_200d/1d)
+  [WARN] price_sma_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: price_ema_200d (price_ema_200d/1d)
+  [WARN] price_ema_200d: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: mvrv (mvrv/1d)
+  [WARN] mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_mvrv (lth_mvrv/1d)
+  [WARN] lth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_mvrv (sth_mvrv/1d)
+  [WARN] sth_mvrv: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: realized_price (realized_price/1d)
+  [WARN] realized_price: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1w (sopr_1w/1d)
+  [WARN] sopr_1w: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sopr_1m (sopr_1m/1d)
+  [WARN] sopr_1m: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: rhodl_ratio (rhodl_ratio/1d)
+  [WARN] rhodl_ratio: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl (nupl/1d)
+  [WARN] nupl: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: nupl_ppm (nupl_ppm/1d)
+  [WARN] nupl_ppm: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: reserve_risk (reserve_risk/1d)
+  [WARN] reserve_risk: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: market_cap (market_cap/1d)
+  [WARN] market_cap: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: coinbase_sum_24h (coinbase_sum_24h/1d)
+  [WARN] coinbase_sum_24h: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: difficulty (difficulty/1d)
+  [WARN] difficulty: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: utxo_count (utxo_count/1d)
+  [WARN] utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: lth_utxo_count (lth_utxo_count/1d)
+  [WARN] lth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+Ingesting: sth_utxo_count (sth_utxo_count/1d)
+  [WARN] sth_utxo_count: no data returned (2026-10-09 → 2026-10-09)
+
+============================================================
+Done. Total rows this run: ~0
+============================================================
+  [OK] ingest
+  DGS10: trayendo desde 2026-10-08
+  DGS10: sin datos nuevos; reconciliando últimas observaciones
+  DGS2: trayendo desde 2026-10-08
+  DGS2: sin datos nuevos; reconciliando últimas observaciones
+  DTWEXBGS: trayendo desde 2026-10-03
+  DTWEXBGS: sin datos nuevos; reconciliando últimas observaciones
+  VIXCLS: trayendo desde 2026-10-08
+  VIXCLS: sin datos nuevos; reconciliando últimas observaciones
+  CPIAUCSL: trayendo desde 2026-08-02
+  CPIAUCSL: 1 filas nuevas, reconciliando ultimos 60 días...
+  CPALTT01USM661S: trayendo desde 2025-04-02
+  CPALTT01USM661S: 1 filas nuevas, reconciliando ultimos 60 días...
+  PPIACO: trayendo desde 2026-08-02
+  PPIACO: 1 filas nuevas, reconciliando ultimos 60 días...
+  UNRATE: trayendo desde 2026-09-02
+  UNRATE: 1 filas nuevas, reconciliando ultimos 60 días...
+  PAYEMS: trayendo desde 2026-09-02
+  PAYEMS: 1 filas nuevas, reconciliando ultimos 60 días...
+  CBBTCUSD: sin fechas nuevas; revisando cambios recientes
+  NFCI: trayendo desde 2026-10-03
+  NFCI: sin datos nuevos; reconciliando últimas observaciones
+  RSXFS: trayendo desde 2026-08-02
+  RSXFS: 1 filas nuevas, reconciliando ultimos 60 días...
+
+FRED ingestion: 6 filas nuevas insertadas
+  [OK] ingest_fred
+Fase 2: generación de reporte...
+/home/[USER]/btc-research/rendering/charts.py:113: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  d = datetime.utcfromtimestamp(ts)
+/home/[USER]/btc-research/rendering/charts.py:212: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:310: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+/home/[USER]/btc-research/rendering/charts.py:399: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+  return datetime.utcfromtimestamp(ts).strftime("%b %Y")
+
+=== BTC Research Charts ===
+
+  [OK] MVRV + Price
+  [OK] SOPR + Price
+  [OK] RSI + MVRV
+  [OK] Price-Realized
+
+Charts saved to: /home/[USER]/btc-research/charts/
+  [OK] charts
+[news_pipeline] 1 entradas filtradas:
+  BTC: [3] Título muy corto: 'Enkidu · Willy Woo'
+OK -> /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+BTC: --- --- | RSI: 48
+SPY: $773.93 -0.42% | RSI: 56
+Gold: $4202 +1.08% | RSI: 42
+On-chain BTC: MVRV=1.52 | aSOPR=1.0165 | NUPL=0.341 | HR=1042 EH/s
+Macro: 10Y=5.280% | USD Broad=121.38 | VIX=15.1 | CPI=3.35%
+News: BTC 4 | Stocks 5 | Metals 5
+  [OK] daily_report
+[2026-10-08] Archived 78 metrics for 2026-10-08
+
+BTC snapshot:
+  price: 82080.3203125 USD
+  rsi_14: 48.23996306931175 ratio
+  mvrv: 1.52 ratio
+  asopr_1w: 1.0165 ratio
+  nupl: 0.341 ratio
+  hash_rate: 1042.0 EH/s
+  market_cap: 1.64 USD_T
+  realized_cap: 1.08 USD_T
+
+MACRO snapshot:
+  yield_10y: 5.28
+  dxy: 121.3848
+  vix: 15.08
+  cpi_yoy: 3.353
+  unemployment: 4.2
+  nfp: 29.0
+  [OK] archive_metrics
+Fase 3: publication gate...
+
+=================================================================
+PUBLICATION GATE — 2026-10-08
+=================================================================
+
+RESULTADOS POR CATEGORÍA:
+  EXACTITUD       [██████████] 100/100  PASS
+
+  CONSISTENCIA    [██████████] 100/100  PASS
+  🔵 DXY mencionado sin clarificar que es el Trade Weighted USD Broad Index
+
+  TRAZABILIDAD    [█████████░] 95/100  PASS
+  🟡 Solo 47 métricas archivadas hoy — verificar completitud.
+
+  ANALISIS        [██████████] 100/100  PASS
+
+  PRESENTACION    [██████████] 100/100  PASS
+
+─────────────────────────────────────────────────────────────────
+SCORE PONDERADO: 99.0/100
+UMBRAL: 95/100
+─────────────────────────────────────────────────────────────────
+✅ PUBLICACIÓN AUTO-APROBADA
+
+Log: /home/[USER]/btc-research/reports/gate_2026-10-08.json
+  [PASS] publication_gate — publicando...
+HTML PORTÁTIL APROBADO: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  [OK] HTML portátil: /home/[USER]/btc-research/reports/portable/daily_report_2026-10-08.html
+  Archived: ALL daily v16 (id=16) — /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  HTML archivado: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+  [OK] archive_report
+Dashboard exportado: /home/[USER]/btc-research/dashboards/dashboard_latest.json
+  Macro series: 10
+  Predicciones activas: 0
+  Predicciones resueltas: 0
+  Hit rates: []
+  Niveles activos: 0
+  Reportes recientes: 10
+  [OK] export_dashboard
+Snapshot creado: /home/[USER]/btc-research/reports/snapshots/snapshot_2026-10-08_215156.json
+  data_hash: {'price_btc': '4fd50fe69ed2198e', 'macro_fred': '5f82f6ea7f37a7dd', 'daily_metrics_latest': '047d7352774f6d42'}
+  freshness: {'price_btc': '2026-10-08T19:00:00', 'daily_onchain': '2026-10-07T19:00:00', 'macro_fred': '2026-10-08', 'daily_metrics': '2026-10-08'}
+  code_version: 7c1eb91
+  [OK] snapshot
+✅ PUBLICADO: /home/[USER]/btc-research/reports/daily_report_2026-10-08.html
+Done at 2026-10-09 02:51 UTC
